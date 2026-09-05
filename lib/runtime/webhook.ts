@@ -77,6 +77,19 @@ async function readBounded(response: Response): Promise<unknown> {
  * made to POST at the cloud metadata service, a loopback admin port or an
  * internal RFC1918 address — a textbook SSRF, made worse by the fact that the
  * failure path echoes the host and the error back into the order audit log.
+ *
+ * **The string check is not the mitigation — the DNS resolution below it is.**
+ * `https://metadata.attacker.example/` is a perfectly ordinary hostname that
+ * can carry an A record of `169.254.169.254`, so a name-only allowlist passes
+ * it. `resolvedHostIsPublic()` resolves the host and re-checks every address it
+ * answers with, and `execute()` calls it immediately before the request.
+ *
+ * A residual TOCTOU remains: the resolver answers, then undici resolves the
+ * name again when it opens the socket, and a hostile authoritative server can
+ * return a different address the second time (classic DNS rebinding). Closing
+ * that needs the connection pinned to a vetted address through a custom undici
+ * dispatcher; until then the two-second TTL window is the exposure, the runtime
+ * is off unless `ENABLE_WEBHOOK_RUNTIME=1`, and no seeded agent has a webhook.
  */
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -121,6 +134,46 @@ export function isAllowedWebhookUrl(value: string): boolean {
 }
 
 /**
+ * Is a resolved address one the District is willing to open a socket to?
+ *
+ * Covers loopback, link-local (including the `169.254.169.254` metadata
+ * service), RFC1918, carrier-grade NAT and `0.0.0.0/8` for IPv4, and loopback,
+ * unique-local (`fc00::/7`), link-local (`fe80::/10`) and IPv4-mapped addresses
+ * for IPv6.
+ */
+export function isBlockedAddress(address: string): boolean {
+  const ip = address.toLowerCase();
+  if (ip.includes(":")) {
+    if (ip === "::" || ip === "::1") return true;
+    // `::ffff:169.254.169.254` is the metadata service wearing a hat.
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
+    if (mapped) return isBlockedAddress(mapped[1]);
+    const head = ip.split(":")[0];
+    if (/^f[cd]/.test(head)) return true; // fc00::/7 unique-local
+    if (/^fe[89ab]/.test(head)) return true; // fe80::/10 link-local
+    return false;
+  }
+  return BLOCKED_IPV4.test(ip);
+}
+
+/**
+ * Resolve `host` and confirm every address it answers with is public.
+ *
+ * `node:dns` is imported dynamically so this module stays importable from a
+ * non-Node runtime; a resolver failure is treated as "not allowed".
+ */
+export async function resolvedHostIsPublic(host: string): Promise<boolean> {
+  try {
+    const { lookup } = await import("node:dns/promises");
+    const results = await lookup(host, { all: true, verbatim: true });
+    if (results.length === 0) return false;
+    return results.every((entry) => !isBlockedAddress(entry.address));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Is the webhook runtime switched on at all? Off unless
  * `ENABLE_WEBHOOK_RUNTIME=1`, so a zero-env demo can never make an outbound
  * request no matter what a Passport advertises (BUILD_SPEC §1).
@@ -137,6 +190,8 @@ export type WebhookAdapterOptions = {
   fetchImpl?: typeof fetch;
   /** Test seam: bypass the `ENABLE_WEBHOOK_RUNTIME` env flag. */
   enabled?: boolean;
+  /** Test seam: the resolved-address check. Defaults to a real DNS lookup. */
+  hostIsPublic?: (host: string) => Promise<boolean>;
 };
 
 export class WebhookAdapter implements AgentRuntimeAdapter {
@@ -144,11 +199,13 @@ export class WebhookAdapter implements AgentRuntimeAdapter {
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly forceEnabled?: boolean;
+  private readonly hostIsPublic: (host: string) => Promise<boolean>;
 
   constructor(options: WebhookAdapterOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.forceEnabled = options.enabled;
+    this.hostIsPublic = options.hostIsPublic ?? resolvedHostIsPublic;
   }
 
   async execute(order: Order, agent: Agent, context: RunContext = {}): Promise<RunResult> {
@@ -160,6 +217,12 @@ export class WebhookAdapter implements AgentRuntimeAdapter {
 
     const now = context.now ?? Date.now();
     try {
+      // The allowlist above filtered a *string*; this is the check that matters.
+      // A name resolving to 169.254.169.254 or an RFC1918 address never gets a
+      // socket, however innocuous it reads.
+      if (!(await this.hostIsPublic(new URL(endpoint).hostname))) {
+        throw new Error("webhook host resolves to a private address");
+      }
       const response = await this.fetchImpl(endpoint, {
         method: "POST",
         headers: {

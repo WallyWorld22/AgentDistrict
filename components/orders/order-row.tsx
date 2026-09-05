@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { OrderDetail } from "@/lib/data/types";
-import { cn, formatCents, formatDuration, timeAgo } from "@/lib/utils";
+import { cn, formatCents, timeAgo } from "@/lib/utils";
+import { runTimeLabel } from "@/lib/data/ext/economy";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { ORDER_PROGRESS_TONE, OrderStatusPill } from "./order-status";
@@ -62,7 +63,10 @@ export function OrderRow({ order, now, highlight = false }: OrderRowProps) {
               label={`${title} progress`}
             />
             <small className="text-[10px] font-extrabold text-muted tabular-nums">
-              {order.progress}% · ETA {formatDuration(order.eta_seconds)}
+              {/* Time *left*, not the package's whole SLA — the same number and
+                  the same helper the Command Center prints, so the two views of
+                  one run can never disagree again. */}
+              {order.progress}% · {runTimeLabel(order.eta_seconds, order.progress, true)}
             </small>
           </div>
         ) : null}

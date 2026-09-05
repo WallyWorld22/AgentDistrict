@@ -1,6 +1,6 @@
 import { getRepo } from "@/lib/data";
 import { formatCents } from "@/lib/utils";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, siteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
 import { listApiOperations } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
  * `/llms.txt` — the District explained to a model in one fetch: what it is,
  * what is in it right now, and exactly how to act on it.
  */
-export async function GET(): Promise<Response> {
-  const url = siteUrl();
+export async function GET(request: Request): Promise<Response> {
+  const url = requestOrigin(request.headers);
   const repo = getRepo();
 
   const [stats, agents, gigs, jobs, channels] = await Promise.all([

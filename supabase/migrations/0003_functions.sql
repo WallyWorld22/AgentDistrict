@@ -170,7 +170,7 @@ as $$
           'english',
           coalesce(a.name, '') || ' ' || coalesce(a.handle, '') || ' ' ||
           coalesce(a.tagline, '') || ' ' || coalesce(a.description, '') || ' ' ||
-          array_to_string(a.skills, ' ')
+          public.text_join(a.skills)
         ) @@ websearch_to_tsquery('english', p_query)
      or a.handle ilike '%' || public.like_escape(p_query) || '%' escape '\'
      or a.name   ilike '%' || public.like_escape(p_query) || '%' escape '\'
@@ -182,7 +182,7 @@ as $$
           'english',
           coalesce(a.name, '') || ' ' || coalesce(a.handle, '') || ' ' ||
           coalesce(a.tagline, '') || ' ' || coalesce(a.description, '') || ' ' ||
-          array_to_string(a.skills, ' ')
+          public.text_join(a.skills)
         ),
         websearch_to_tsquery('english', p_query)
       )
@@ -209,7 +209,7 @@ as $$
       or to_tsvector(
            'english',
            coalesce(g.title, '') || ' ' || coalesce(g.description, '') || ' ' ||
-           array_to_string(g.tags, ' ')
+           public.text_join(g.tags)
          ) @@ websearch_to_tsquery('english', p_query)
       or g.title ilike '%' || public.like_escape(p_query) || '%' escape '\'
     )
@@ -220,7 +220,7 @@ as $$
         to_tsvector(
           'english',
           coalesce(g.title, '') || ' ' || coalesce(g.description, '') || ' ' ||
-          array_to_string(g.tags, ' ')
+          public.text_join(g.tags)
         ),
         websearch_to_tsquery('english', p_query)
       )
@@ -287,7 +287,7 @@ as $$
         to_tsvector(
           'english',
           coalesce(a.name, '') || ' ' || coalesce(a.handle, '') || ' ' ||
-          coalesce(a.tagline, '') || ' ' || array_to_string(a.skills, ' ')
+          coalesce(a.tagline, '') || ' ' || public.text_join(a.skills)
         ),
         q.tsq
       ) as rank
@@ -295,7 +295,7 @@ as $$
     where to_tsvector(
             'english',
             coalesce(a.name, '') || ' ' || coalesce(a.handle, '') || ' ' ||
-            coalesce(a.tagline, '') || ' ' || array_to_string(a.skills, ' ')
+            coalesce(a.tagline, '') || ' ' || public.text_join(a.skills)
           ) @@ q.tsq
        or a.handle ilike '%' || public.like_escape(p_query) || '%' escape '\'
 
@@ -337,7 +337,7 @@ as $$
         to_tsvector(
           'english',
           coalesce(m.title, '') || ' ' || coalesce(m.description, '') || ' ' ||
-          array_to_string(m.tags, ' ')
+          public.text_join(m.tags)
         ),
         q.tsq
       )
@@ -345,7 +345,7 @@ as $$
     where to_tsvector(
             'english',
             coalesce(m.title, '') || ' ' || coalesce(m.description, '') || ' ' ||
-            array_to_string(m.tags, ' ')
+            public.text_join(m.tags)
           ) @@ q.tsq
   ) hits
   order by hits.rank desc, hits.title asc
@@ -408,6 +408,7 @@ revoke execute on function public.increment_market_downloads(text)         from 
 revoke execute on function public.increment_channel_viewers(text, integer)  from anon, public;
 revoke execute on function public.recalc_agent_rating(uuid)                from anon, authenticated, public;
 
+grant execute on function public.text_join(text[], text)                  to anon, authenticated;
 grant execute on function public.like_escape(text)                       to anon, authenticated;
 grant execute on function public.increment_gig_runs(uuid, integer)       to authenticated;
 grant execute on function public.increment_agent_jobs(uuid, integer)     to authenticated;

@@ -809,6 +809,36 @@ const SPECS: AgentSpec[] = [
     avg_latency_sec: 23,
     daysOld: 132,
   },
+  {
+    // The District's one off-shift Passport. `offline` is a first-class filter
+    // chip on `/agents` and a `StatusPill` variant, and with no seeded row both
+    // could only ever render empty. A registered agent that is simply not on
+    // shift reads naturally, and it is excluded from `agentsOnline`, so the
+    // home hero's counters do not move.
+    handle: "nightowl",
+    name: "NightOwl",
+    emoji: "🦉",
+    gradient: "linear-gradient(135deg,#2b3752,#8e5cff)",
+    tagline: "Overnight batch runs",
+    description:
+      "Runs long batches while the District sleeps: 10pm to 6am Eastern only. Queue the work during the day, read the results with coffee. Off shift right now — messages are answered when it clocks back on.",
+    category: "operations",
+    skills: ["Batch processing", "Scheduling", "Reporting"],
+    regions: ["US"],
+    status: "offline",
+    pricing_model: "per_run",
+    price: 14,
+    owner: "devdan",
+    verified: false,
+    rating_avg: 4.71,
+    rating_count: 268,
+    jobs_completed: 9104,
+    repeat_hire_rate: 0.48,
+    reliability: 0.974,
+    dispute_rate: 0.009,
+    avg_latency_sec: 240,
+    daysOld: 96,
+  },
 ];
 
 /** `Lead research` → `lead_research`. Mirrors the legacy passport modal. */

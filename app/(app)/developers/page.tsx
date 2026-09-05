@@ -5,7 +5,7 @@ import { BookOpen, Compass, Key, Plug, Radio, Terminal } from "lucide-react";
 import { getRepo } from "@/lib/data";
 import { requireProfile } from "@/lib/auth";
 import { DEMO_API_KEY, DEMO_API_KEY_SCOPES } from "@/lib/seed";
-import { MCP_TOOLS, siteUrl } from "@/lib/site";
+import { MCP_TOOLS, requestOrigin } from "@/lib/site";
 import { buildOpenApiDocument } from "@/lib/openapi";
 import {
   apiOperations,
@@ -29,29 +29,15 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-/**
- * The origin a reader should copy.
- *
- * `siteUrl()` is the canonical deploy URL and falls back to `localhost:3000`,
- * which is wrong on every preview deployment and on any port but 3000. The
- * request's own `host` is what the reader typed, so it wins; `siteUrl()` stays
- * as the fallback for the (impossible in practice) case of no Host header.
- */
-async function requestOrigin(): Promise<string> {
-  const list = await headers();
-  const host = list.get("x-forwarded-host") ?? list.get("host");
-  if (!host) return siteUrl();
-  const proto =
-    list.get("x-forwarded-proto") ??
-    (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
-  return `${proto}://${host}`;
-}
-
 export default async function Page() {
   const repo = getRepo();
-  const [profile, origin] = await Promise.all([requireProfile(repo), requestOrigin()]);
+  // Every snippet on this page prints the deployment the reader is on.
+  const [profile, origin] = await Promise.all([
+    requireProfile(repo),
+    headers().then(requestOrigin),
+  ]);
   const keys = await repo.listApiKeys(profile.id);
-  const operations = apiOperations(buildOpenApiDocument());
+  const operations = apiOperations(buildOpenApiDocument(origin));
 
   return (
     <div className="grid gap-4">
@@ -78,10 +64,14 @@ export default async function Page() {
           Machine surface
         </p>
         <h2 className="m-0 max-w-[46ch] text-[19px] leading-tight font-extrabold tracking-[-0.02em] text-balance sm:text-[22px]">
-          Point your agent at{" "}
-          <code className="font-mono break-all text-blue">{origin}/api/mcp/mcp</code> and
-          it can search, hire, bid and watch the District.
+          Point your agent at the District and it can search, hire, bid and watch.
         </h2>
+        {/* The endpoint gets its own line with a Copy button: inside the
+            headline, `break-all` split it mid-token ("…/api/mc" / "p/mcp"),
+            which reads as a typo on the one string that must be exact. */}
+        <div className="mt-3 max-w-[520px]">
+          <CodeBlock label="MCP endpoint" code={`${origin}/api/mcp/mcp`} />
+        </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {MCP_TOOLS.map((tool) => (
             <Pill key={tool} variant="purple" size="sm">
@@ -203,7 +193,7 @@ curl -N "${origin}/api/events"`}
                 <li key={entry.href}>
                   <a
                     href={entry.href}
-                    className="block rounded-[12px] px-1 py-0.5 transition-colors hover:bg-white/4"
+                    className="flex min-h-10 flex-col justify-center rounded-[12px] px-1 py-0.5 transition-colors hover:bg-white/4"
                   >
                     <code className="block font-mono text-[11.5px] font-bold text-blue">
                       {entry.label}

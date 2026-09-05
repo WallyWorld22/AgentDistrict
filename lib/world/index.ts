@@ -1,8 +1,9 @@
 import { getRepo } from "@/lib/data";
 import type { Repository } from "@/lib/data/repository";
-import type { Agent } from "@/lib/data/types";
+import type { Agent, GigWithAgent, Slug } from "@/lib/data/types";
 import { assembleGuild, estimateAgentCents, estimateAgentSeconds, volumeFactor, type GuildProposal } from "./guild";
 import { extractIntent, type WorldIntent } from "./intent";
+import { indexGigsByAgent, quoteAgent, type AgentQuote } from "./pricing";
 import { canRefineIntent, refineIntent } from "./refine";
 import { SCORE_FORMULA, rankAgents, type ScoredAgent, type ScoringContext } from "./scoring";
 
@@ -27,6 +28,11 @@ export type RankedAgent = {
   relevance: number;
   fit: number;
   reasons: string[];
+  /**
+   * The gig a one-click hire runs on. `estimateCents` is that gig's basic
+   * package, so the price on the button is the price the wallet is charged.
+   */
+  gigSlug: Slug | null;
   /** What hiring this one agent for this outcome would cost. */
   estimateCents: number;
   etaSeconds: number;
@@ -47,6 +53,12 @@ export type RouteOutcomeResult = {
 export type RouteOutcomeOptions = {
   /** Score against this pool instead of loading one (tests, MCP callers). */
   pool?: Agent[];
+  /**
+   * Price against these gigs instead of loading the District's. Supplying a
+   * `pool` without gigs keeps `routeOutcome` I/O-free, and prices fall back to
+   * each Passport's headline figure.
+   */
+  gigs?: GigWithAgent[];
   repo?: Repository;
   /** Set false to skip the Claude pass even when a key is present. */
   refine?: boolean;
@@ -76,7 +88,13 @@ export async function routeOutcome(
   options: RouteOutcomeOptions = {},
 ): Promise<RouteOutcomeResult> {
   const outcome = input.outcome.trim();
-  const pool = options.pool ?? (await (options.repo ?? getRepo()).listAgents({ limit: 200 }));
+  const repo = options.repo ?? getRepo();
+  const pool = options.pool ?? (await repo.listAgents({ limit: 200 }));
+  // One query for the whole marketplace, then every price on the page comes
+  // from the gig a hire would actually order (see `./pricing`).
+  const gigs =
+    options.gigs ?? (options.pool ? [] : await repo.listGigs({ limit: 400 }));
+  const gigIndex = indexGigsByAgent(gigs);
 
   let intent = extractIntent(outcome);
   if (options.refine !== false && canRefineIntent()) {
@@ -109,17 +127,33 @@ export async function routeOutcome(
   const candidates = rankAgents(available, context, Math.max(GUILD_CANDIDATE_POOL, limit));
   const scored = candidates.slice(0, limit);
 
-  const ranked: RankedAgent[] = scored.map((entry) => ({
-    agent: entry.agent,
-    score: entry.score,
-    relevance: entry.relevance,
-    fit: entry.fit,
-    reasons: entry.reasons,
-    estimateCents: estimateAgentCents(entry.agent, factor),
-    etaSeconds: estimateAgentSeconds(entry.agent, factor),
-  }));
+  const quote = (agent: Agent): AgentQuote => {
+    const owned = gigIndex.get(agent.handle);
+    if (!owned || owned.length === 0) {
+      return {
+        gigSlug: null,
+        cents: estimateAgentCents(agent, factor),
+        etaSeconds: estimateAgentSeconds(agent, factor),
+      };
+    }
+    return quoteAgent(agent, owned, intent.categories);
+  };
 
-  const guild = assembleGuild(candidates, intent);
+  const ranked: RankedAgent[] = scored.map((entry) => {
+    const priced = quote(entry.agent);
+    return {
+      agent: entry.agent,
+      score: entry.score,
+      relevance: entry.relevance,
+      fit: entry.fit,
+      reasons: entry.reasons,
+      gigSlug: priced.gigSlug,
+      estimateCents: priced.cents,
+      etaSeconds: priced.etaSeconds,
+    };
+  });
+
+  const guild = assembleGuild(candidates, intent, { quote });
 
   return {
     outcome,
@@ -159,6 +193,7 @@ export {
   type ScoredAgent,
   type ScoringContext,
 } from "./scoring";
+export { indexGigsByAgent, quoteAgent, type AgentQuote } from "./pricing";
 export {
   assembleGuild,
   estimateAgentCents,

@@ -18,11 +18,7 @@ export function EndpointTable({ operations }: { operations: ApiOperation[] }) {
   return (
     <div className="overflow-x-auto rounded-[16px] border border-[#1c2638]">
       <table
-        className="w-full border-collapse text-left text-[11.5px]"
-        // `min-w-[…]` loses to the unlayered `* { min-width: 0 }` reset in
-        // app/globals.css (unlayered CSS beats every Tailwind layer), so the
-        // scroll width is set inline until that reset moves into `@layer base`.
-        style={{ minWidth: "600px" }}
+        className="w-full min-w-[600px] border-collapse text-left text-[11.5px]"
       >
         <caption className="sr-only">Every documented /api/v1 operation</caption>
         <thead>

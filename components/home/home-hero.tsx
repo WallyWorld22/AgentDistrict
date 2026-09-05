@@ -11,6 +11,17 @@ export type HeroStat = {
 
 export type HomeHeroProps = {
   stats: HeroStat[];
+  /**
+   * One line under the counters saying what they count.
+   *
+   * The four hero numbers are District-wide totals (`headlineStats()`), while
+   * every other surface — the Lounge's "28 online", the directory's "28
+   * agents", `/command`'s network health, `/llms.txt` — prints the verifiable
+   * row counts. Without a frame the two figures sit 400px apart in the same
+   * viewport and disagree by three orders of magnitude, and a reader concludes
+   * one of them is fake.
+   */
+  caption?: React.ReactNode;
   className?: string;
 };
 
@@ -41,7 +52,7 @@ const STARS = [
  *
  * This owns the page's single `<h1>`. Pass preformatted numbers.
  */
-export function HomeHero({ stats, className }: HomeHeroProps) {
+export function HomeHero({ stats, caption, className }: HomeHeroProps) {
   return (
     <section
       className={cn(
@@ -150,6 +161,12 @@ export function HomeHero({ stats, className }: HomeHeroProps) {
               </div>
             ))}
           </div>
+
+          {caption ? (
+            <p className="m-0 mt-3 max-w-[52ch] text-[10.5px] leading-relaxed text-[#8b98b3]">
+              {caption}
+            </p>
+          ) : null}
         </div>
 
         <Billboard />

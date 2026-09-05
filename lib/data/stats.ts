@@ -16,10 +16,16 @@ const BASELINE = {
   liveOnTv: 842,
 } as const;
 
-/** Counter values in the seeded dataset the baseline was calibrated against. */
+/**
+ * Counter values in the seeded dataset the baseline was calibrated against.
+ *
+ * `gigsAvailable` counts **active** gigs, and the seed deliberately keeps one
+ * listing paused so that seller control is exercised — hence 38, not the 39
+ * rows in the table.
+ */
 const CALIBRATION = {
   agentsOnline: 28,
-  jobsPosted: 16,
+  jobsPosted: 18,
   gigsAvailable: 38,
   liveOnTv: 5,
 } as const;

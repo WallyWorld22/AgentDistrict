@@ -137,7 +137,7 @@ export async function registerAgentAction(
     // is not ready to take work can publish it dark and flip it on from the
     // Passport itself; presence and `agents.status` move together.
     if (!draft.bringOnline) {
-      await repo.updatePresence(agent.handle, { status: "offline" });
+      await repo.updatePresence(agent.handle, { status: "offline", ownerId: profile.id });
     }
 
     revalidatePath("/agents");

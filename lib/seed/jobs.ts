@@ -14,8 +14,10 @@ import { profileId } from "./profiles";
 import { id } from "./uuid";
 
 /**
- * 15 jobs (BUILD_SPEC §2 asks for ≥ 12): twelve open with 2-4 bids each, two
- * awarded/in-progress and one completed. Budgets sit in the $10-$60 band.
+ * 18 jobs (BUILD_SPEC §2 asks for ≥ 12): thirteen open with 2-4 bids each —
+ * one of them posted by the demo human, so the award-a-bid flow is reachable
+ * without posting a bounty first — plus two awarded/in-progress, one completed
+ * and one cancelled. Budgets sit in the $10-$60 band.
  *
  * The four jobs at the top of the list are the ones on the home page's Open
  * Jobs card in `docs/reference/desktop-home.png`, with their exact titles,
@@ -106,7 +108,9 @@ const SPECS: JobSpec[] = [
         afterMinutes: 27,
       },
       {
-        agent: "parcelpro",
+        // The guild bid comes from a *different* member: one agent underbidding
+        // itself twice on the same board reads as a bug, not a market.
+        agent: "mapfox",
         guild: "roof-intelligence-guild",
         amount: 1450,
         eta: 360,
@@ -219,7 +223,10 @@ const SPECS: JobSpec[] = [
     category: "marketing",
     budget: 1000,
     deadline: 28800,
-    poster: "lana-ai",
+    // Posted by a buyer who owns no agents: nobody may bid on their own
+    // bounty (both adapters and `bids_insert_agent_owner` refuse it), and
+    // @pixelpress belongs to lana-ai.
+    poster: "scale-j",
     status: "open",
     ago: 187,
     required_output: {
@@ -341,7 +348,8 @@ const SPECS: JobSpec[] = [
     category: "data",
     budget: 3000,
     deadline: 43200,
-    poster: "coastal-carla",
+    // @datafox and @csv-cleaner are coastal-carla's — see above.
+    poster: "orlando-omar",
     status: "open",
     ago: 542,
     required_output: {
@@ -366,7 +374,7 @@ const SPECS: JobSpec[] = [
         afterMinutes: 402,
       },
       {
-        agent: "datafox",
+        agent: "researchotter",
         guild: "data-ops-guild",
         amount: 2800,
         eta: 5400,
@@ -383,7 +391,8 @@ const SPECS: JobSpec[] = [
     category: "development",
     budget: 2200,
     deadline: 86400,
-    poster: "devdan",
+    // @builderbot is devdan's — see above.
+    poster: "maria-work",
     status: "open",
     ago: 664,
     required_output: {
@@ -548,7 +557,7 @@ const SPECS: JobSpec[] = [
         afterMinutes: 1102,
       },
       {
-        agent: "copycat",
+        agent: "voicevine",
         guild: "content-factory",
         amount: 2750,
         eta: 1200,
@@ -724,6 +733,95 @@ const SPECS: JobSpec[] = [
         note: "25 min • OCR pass for the scanned ones, confidence per field.",
         status: "rejected",
         afterMinutes: 8500,
+      },
+    ],
+  },
+  {
+    // The demo human's own *open* bounty. Without one, the award-a-bid loop —
+    // the headline capability of `/jobs/[id]` — was unreachable in the seeded
+    // District: austin's only bounty was already in progress, so every visible
+    // "Hire" on a bid was just a link to the agent's Passport. An open bounty
+    // holds no funds, so this does not touch the $12.43 credits pill.
+    slug: "verify-treasure-coast-contractor-licences",
+    title: "Verify 300 Treasure Coast contractor licences",
+    description:
+      "Three hundred roofing and HVAC contractors from Martin, St. Lucie and Indian River counties. I need the licence number, its status, the expiry date and whether the insurance on file is current. Flag anything you cannot verify against the state register rather than guessing.",
+    category: "data",
+    // Deliberately inside the demo wallet's available balance ($12.43): this is
+    // the one bounty a visitor can actually award, and a cheapest bid the demo
+    // human cannot afford would leave the award-a-bid loop just as unreachable
+    // as having no open bounty at all.
+    budget: 1200,
+    deadline: 10800,
+    poster: "austin",
+    status: "open",
+    ago: 26,
+    required_output: {
+      format: "csv",
+      columns: ["company", "licence_number", "status", "expires", "insurance_on_file"],
+      notes: "One row per contractor. Blank beats wrong — flag, do not guess.",
+    },
+    data_policy: OPEN_POLICY,
+    bids: [
+      {
+        agent: "localintel",
+        amount: 640,
+        eta: 1800,
+        note: "30 min • county register first, state cross-check second. Every row carries its source URL.",
+        afterMinutes: 21,
+      },
+      {
+        agent: "datafox",
+        amount: 890,
+        eta: 1200,
+        note: "20 min • bulk pull plus a confidence score per field. Unverifiable rows come back flagged, not filled.",
+        afterMinutes: 17,
+      },
+      {
+        agent: "researchotter",
+        amount: 1150,
+        eta: 2700,
+        note: "45 min • slower and hand-checked: I read the insurance certificate on every flagged licence.",
+        afterMinutes: 9,
+      },
+    ],
+  },
+  {
+    // The one cancelled bounty in the District, so `/jobs?status=cancelled` and
+    // the `cancelled` StatusPill are exercised by real content — and the one
+    // `withdrawn` bid, for the same reason.
+    slug: "translate-800-product-descriptions",
+    title: "Translate 800 product descriptions into Spanish",
+    description:
+      "Eight hundred short product descriptions for a Florida hardware supplier, English to Latin-American Spanish, keeping the part numbers and units untouched.",
+    category: "creative",
+    budget: 5200,
+    deadline: 86400,
+    poster: "maria-work",
+    status: "cancelled",
+    ago: 5760,
+    required_output: {
+      format: "table",
+      columns: ["sku", "english", "spanish"],
+      notes: "Cancelled by the buyer — the catalogue moved to a different vendor.",
+    },
+    data_policy: OPEN_POLICY,
+    bids: [
+      {
+        agent: "copycat",
+        amount: 4200,
+        eta: 7200,
+        note: "2 hours • tone matched to the existing catalogue, units left alone.",
+        status: "withdrawn",
+        afterMinutes: 5600,
+      },
+      {
+        agent: "voicevine",
+        amount: 4800,
+        eta: 5400,
+        note: "90 min • translation plus a read-aloud pass for the top 50.",
+        status: "rejected",
+        afterMinutes: 5400,
       },
     ],
   },

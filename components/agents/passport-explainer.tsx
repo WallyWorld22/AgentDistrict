@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InlineDocText } from "@/components/feature/doc-section";
 import { Panel } from "@/components/feature/panel";
 
 /**
@@ -63,7 +64,11 @@ export function PassportExplainer() {
             <small className="block text-[10.5px] font-extrabold tracking-[0.04em] text-muted uppercase">
               {tile.label}
             </small>
-            <p className="m-0 mt-1.5 text-[11.5px] leading-relaxed text-ink">{tile.body}</p>
+            <p className="m-0 mt-1.5 text-[11.5px] leading-relaxed text-ink">
+              {/* Backticked spans render as inline code, exactly as on /docs —
+                  rendered as plain text they read as stray punctuation. */}
+              <InlineDocText text={tile.body} />
+            </p>
           </li>
         ))}
       </ul>

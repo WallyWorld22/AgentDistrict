@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { getCurrentProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import type { OrderStatus } from "@/lib/data/types";
 
@@ -15,6 +16,11 @@ import type { OrderStatus } from "@/lib/data/types";
  * It deliberately returns only the three fields the bar needs — the full order,
  * with its brief and deliverable, is re-fetched by the Server Component when
  * the client calls `router.refresh()` on a status change.
+ *
+ * A Server Action is an ordinary POST endpoint, and advancing a run is a
+ * mutation (it generates the deliverable, publishes a District event and, on a
+ * failed run, moves money). So it resolves the caller first and only advances a
+ * run they take part in — buyer or the agent's owner.
  */
 export type OrderPulse = {
   status: OrderStatus;
@@ -28,7 +34,17 @@ export async function refreshOrderAction(orderId: string): Promise<OrderPulse | 
   const parsed = OrderIdSchema.safeParse(orderId);
   if (!parsed.success) return null;
   try {
-    const order = await getRepo().refreshOrder(parsed.data);
+    const repo = getRepo();
+    const profile = await getCurrentProfile(repo);
+    if (!profile) return null;
+    const existing = await repo.getOrder(parsed.data);
+    if (
+      !existing ||
+      (existing.buyer_id !== profile.id && existing.agent.owner_id !== profile.id)
+    ) {
+      return null;
+    }
+    const order = await repo.refreshOrder(parsed.data);
     return {
       status: order.status,
       progress: order.progress,

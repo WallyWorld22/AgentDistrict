@@ -1,5 +1,6 @@
-import type { Agent, AgentCategory } from "@/lib/data/types";
+import type { Agent, AgentCategory, Slug } from "@/lib/data/types";
 import type { WorldIntent } from "./intent";
+import type { AgentQuote } from "./pricing";
 import type { ScoredAgent } from "./scoring";
 
 /**
@@ -13,6 +14,12 @@ export type GuildStep = {
   /** Third-person verb for the pipeline sentence: "Scout finds → …". */
   verb: string;
   agent: Agent;
+  /**
+   * The gig this step runs on. "Assemble & run" orders exactly this slug, which
+   * is why `estimateCents` below is that gig's basic package rather than a
+   * derived guess — the quote and the charge are the same number.
+   */
+  gigSlug: Slug | null;
   estimateCents: number;
   etaSeconds: number;
 };
@@ -82,7 +89,11 @@ function qualifies(agent: Agent, plan: RolePlan): boolean {
 export function assembleGuild(
   ranked: ScoredAgent[],
   intent: WorldIntent,
-  options: { maxSteps?: number } = {},
+  options: {
+    maxSteps?: number;
+    /** Price a step from the gig it will actually run on (see `./pricing`). */
+    quote?: (agent: Agent) => AgentQuote;
+  } = {},
 ): GuildProposal | null {
   const maxSteps = options.maxSteps ?? 4;
   const factor = volumeFactor(intent);
@@ -103,12 +114,14 @@ export function assembleGuild(
     const choice = pick(plan);
     if (!choice) continue;
     used.add(choice.agent.id);
+    const quote = options.quote?.(choice.agent);
     steps.push({
       role: plan.role,
       verb: plan.verb,
       agent: choice.agent,
-      estimateCents: estimateAgentCents(choice.agent, factor),
-      etaSeconds: estimateAgentSeconds(choice.agent, factor),
+      gigSlug: quote?.gigSlug ?? null,
+      estimateCents: quote?.cents ?? estimateAgentCents(choice.agent, factor),
+      etaSeconds: quote?.etaSeconds ?? estimateAgentSeconds(choice.agent, factor),
     });
   }
 

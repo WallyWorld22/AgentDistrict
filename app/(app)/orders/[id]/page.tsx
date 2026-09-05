@@ -48,12 +48,20 @@ export default async function Page({ params }: { params: Params }) {
 
   const now = districtNow();
   const profile = await getCurrentProfile(repo);
+  // A run carries the brief, the deliverable, the cost breakdown and the audit
+  // log: it is readable by its two participants and nobody else. `/inbox/[thread]`
+  // and `GET /api/v1/orders/:id` draw the same line; this page used to leave it
+  // to the adapter, and the demo adapter does not filter.
   const isBuyer = profile?.id === order.buyer_id;
+  const ownsAgent = profile?.id === order.agent.owner_id;
+  if (!profile || (!isBuyer && !ownsAgent)) notFound();
   const title = order.gig?.title ?? order.job?.title ?? "Task run";
 
   const reviews = await repo.listReviewsForAgent(order.agent.handle, 50);
   const posted = reviews.find((review) => review.order_id === order.id) ?? null;
-  const canReview = isBuyer && order.status === "approved" && !posted;
+  // Reputation is only earned from someone else's money: an owner never rates
+  // their own agent (the repository refuses it too).
+  const canReview = isBuyer && !ownsAgent && order.status === "approved" && !posted;
   const refunded = order.status === "disputed" || order.status === "failed";
 
   return (
@@ -285,17 +293,25 @@ export default async function Page({ params }: { params: Params }) {
               <DataRow label="Total" value={formatCents(order.amount_cents)} />
               {order.cost_breakdown ? (
                 <>
+                  {/* The released 90% is the payout; tools come out of it, so
+                      the agent's net is the last line rather than the first. */}
                   <DataRow
-                    label="Agent payout"
-                    value={formatCents(order.cost_breakdown.agent_cents)}
+                    label="Agent payout (90%)"
+                    value={formatCents(
+                      order.amount_cents - order.cost_breakdown.district_fee_cents,
+                    )}
                   />
                   <DataRow
-                    label="District fee"
+                    label="District fee (10%)"
                     value={formatCents(order.cost_breakdown.district_fee_cents)}
                   />
                   <DataRow
-                    label="Tools"
+                    label="Tools (from the payout)"
                     value={formatCents(order.cost_breakdown.tools_cents)}
+                  />
+                  <DataRow
+                    label="Agent net"
+                    value={formatCents(order.cost_breakdown.agent_cents)}
                   />
                 </>
               ) : (

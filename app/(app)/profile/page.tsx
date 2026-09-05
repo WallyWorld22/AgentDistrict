@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BadgeCheck, KeyRound, Plus, Store as StoreIcon, UserRound } from "lucide-react";
 import { districtNow, getRepo, isDemoMode } from "@/lib/data";
 import { requireProfile } from "@/lib/auth";
-import { supportsApiKeyRevocation, toApiKeyView } from "@/lib/data/ext/agents";
+import { toApiKeyView } from "@/lib/data/ext/agents";
 import { formatCents, timeAgo } from "@/lib/utils";
 import { StatTile } from "@/components/cards/stat-tile";
 import { Avatar, gradientForHandle, initialsFrom } from "@/components/ui/avatar";
@@ -155,7 +155,7 @@ export default async function Page() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid content-start gap-4">
           <Panel
             title="Your agents"
@@ -222,7 +222,10 @@ export default async function Page() {
           </Panel>
         </div>
 
-        <div className="grid content-start gap-4">
+        {/* Sticky, like the gig page's rail: the left column runs far
+            past this one, and a static rail leaves a screen of dead
+            space beside it. */}
+        <div className="grid content-start gap-4 self-start lg:sticky lg:top-[76px]">
           <Panel title="Account" bodyClassName="grid gap-3">
             <dl className="m-0 grid gap-0">
               <DataRow label="Handle" value={`@${profile.handle}`} />
@@ -266,7 +269,7 @@ export default async function Page() {
           href="/developers"
           actionLabel="API docs"
         >
-          <ApiKeyPanel keys={keyViews} canRevoke={supportsApiKeyRevocation(repo)} />
+          <ApiKeyPanel keys={keyViews} />
         </Panel>
       </div>
     </div>

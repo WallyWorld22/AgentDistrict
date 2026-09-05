@@ -22,7 +22,15 @@ import {
 } from "../hash";
 import type { Repository, RepositoryMode } from "../repository";
 import { headlineStats } from "../stats";
-import { trendDeltaFor } from "../trending";
+import { compareTrendingGigs, trendDeltaFor } from "../trending";
+
+/**
+ * How many rows the trending sort re-ranks in memory. The score is computed,
+ * not a column, so PostgREST cannot order by it; this is the window it is
+ * applied to (`runs_count` desc is its dominant term, so the tail it drops
+ * could not have reached the front of the page).
+ */
+const TRENDING_POOL = 240;
 import { sha1Hex } from "@/lib/seed/uuid";
 import {
   asRow,
@@ -65,7 +73,9 @@ import type {
   Channel,
   ChannelDetail,
   ChannelFilter,
+  ChannelWithHosts,
   ChatMessage,
+  CompetitionFilter,
   CompetitionWithEntries,
   CreateAgentInput,
   CreateApiKeyInput,
@@ -104,10 +114,14 @@ import type {
   Review,
   ReviewWithReviewer,
   RoomWithCounts,
+  SearchHit,
+  SearchKind,
+  SearchResults,
   SendMessageInput,
   Slug,
   StoreDetail,
   StoreWithAgents,
+  Thread,
   ThreadListItem,
   ThreadWithMessages,
   TrendingAgent,
@@ -115,8 +129,10 @@ import type {
   UpdateAgentInput,
   UpdatePresenceInput,
   Wallet,
+  WalletPolicyPatch,
   WalletTransaction,
 } from "../types";
+import { emptySearchCounts, searchHrefFor, summariseHits } from "../search";
 
 /**
  * The Postgres adapter (BUILD_SPEC §2).
@@ -142,10 +158,35 @@ import type {
  */
 const TRENDING_WINDOW = 200;
 
+export type SupabaseRepositoryOptions = {
+  /**
+   * Act as this profile without a Supabase session.
+   *
+   * Set only for a **service-role** client, which is how an API-key (or MCP)
+   * caller reaches Postgres: it authenticates at the app layer and has no JWT,
+   * so `auth.uid()` would be null and every RLS-scoped read came back empty
+   * while every write was refused. The money/event RPCs take the same id as
+   * `p_actor`, which they honour only for the service role.
+   */
+  actAs?: UUID;
+};
+
 export class SupabaseRepository implements Repository {
   readonly mode: RepositoryMode = "supabase";
 
-  constructor(private readonly clientFactory: () => Promise<SupabaseClient | null>) {}
+  private readonly actAs: UUID | null;
+
+  constructor(
+    private readonly clientFactory: () => Promise<SupabaseClient | null>,
+    options: SupabaseRepositoryOptions = {},
+  ) {
+    this.actAs = options.actAs ?? null;
+  }
+
+  /** The id the SECURITY DEFINER functions should treat as the caller. */
+  private actor(): UUID | null {
+    return this.actAs;
+  }
 
   /* ------------------------------------------------------------- internals */
 
@@ -262,6 +303,7 @@ export class SupabaseRepository implements Repository {
       p_amount: amount,
       p_memo: memo,
       p_approved: options.approved ?? false,
+      p_actor: this.actor(),
     });
     if (!error) return;
 
@@ -287,6 +329,7 @@ export class SupabaseRepository implements Repository {
       p_order_id: orderId,
       p_memo: memo,
       p_refund: options.refund ?? false,
+      p_actor: this.actor(),
     });
     if (error) throw new UpstreamError(error.message);
   }
@@ -316,6 +359,7 @@ export class SupabaseRepository implements Repository {
       p_cost: patch.cost ?? null,
       p_delivered_at: patch.deliveredAt ?? null,
       p_audit: patch.audit ?? null,
+      p_actor: this.actor(),
     });
     if (error) throw new UpstreamError(error.message);
     const row = Array.isArray(data) ? data[0] : data;
@@ -333,7 +377,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
-    const { limit = 20, offset = 0, kind } = filter;
+    const { limit = 20, offset = 0, kind, kinds } = filter;
     const client = await this.client();
     let query = client
       .from("events")
@@ -341,6 +385,7 @@ export class SupabaseRepository implements Repository {
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
     if (kind) query = query.eq("kind", kind);
+    if (kinds && kinds.length > 0) query = query.in("kind", kinds);
     return this.many(query, toEvent);
   }
 
@@ -363,6 +408,7 @@ export class SupabaseRepository implements Repository {
       p_body: input.body,
       p_cta_label: input.cta_label ?? null,
       p_cta_href: input.cta_href ?? null,
+      p_actor: this.actor(),
     });
     if (error) throw new UpstreamError(error.message);
     const row = Array.isArray(data) ? data[0] : data;
@@ -380,6 +426,40 @@ export class SupabaseRepository implements Repository {
     } catch {
       /* the feed is not worth failing a money mutation over */
     }
+  }
+
+  /* ---------------------------------------------------------------- search */
+
+  /**
+   * One `search_district()` call across agents, gigs, jobs, guilds, channels,
+   * market items and stores. The RPC is `stable` and granted to `anon`, so the
+   * results page works for a signed-out visitor and for a machine caller.
+   */
+  async searchDistrict(query: string, limit = 24): Promise<SearchResults> {
+    const needle = query.trim();
+    if (!needle) return { query: "", hits: [], counts: emptySearchCounts(), total: 0 };
+
+    const client = await this.client();
+    const { data, error } = await client.rpc("search_district", {
+      p_query: needle,
+      p_limit: Math.max(1, Math.min(limit, 100)),
+    });
+    if (error) throw new UpstreamError(error.message);
+
+    const hits: SearchHit[] = asRows(data).map((row) => {
+      const kind = String(row.kind ?? "agent") as SearchKind;
+      const slug = String(row.slug ?? "");
+      return {
+        kind,
+        id: String(row.id ?? ""),
+        slug,
+        title: String(row.title ?? ""),
+        subtitle: String(row.subtitle ?? ""),
+        href: searchHrefFor(kind, slug),
+        rank: Number(row.rank ?? 0),
+      };
+    });
+    return summariseHits(needle, hits);
   }
 
   /* ---------------------------------------------------------------- agents */
@@ -605,6 +685,11 @@ export class SupabaseRepository implements Repository {
 
   async updatePresence(agentHandle: Handle, input: UpdatePresenceInput): Promise<Presence> {
     const agent = await this.requireAgentByHandle(agentHandle);
+    // Same guard `updateAgent` applies. RLS also enforces it on the row, but a
+    // clear ForbiddenError beats PostgREST's silent zero-row update.
+    if (agent.owner_id !== input.ownerId) {
+      throw new ForbiddenError("You do not own this agent");
+    }
     const client = await this.client();
     const presence = await this.one(
       client
@@ -657,13 +742,21 @@ export class SupabaseRepository implements Repository {
   }
 
   async createReview(input: CreateReviewInput, reviewerId: UUID): Promise<Review> {
-    if (input.rating < 1 || input.rating > 5) {
-      throw new ValidationError("Rating must be between 1 and 5");
+    // `Number.isInteger` first: both `NaN < 1` and `NaN > 5` are false, so a
+    // range check alone lets an un-parsed rating through.
+    if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
+      throw new ValidationError("Rating must be a whole number between 1 and 5");
     }
     const order = await this.orderRow(input.orderId);
     if (order.buyer_id !== reviewerId) throw new ForbiddenError("Only the buyer can review a run");
-    if (order.status !== "approved" && order.status !== "delivered") {
-      throw new ConflictError("Only a delivered order can be reviewed");
+    // Reputation only moves once money has, and never in your own favour: a
+    // creator reviewing their own agent would buy the ranking signal outright.
+    if (order.status !== "approved") {
+      throw new ConflictError("Only an approved run can be reviewed");
+    }
+    const reviewed = await this.requireAgentById(order.agent_id);
+    if (reviewed.owner_id === reviewerId) {
+      throw new ForbiddenError("You cannot review your own agent");
     }
 
     const client = await this.client();
@@ -672,6 +765,21 @@ export class SupabaseRepository implements Repository {
       (row) => String(row.id ?? ""),
     );
     if (existing) throw new ConflictError("This order already has a review");
+    // Free runs cost nothing to mint — one review per reviewer per agent from
+    // one. `reviews_insert_reviewer` (0008) enforces the same rule in SQL.
+    if (order.amount_cents === 0) {
+      const prior = await this.one(
+        client
+          .from("reviews")
+          .select("id")
+          .eq("agent_id", order.agent_id)
+          .eq("reviewer_id", reviewerId)
+          .limit(1)
+          .maybeSingle(),
+        (row) => String(row.id ?? ""),
+      );
+      if (prior) throw new ConflictError("You have already reviewed this agent from a free run");
+    }
 
     const rating = Math.round(input.rating);
     const review = await this.one(
@@ -698,6 +806,7 @@ export class SupabaseRepository implements Repository {
       p_agent_id: order.agent_id,
       p_rating: rating,
       p_gig_id: order.gig_id,
+      p_actor: this.actor(),
     });
     if (error) throw new UpstreamError(error.message);
 
@@ -773,8 +882,92 @@ export class SupabaseRepository implements Repository {
         query = query.order("runs_count", { ascending: false });
     }
 
+    // `trending` is a computed score (`compareTrendingGigs`), which PostgREST
+    // cannot express in `.order()`. Pull a wider window ordered by the score's
+    // dominant term and rank it here, exactly as the search branch above does,
+    // so the two adapters return the same page.
+    if (sort === "trending" || sort === undefined) {
+      const pool = await this.many(
+        query.range(0, Math.min(TRENDING_POOL, offset + limit * 3) - 1),
+        toGig,
+      );
+      return this.withAgents(sortGigs(pool, "trending").slice(offset, offset + limit));
+    }
+
     const gigs = await this.many(query.range(offset, offset + limit - 1), toGig);
     return this.withAgents(gigs);
+  }
+
+  /**
+   * `count: "exact", head: true` asks Postgres for the count only — no rows
+   * cross the wire. The `q` branch has to count through the search RPC, which
+   * returns whole rows, so it is capped at 200 like the UI's own page window.
+   */
+  async countGigs(filter: GigFilter = {}): Promise<number> {
+    const { q, category, agentHandle, maxPriceCents, tags } = filter;
+    const client = await this.client();
+
+    let agentId: UUID | null = null;
+    if (agentHandle) {
+      const agent = await this.getAgentByHandle(agentHandle);
+      if (!agent) return 0;
+      agentId = agent.id;
+    }
+
+    if (q && q.trim()) {
+      const { data, error } = await client.rpc("search_gigs", {
+        p_query: q.trim(),
+        p_limit: 200,
+      });
+      if (error) throw new UpstreamError(error.message);
+      return asRows(data)
+        .map(toGig)
+        .filter((gig) => matchesGigFilter(gig, { category, agentId, maxPriceCents, tags })).length;
+    }
+
+    let query = client
+      .from("gigs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active");
+    if (category) query = query.eq("category", category);
+    if (maxPriceCents !== undefined) query = query.lte("starting_price_cents", maxPriceCents);
+    if (tags && tags.length > 0) query = query.overlaps("tags", tags);
+    if (agentId) query = query.eq("agent_id", agentId);
+    const { count, error } = await query;
+    if (error) throw new UpstreamError(error.message);
+    return count ?? 0;
+  }
+
+  async listReviewsForGig(slug: Slug, limit = 12): Promise<ReviewWithReviewer[]> {
+    const client = await this.client();
+    const gig = await this.one(
+      client.from("gigs").select("id").eq("slug", slug).maybeSingle(),
+      (row) => String(row.id ?? ""),
+    );
+    if (!gig) return [];
+
+    // Reviews reach a gig through the order they were left on.
+    const orderIds = await this.many(
+      client.from("orders").select("id").eq("gig_id", gig),
+      (row) => String(row.id ?? ""),
+    );
+    if (orderIds.length === 0) return [];
+
+    const reviews = await this.many(
+      client
+        .from("reviews")
+        .select("*")
+        .in("order_id", orderIds)
+        .order("created_at", { ascending: false })
+        .limit(limit),
+      toReview,
+    );
+    const reviewerIds = [...new Set(reviews.map((review) => review.reviewer_id))];
+    const profiles = reviewerIds.length
+      ? await this.many(client.from("profiles").select("*").in("id", reviewerIds), toProfile)
+      : [];
+    const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+    return reviews.map((review) => ({ ...review, reviewer: byId.get(review.reviewer_id) ?? null }));
   }
 
   async getGigBySlug(slug: Slug): Promise<GigWithAgent | null> {
@@ -876,6 +1069,9 @@ export class SupabaseRepository implements Repository {
   async orderGig(input: OrderGigInput): Promise<Order> {
     const gig = await this.getGigBySlug(input.gigSlug);
     if (!gig) throw new NotFoundError(`Gig ${input.gigSlug}`);
+    if (gig.status !== "active") {
+      throw new ConflictError("This gig is paused and is not taking new orders.");
+    }
     const pkg = gig.packages.find((candidate) => candidate.tier === input.tier);
     if (!pkg) throw new ValidationError(`Gig ${gig.slug} has no ${input.tier} package`);
     const brief = input.brief.trim();
@@ -934,7 +1130,9 @@ export class SupabaseRepository implements Repository {
       await client.from("orders").delete().eq("id", order.id);
       throw error;
     }
-    await client.rpc("increment_gig_runs", { p_gig_id: gig.id, p_by: 1 });
+    // 0008: the bump is bound to the order that earned it, so it can neither
+    // be aimed at a stranger's gig nor replayed.
+    await client.rpc("increment_gig_runs", { p_gig_id: gig.id, p_order_id: order.id });
 
     await this.publishEventBestEffort({
       kind: "hired",
@@ -1082,6 +1280,44 @@ export class SupabaseRepository implements Repository {
     return job;
   }
 
+  async listBidsForJobs(jobIds: UUID[]): Promise<Record<UUID, BidWithAgent[]>> {
+    const out: Record<UUID, BidWithAgent[]> = {};
+    for (const id of jobIds) out[id] = [];
+    if (jobIds.length === 0) return out;
+
+    const client = await this.client();
+    const bids = await this.many(
+      client
+        .from("bids")
+        .select("*")
+        .in("job_id", jobIds)
+        .order("amount_cents", { ascending: true }),
+      toBid,
+    );
+    if (bids.length === 0) return out;
+
+    const agents = await this.agentsByIds(bids.map((bid) => bid.agent_id));
+    const guildIds = [...new Set(bids.map((bid) => bid.guild_id).filter((id): id is UUID => Boolean(id)))];
+    const guilds = guildIds.length
+      ? await this.many(client.from("guilds").select("*").in("id", guildIds), toGuild)
+      : [];
+    const guildById = new Map(guilds.map((guild) => [guild.id, guild]));
+
+    for (const bid of bids) {
+      const agent = agents.get(bid.agent_id);
+      if (!agent) continue;
+      (out[bid.job_id] ??= []).push({
+        ...bid,
+        agent,
+        guild: bid.guild_id ? (guildById.get(bid.guild_id) ?? null) : null,
+      });
+    }
+    for (const id of jobIds) {
+      out[id].sort((a, b) => a.amount_cents - b.amount_cents || a.eta_seconds - b.eta_seconds);
+    }
+    return out;
+  }
+
   async placeBid(input: PlaceBidInput): Promise<Bid> {
     const client = await this.client();
     const job = await this.one(
@@ -1092,6 +1328,11 @@ export class SupabaseRepository implements Repository {
     if (job.status !== "open") throw new ConflictError("This job is no longer open for bids");
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
     const agent = await this.requireAgentByHandle(input.agentHandle);
+    // See the demo adapter: bidding on your own bounty is free reputation.
+    // `bids_insert_agent_owner` (0008) refuses it in the database too.
+    if (job.poster_id === agent.owner_id) {
+      throw new ForbiddenError("You cannot bid on your own bounty");
+    }
 
     const guildId = input.guildSlug
       ? await this.one(
@@ -1154,6 +1395,10 @@ export class SupabaseRepository implements Repository {
     );
     if (!bid) throw new NotFoundError("Bid");
     const agent = await this.requireAgentById(bid.agent_id);
+    // Mirror of the `placeBid` guard, for a bid that predates it.
+    if (job.poster_id === agent.owner_id) {
+      throw new ForbiddenError("You cannot award your own bounty to your own agent");
+    }
 
     const timestamp = this.nowIso();
     const order = await this.one(
@@ -1229,12 +1474,13 @@ export class SupabaseRepository implements Repository {
   /* ---------------------------------------------------------------- orders */
 
   async listOrders(filter: OrderFilter = {}): Promise<OrderDetail[]> {
-    const { buyerId, agentHandle, status, limit = 50, offset = 0 } = filter;
+    const { buyerId, agentHandle, status, jobId, limit = 50, offset = 0 } = filter;
     const client = await this.client();
 
     let query = client.from("orders").select("*").order("created_at", { ascending: false });
     if (buyerId) query = query.eq("buyer_id", buyerId);
     if (status) query = query.eq("status", status);
+    if (jobId) query = query.eq("job_id", jobId);
     if (agentHandle) {
       // A list read returns an empty page for an unknown handle rather than
       // throwing — see the Repository contract in `lib/data/repository.ts`.
@@ -1246,6 +1492,24 @@ export class SupabaseRepository implements Repository {
     const orders = await this.many(query.range(offset, offset + limit - 1), toOrder);
     const advanced = await Promise.all(orders.map((order) => this.advance(order)));
     return this.decorateOrders(advanced);
+  }
+
+  async countOrders(filter: OrderFilter = {}): Promise<number> {
+    const { buyerId, agentHandle, status, jobId } = filter;
+    const client = await this.client();
+
+    let query = client.from("orders").select("id", { count: "exact", head: true });
+    if (buyerId) query = query.eq("buyer_id", buyerId);
+    if (status) query = query.eq("status", status);
+    if (jobId) query = query.eq("job_id", jobId);
+    if (agentHandle) {
+      const agent = await this.getAgentByHandle(agentHandle);
+      if (!agent) return 0;
+      query = query.eq("agent_id", agent.id);
+    }
+    const { count, error } = await query;
+    if (error) throw new UpstreamError(error.message);
+    return count ?? 0;
   }
 
   async getOrder(id: UUID): Promise<OrderDetail | null> {
@@ -1366,7 +1630,7 @@ export class SupabaseRepository implements Repository {
       audit: [entry],
     });
 
-    await client.rpc("increment_agent_jobs", { p_agent_id: agent.id, p_by: 1 });
+    await client.rpc("increment_agent_jobs", { p_agent_id: agent.id, p_order_id: order.id });
     if (agent.store_id) {
       const store = await this.one(
         client.from("stores").select("hires_count").eq("id", agent.store_id).maybeSingle(),
@@ -1408,6 +1672,15 @@ export class SupabaseRepository implements Repository {
     const order = await this.orderRow(id);
     if (order.buyer_id !== buyerId) throw new ForbiddenError("Only the buyer can dispute this run");
     if (order.status === "approved") throw new ConflictError("This run has already been approved");
+    // Terminal states are already settled — a second dispute would refund the
+    // same hold twice, releasing credits that belong to other live orders.
+    if (
+      order.status === "disputed" ||
+      order.status === "failed" ||
+      order.status === "cancelled"
+    ) {
+      return order;
+    }
 
     const entry = {
       at: this.nowIso(),
@@ -1585,7 +1858,7 @@ export class SupabaseRepository implements Repository {
 
   /* -------------------------------------------------------------------- tv */
 
-  async listChannels(filter: ChannelFilter = {}): Promise<Channel[]> {
+  async listChannels(filter: ChannelFilter = {}): Promise<ChannelWithHosts[]> {
     const { liveOnly, kind, limit = 24, offset = 0 } = filter;
     const client = await this.client();
     let query = client
@@ -1596,7 +1869,70 @@ export class SupabaseRepository implements Repository {
       .range(offset, offset + limit - 1);
     if (liveOnly) query = query.eq("is_live", true);
     if (kind) query = query.eq("kind", kind);
-    return this.many(query, toChannel);
+    const channels = await this.many(query, toChannel);
+    if (channels.length === 0) return [];
+
+    // Hosts for the whole page in ONE round trip — every TV surface draws them.
+    const hostRows = await this.many(
+      client
+        .from("channel_hosts")
+        .select("*")
+        .in(
+          "channel_id",
+          channels.map((channel) => channel.id),
+        )
+        .order("position"),
+      (row) => ({
+        channel_id: String(row.channel_id ?? ""),
+        agent_id: String(row.agent_id ?? ""),
+      }),
+    );
+    const agents = await this.agentsByIds(hostRows.map((row) => row.agent_id));
+    return channels.map((channel) => ({
+      ...channel,
+      hosts: hostRows
+        .filter((row) => row.channel_id === channel.id)
+        .map((row) => agents.get(row.agent_id))
+        .filter((agent): agent is Agent => Boolean(agent)),
+    }));
+  }
+
+  /**
+   * Follow / unfollow through the `set_channel_follow()` RPC (migration 0006).
+   * `channels.followers` is a denormalised counter the channel owner alone can
+   * write, so the toggle has to be `security definer`; the RPC keeps the join
+   * row and the counter in one statement and returns the new count.
+   */
+  async setChannelFollow(slug: Slug, profileId: UUID, following: boolean): Promise<Channel> {
+    void profileId; // taken from auth.uid() inside the RPC
+    const client = await this.client();
+    const { error } = await client.rpc("set_channel_follow", {
+      p_slug: slug,
+      p_follow: following,
+    });
+    if (error) {
+      if (/channel not found/i.test(error.message ?? "")) throw new NotFoundError(`Channel ${slug}`);
+      throw new UpstreamError(error.message);
+    }
+    const channel = await this.one(
+      client.from("channels").select("*").eq("slug", slug).maybeSingle(),
+      toChannel,
+    );
+    if (!channel) throw new NotFoundError(`Channel ${slug}`);
+    return channel;
+  }
+
+  async listFollowedChannelSlugs(profileId: UUID): Promise<Slug[]> {
+    const client = await this.client();
+    const rows = await this.many(
+      client.from("channel_followers").select("channel_id").eq("profile_id", profileId),
+      (row) => String(row.channel_id ?? ""),
+    );
+    if (rows.length === 0) return [];
+    return this.many(
+      client.from("channels").select("slug").in("id", rows),
+      (row) => String(row.slug ?? ""),
+    );
   }
 
   async getChannelBySlug(slug: Slug): Promise<ChannelDetail | null> {
@@ -1637,9 +1973,16 @@ export class SupabaseRepository implements Repository {
     };
   }
 
-  async listCompetitions(): Promise<CompetitionWithEntries[]> {
+  async listCompetitions(filter: CompetitionFilter = {}): Promise<CompetitionWithEntries[]> {
+    const { status, channelId, limit = 24, offset = 0 } = filter;
     const client = await this.client();
-    const competitions = await this.many(client.from("competitions").select("*"), toCompetition);
+    let competitionQuery = client.from("competitions").select("*");
+    if (status) competitionQuery = competitionQuery.eq("status", status);
+    if (channelId) competitionQuery = competitionQuery.eq("channel_id", channelId);
+    const competitions = await this.many(
+      competitionQuery.range(offset, offset + limit - 1),
+      toCompetition,
+    );
     if (competitions.length === 0) return [];
     const entries = await this.many(
       client
@@ -1726,7 +2069,11 @@ export class SupabaseRepository implements Repository {
       .filter((row): row is PresenceWithAgent => Boolean(row));
   }
 
-  async listLoungeMessages(roomSlug?: Slug, limit = 30): Promise<LoungeMessage[]> {
+  async listLoungeMessages(
+    roomSlug?: Slug,
+    limit = 30,
+    since?: string,
+  ): Promise<LoungeMessage[]> {
     const client = await this.client();
     let query = client
       .from("lounge_messages")
@@ -1734,6 +2081,7 @@ export class SupabaseRepository implements Repository {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (roomSlug) query = query.eq("room_slug", roomSlug);
+    if (since) query = query.gt("created_at", since);
     const rows = await this.many(query, toLoungeMessage);
     return rows.reverse();
   }
@@ -1827,10 +2175,50 @@ export class SupabaseRepository implements Repository {
     return { ...thread, messages, counterpart };
   }
 
+  async markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread> {
+    const client = await this.client();
+    const thread = await this.one(
+      client
+        .from("threads")
+        .update({ unread_count: 0 })
+        .eq("id", threadId)
+        .eq("profile_id", profileId)
+        .select("*")
+        .maybeSingle(),
+      toThread,
+    );
+    // RLS makes someone else's thread simply not match, so a null row here
+    // means "missing or not yours" — report it the same way the demo does.
+    if (!thread) {
+      const exists = await this.one(
+        client.from("threads").select("id").eq("id", threadId).maybeSingle(),
+        (row) => String(row.id ?? ""),
+      );
+      if (!exists) throw new NotFoundError("Thread");
+      throw new ForbiddenError("This is not your conversation");
+    }
+    return thread;
+  }
+
   async sendMessage(input: SendMessageInput): Promise<Message> {
     const body = input.body.trim();
     if (!body) throw new ValidationError("Message body is required");
     const client = await this.client();
+
+    // Only the two participants may post. RLS enforces it too, but a clear
+    // ForbiddenError beats a policy violation surfacing as an upstream error.
+    const thread = await this.one(
+      client.from("threads").select("*").eq("id", input.threadId).maybeSingle(),
+      toThread,
+    );
+    if (!thread) throw new NotFoundError("Thread");
+    if (input.senderType === "human") {
+      if (thread.profile_id !== input.senderId) {
+        throw new ForbiddenError("This is not your conversation");
+      }
+    } else if (thread.agent_id !== input.senderId) {
+      throw new ForbiddenError("This agent is not part of that conversation");
+    }
 
     const senderName =
       input.senderType === "agent"
@@ -1855,15 +2243,11 @@ export class SupabaseRepository implements Repository {
 
     // The Inbox badge reads `threads.unread_count`; without this it is frozen
     // in supabase mode while the demo adapter moves it.
-    const thread = await this.one(
-      client.from("threads").select("unread_count").eq("id", input.threadId).maybeSingle(),
-      (row) => Number(row.unread_count ?? 0),
-    );
     await client
       .from("threads")
       .update({
         updated_at: message.created_at,
-        unread_count: input.senderType === "human" ? 0 : (thread ?? 0) + 1,
+        unread_count: input.senderType === "human" ? 0 : thread.unread_count + 1,
       })
       .eq("id", input.threadId);
     return message;
@@ -1900,10 +2284,18 @@ export class SupabaseRepository implements Repository {
 
   async getWallet(profileId: UUID): Promise<Wallet | null> {
     const client = await this.client();
-    return this.one(
+    const wallet = await this.one(
       client.from("wallets").select("*").eq("profile_id", profileId).maybeSingle(),
       toWallet,
     );
+    if (!wallet) return null;
+    // Present the counter the way `hold_funds` reads it: a stale
+    // `spend_today_date` is zero, never yesterday's total charged against
+    // today's ceiling.
+    const today = this.nowIso().slice(0, 10);
+    return wallet.spend_today_date >= today
+      ? wallet
+      : { ...wallet, spend_today_cents: 0, spend_today_date: today };
   }
 
   async listTransactions(profileId: UUID, limit = 20): Promise<WalletTransaction[]> {
@@ -1925,6 +2317,7 @@ export class SupabaseRepository implements Repository {
     const { data, error } = await client.rpc("top_up_wallet", {
       p_amount: amountCents,
       p_memo: "Added credits",
+      p_actor: this.actor(),
     });
     if (error) {
       if (/wallet not found/i.test(error.message ?? "")) throw new NotFoundError("Wallet");
@@ -1933,6 +2326,48 @@ export class SupabaseRepository implements Repository {
     const row = Array.isArray(data) ? data[0] : data;
     if (row) return toWallet(asRow(row));
     const wallet = await this.getWallet(profileId);
+    if (!wallet) throw new NotFoundError("Wallet");
+    return wallet;
+  }
+
+  /**
+   * The two policy columns are the only part of a wallet a human may write —
+   * 0005 revokes `balance_cents`/`held_cents`/`spend_today_cents`, so this is
+   * a plain owner-scoped update rather than an RPC.
+   */
+  async updateWalletPolicy(profileId: UUID, patch: WalletPolicyPatch): Promise<Wallet> {
+    const update: Record<string, number | boolean> = {};
+    if (patch.approvalThresholdCents !== undefined) {
+      if (patch.approvalThresholdCents < 0) {
+        throw new ValidationError("The approval threshold cannot be negative");
+      }
+      update.approval_threshold_cents = Math.round(patch.approvalThresholdCents);
+    }
+    if (patch.autonomousSpendLimitCents !== undefined) {
+      if (patch.autonomousSpendLimitCents < 0) {
+        throw new ValidationError("The daily autonomous ceiling cannot be negative");
+      }
+      update.autonomous_spend_limit_cents = Math.round(patch.autonomousSpendLimitCents);
+    }
+    if (patch.autonomousPaused !== undefined) {
+      update.autonomous_paused = patch.autonomousPaused;
+    }
+    if (Object.keys(update).length === 0) {
+      const current = await this.getWallet(profileId);
+      if (!current) throw new NotFoundError("Wallet");
+      return current;
+    }
+
+    const client = await this.client();
+    const wallet = await this.one(
+      client
+        .from("wallets")
+        .update({ ...update, updated_at: this.nowIso() })
+        .eq("profile_id", profileId)
+        .select("*")
+        .maybeSingle(),
+      toWallet,
+    );
     if (!wallet) throw new NotFoundError("Wallet");
     return wallet;
   }
@@ -1953,6 +2388,9 @@ export class SupabaseRepository implements Repository {
   }
 
   async getCurrentProfile(): Promise<Profile | null> {
+    // A service-role repository has no session by design — the caller proved
+    // who they are with an API key at the app layer.
+    if (this.actAs) return this.getProfile(this.actAs);
     const client = await this.client();
     const {
       data: { user },
@@ -1994,6 +2432,21 @@ export class SupabaseRepository implements Repository {
     );
     if (!record) throw new UpstreamError("API key was not created");
     return { key: raw, record };
+  }
+
+  async revokeApiKey(id: UUID, profileId: UUID): Promise<void> {
+    const client = await this.client();
+    const deleted = await this.one(
+      client
+        .from("api_keys")
+        .delete()
+        .eq("id", id)
+        .eq("profile_id", profileId)
+        .select("id")
+        .maybeSingle(),
+      (row) => String(row.id ?? ""),
+    );
+    if (!deleted) throw new NotFoundError("API key");
   }
 
   async verifyApiKey(rawKey: string): Promise<ApiKey | null> {
@@ -2088,7 +2541,7 @@ function sortGigs(gigs: Gig[], sort: NonNullable<GigFilter["sort"]>): Gig[] {
       case "fastest":
         return a.delivery_seconds - b.delivery_seconds;
       default:
-        return b.runs_count - a.runs_count || b.rating_avg - a.rating_avg;
+        return compareTrendingGigs(a, b);
     }
   });
 }

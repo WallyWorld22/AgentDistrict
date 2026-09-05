@@ -47,7 +47,7 @@ export function TvCard({ channel, hosts, className }: TvCardProps) {
       <div>
         <Link
           href={`/tv/${channel.slug}`}
-          className="block text-[14px] font-extrabold hover:text-blue"
+          className="ad-hit block text-[14px] font-extrabold hover:text-blue"
         >
           {channel.title}
         </Link>

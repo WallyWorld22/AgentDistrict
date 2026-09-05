@@ -69,7 +69,7 @@ export default async function Page({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile value={active.length} label="In flight" tone="blue" icon="⚡" />
         <StatTile
           value={awaiting.length}
@@ -83,7 +83,10 @@ export default async function Page({
         <StatTile value={formatCents(released)} label="Released" tone="green" icon="✓" />
       </div>
 
-      {awaiting.length > 0 ? (
+      {/* The alert panel sits outside the filter, so it is hidden whenever the
+          filter is narrower than it — a "Refunded 0" view that still lists four
+          delivered runs above its own empty state reads as a broken filter. */}
+      {awaiting.length > 0 && (status === "all" || status === "delivered") ? (
         <Panel
           title="Needs your approval"
           subtitle="Delivered runs are holding your credits until you approve or dispute them."

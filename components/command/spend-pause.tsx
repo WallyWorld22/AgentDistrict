@@ -14,11 +14,13 @@ export type SpendPauseProps = {
 /**
  * "Pause all external agent spending" (BUILD_SPEC §4 `/command`).
  *
- * A real control, not a preference: the switch is a form submit, the flag lives
- * on the session server-side, and every unattended spend path — @World's
- * "Assemble & run" and its one-click hires — refuses while it is on. The wallet's
- * approval threshold and daily ceiling keep enforcing themselves underneath for
- * API-key and MCP callers; the copy says so rather than overclaiming.
+ * A real control, not a preference. The switch writes `autonomous_paused` on
+ * the wallet row, which `holdFunds` reads inside the same transaction that
+ * places a hold — so @World's "Assemble & run", an API key and an MCP client
+ * are all refused while it is on, in every browser at once.
+ *
+ * It submits a *toggle*, not a target state: a tab rendered before someone else
+ * flipped the switch would otherwise send the wrong answer.
  */
 export function SpendPause({ paused, dailyLimitCents }: SpendPauseProps) {
   return (
@@ -43,7 +45,7 @@ export function SpendPause({ paused, dailyLimitCents }: SpendPauseProps) {
               className="mt-0.5 block text-[10.5px] leading-relaxed text-muted"
             >
               {paused
-                ? "Paused. @World cannot start runs and no unattended order can be placed. Runs already in flight finish and stay held."
+                ? "Paused. No unattended run can start — not from @World, not from an API key, not from an MCP client. Runs already in flight finish and stay held."
                 : `Live. Unattended spend is capped at ${formatCents(
                     dailyLimitCents,
                   )} a day and anything over your approval threshold still needs you.`}
@@ -85,8 +87,8 @@ export function SpendPause({ paused, dailyLimitCents }: SpendPauseProps) {
         </div>
       )}
     >
-      {/* Submitting toggles: the value is what the switch will become. */}
-      <input type="hidden" name="paused" value={paused ? "0" : "1"} />
+      {/* The server reads the wallet and flips it, so a stale tab is safe. */}
+      <input type="hidden" name="intent" value="toggle" />
     </ActionForm>
   );
 }

@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
-import { pickGigForOutcome } from "@/lib/data/ext/jobs";
-import { routeOutcome } from "@/lib/world";
+import type { Agent } from "@/lib/data/types";
+import { quoteAgent, routeOutcome } from "@/lib/world";
 import type { ActionState } from "@/app/actions";
 import { isSpendPaused } from "@/app/(app)/command/spend-pause";
 
@@ -59,19 +59,21 @@ export async function assembleGuildAction(
 
     const repo = getRepo();
     const result = await routeOutcome({ outcome }, { repo });
-    const steps =
+    const steps: Array<{ role: string; agent: Agent; gigSlug: string | null }> =
       result.guild?.steps ??
-      result.ranked.slice(0, 1).map((entry) => ({ role: "Run", agent: entry.agent }));
+      result.ranked
+        .slice(0, 1)
+        .map((entry) => ({ role: "Run", agent: entry.agent, gigSlug: entry.gigSlug }));
     if (steps.length === 0) throw new Error("No agent in the District fits that yet.");
 
+    // Order the exact gig the proposal was priced from. Re-picking one here is
+    // what made the button say $1.52 and the wallet lose $5.64.
     const created: string[] = [];
     const names: string[] = [];
     for (const step of steps) {
-      const gigs = await repo.listGigs({ agentHandle: step.agent.handle, limit: 12 });
-      const gig = pickGigForOutcome(gigs, result.intent.categories);
-      if (!gig) continue;
+      if (!step.gigSlug) continue;
       const order = await repo.orderGig({
-        gigSlug: gig.slug,
+        gigSlug: step.gigSlug,
         tier: "basic",
         brief: `${step.role}: ${outcome}`,
         buyerId: profile.id,
@@ -114,15 +116,18 @@ export async function hireRankedAgentAction(
     const agent = await repo.getAgentByHandle(handle);
     if (!agent) throw new Error("That agent is no longer in the District.");
 
+    // The same quote the row showed: `quoteAgent` is what priced that button.
     const result = await routeOutcome({ outcome }, { repo, limit: 1 });
-    const gigs = await repo.listGigs({ agentHandle: handle, limit: 12 });
-    const gig = pickGigForOutcome(gigs, [agent.category, ...result.intent.categories]);
-    if (!gig) throw new Error(`${agent.name} has no published gig to run this on yet.`);
+    const gigs = await repo.listGigs({ agentHandle: handle, limit: 24 });
+    const quote = quoteAgent(agent, gigs, result.intent.categories);
+    if (!quote.gigSlug) {
+      throw new Error(`${agent.name} has no published gig to run this on yet.`);
+    }
 
     const order = await repo.orderGig({
-      gigSlug: gig.slug,
+      gigSlug: quote.gigSlug,
       tier: "basic",
-      brief: outcome || gig.input_contract.summary,
+      brief: outcome || `Outcome for ${agent.name}`,
       buyerId: profile.id,
       approved: true,
     });

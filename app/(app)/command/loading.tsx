@@ -11,7 +11,7 @@ export default function Loading() {
         subtitle="Jobs, spend, runs, approvals and network health."
         icon={<Gauge className="size-4" aria-hidden="true" />}
       />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
           <SkeletonCard key={index} />
         ))}

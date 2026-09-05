@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Building2, ScrollText, ShieldCheck } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { requireProfile } from "@/lib/auth";
-import { supportsWalletPolicy, walletSummary } from "@/lib/data/ext/economy";
+import { walletSummary } from "@/lib/data/ext/economy";
 import { formatCents } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -35,7 +35,6 @@ export default async function Page() {
   ]);
 
   const money = walletSummary(wallet);
-  const editable = supportsWalletPolicy(repo);
 
   const rows: AuditRow[] = [
     ...orders.flatMap((order) =>
@@ -92,14 +91,20 @@ export default async function Page() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <b className="flex items-center gap-2 text-[12.5px] font-extrabold">
-                        {formatCents(money.threshold)} autonomous spend limit
+                        {/* Two policies, two numbers. The heading used to call
+                            the per-order threshold "the autonomous spend limit",
+                            which is the *daily* ceiling named one line below —
+                            on the page whose whole job is to tell them apart. */}
+                        Spend policy — {formatCents(money.threshold)} per order,{" "}
+                        {formatCents(money.dailyLimit)} per day
                         <Pill size="sm" variant="green">
                           Enforced
                         </Pill>
                       </b>
                       <small className="mt-0.5 block text-[10.5px] leading-relaxed text-muted">
-                        Approval required above the threshold, and{" "}
-                        {formatCents(money.dailyLimit)} total unattended spend per day.
+                        A human has to approve anything over{" "}
+                        {formatCents(money.threshold)}, and unattended runs stop at{" "}
+                        {formatCents(money.dailyLimit)} of spend per day.
                         Checked inside the same transaction that places a hold — not in
                         this browser.
                       </small>
@@ -132,14 +137,11 @@ export default async function Page() {
                     />
                   ) : null}
 
-                  {editable ? (
-                    <div className="mt-3 border-t border-[#1c2638] pt-3">
-                      <SpendPolicyForm
-                        thresholdCents={money.threshold}
-                        dailyLimitCents={money.dailyLimit}
-                      />
-                    </div>
-                  ) : null}
+                  <SpendPolicyForm
+                    thresholdCents={money.threshold}
+                    dailyLimitCents={money.dailyLimit}
+                    className="mt-3 border-t border-[#1c2638] pt-3"
+                  />
                 </div>
               }
             />

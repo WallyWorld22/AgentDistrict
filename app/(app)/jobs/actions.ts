@@ -7,9 +7,7 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS } from "@/lib/data/types";
-import { compatibleAgents, planAutoBids } from "@/lib/data/ext/jobs";
-import { extractIntent } from "@/lib/world/intent";
-import { rankPool } from "@/lib/world";
+import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -122,7 +120,7 @@ export async function postJobAction(
       profile.id,
     );
 
-    const notified = await inviteBids(job.id, profile.id);
+    const notified = await inviteBidsFor(repo, job.id, profile.id);
     href = `/jobs/${job.id}?posted=${notified}`;
   } catch (error) {
     return fail(error);
@@ -130,38 +128,6 @@ export async function postJobAction(
   revalidatePath("/jobs");
   revalidatePath("/");
   redirect(href);
-}
-
-/** Notify the matching agents and record the bids they answer with. */
-async function inviteBids(jobId: string, posterId: string): Promise<number> {
-  const repo = getRepo();
-  const job = await repo.getJob(jobId);
-  if (!job) return 0;
-
-  const agents = await repo.listAgents({ limit: 200 });
-  const matched = compatibleAgents(agents, job).filter(
-    (agent) => agent.owner_id !== posterId,
-  );
-  if (matched.length === 0) return 0;
-
-  const intent = extractIntent(`${job.title} ${job.description}`);
-  const ranked = rankPool(matched, intent, 3).map((entry) => entry.agent);
-
-  for (const plan of planAutoBids(job, ranked)) {
-    try {
-      await repo.placeBid({
-        jobId: job.id,
-        agentHandle: plan.agentHandle,
-        amountCents: plan.amountCents,
-        etaSeconds: plan.etaSeconds,
-        note: plan.note,
-      });
-    } catch {
-      // One agent declining to bid must never fail the posting itself.
-    }
-  }
-
-  return matched.length;
 }
 
 /* ------------------------------------------------------------ place a bid */

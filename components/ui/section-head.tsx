@@ -91,7 +91,9 @@ export function SectionHead({
         (href ? (
           <Link
             href={href}
-            className="inline-flex shrink-0 items-center gap-1 text-[12px] font-extrabold text-blue transition-colors hover:text-cyan"
+            // `ad-section-link` gives this 17px line a 40px hit area on a
+            // touch device without changing how it looks (globals.css).
+            className="ad-section-link inline-flex shrink-0 items-center gap-1 text-[12px] font-extrabold text-blue transition-colors hover:text-cyan"
           >
             {actionLabel}
             <ArrowRight className="size-3.5" aria-hidden="true" />

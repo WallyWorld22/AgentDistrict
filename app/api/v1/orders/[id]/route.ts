@@ -14,8 +14,10 @@ export const dynamic = "force-dynamic";
 export const GET = route(
   async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
-    const repo = getRepo();
-    const { profile } = await requireAuth(request, { scope: "orders:read", repo });
+    const { profile, repo } = await requireAuth(request, {
+      scope: "orders:read",
+      repo: getRepo(),
+    });
 
     const order = await repo.getOrder(id);
     if (!order) throw new NotFoundError(`Order ${id}`);

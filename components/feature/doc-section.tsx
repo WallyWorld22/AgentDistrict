@@ -1,5 +1,33 @@
+import * as React from "react";
 import type { DocSection } from "@/lib/docs";
 import { CodeBlock } from "@/components/ui/code-block";
+
+/**
+ * Renders `` `backticked` `` spans as real inline code.
+ *
+ * The doc source is written the way anyone writes prose about code, so the
+ * backticks have to mean something — printing them verbatim made
+ * `approval_threshold_cents` read as punctuation on /docs/cost-model.
+ */
+export function InlineDocText({ text }: { text: string }) {
+  const parts = text.split("`");
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <code
+            key={index}
+            className="rounded-[6px] bg-[#111a2b] px-1 py-px font-mono text-[0.92em] text-cyan"
+          >
+            {part}
+          </code>
+        ) : (
+          <React.Fragment key={index}>{part}</React.Fragment>
+        ),
+      )}
+    </>
+  );
+}
 
 /** Renders one documentation section (BUILD_SPEC §4 `/docs`). */
 export function DocSectionView({ section }: { section: DocSection }) {
@@ -13,7 +41,7 @@ export function DocSectionView({ section }: { section: DocSection }) {
           case "p":
             return (
               <p key={index} className="m-0 text-[12.5px] leading-relaxed text-ink">
-                {block.text}
+                <InlineDocText text={block.text} />
               </p>
             );
           case "list":
@@ -23,7 +51,9 @@ export function DocSectionView({ section }: { section: DocSection }) {
                 className="m-0 grid list-disc gap-1.5 pl-4 text-[12px] leading-relaxed text-ink"
               >
                 {block.items.map((item) => (
-                  <li key={item}>{item}</li>
+                  <li key={item}>
+                    <InlineDocText text={item} />
+                  </li>
                 ))}
               </ul>
             );
@@ -34,7 +64,9 @@ export function DocSectionView({ section }: { section: DocSection }) {
                 className="m-0 grid list-decimal gap-1.5 pl-4 text-[12px] leading-relaxed text-ink"
               >
                 {block.items.map((item) => (
-                  <li key={item}>{item}</li>
+                  <li key={item}>
+                    <InlineDocText text={item} />
+                  </li>
                 ))}
               </ol>
             );
@@ -70,7 +102,7 @@ export function DocSectionView({ section }: { section: DocSection }) {
                             key={cell}
                             className="border-b border-[#141c2b] px-3 py-2 align-top text-ink"
                           >
-                            {cell}
+                            <InlineDocText text={cell} />
                           </td>
                         ))}
                       </tr>

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 const FIELD = [
   "w-full rounded-[14px] border border-[#283650] bg-[#070c14] text-text",
-  "placeholder:text-[#66728a] transition-[border-color,box-shadow] duration-150",
+  "placeholder:text-placeholder transition-[border-color,box-shadow] duration-150",
   "hover:border-[#33456a]",
   "focus-visible:border-[#3a72c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
   "disabled:cursor-not-allowed disabled:opacity-50",

@@ -5,7 +5,7 @@ import { cn, formatCents } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { buttonClasses } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
-import { ROOFINTEL_DEMO } from "@/components/feature/showroom-card";
+import { SHOWROOMS } from "@/lib/data/ext/lounge";
 
 export type ShowroomDemoProps = {
   /** The live agent row, when it is in the District. */
@@ -21,8 +21,23 @@ export type ShowroomDemoProps = {
  * The scan is a CSS animation (`animate-scan`), so it is frozen under
  * `prefers-reduced-motion: reduce` by the global rule in `app/globals.css`.
  */
+/**
+ * One catalog entry, shared with `/showrooms` so the two pages can never
+ * describe the same demo differently.
+ */
+const DEMO = SHOWROOMS.find((entry) => entry.agentHandle === "roofintel") ?? SHOWROOMS[0];
+
+/** The four Address / Roof Area / … rows, paired from the catalog entry. */
+const READOUT = DEMO.fields.map((label, index) => ({
+  label,
+  value: DEMO.sample[index] ?? "—",
+}));
+
+/** RoofIntel's cheapest package, in cents — the price the card advertises. */
+const DEMO_PRICE_CENTS = 47;
+
 export function ShowroomDemo({ agent, className }: ShowroomDemoProps) {
-  const demo = ROOFINTEL_DEMO;
+  const demo = DEMO;
   const name = agent?.name ?? demo.agentName;
   const emoji = agent?.avatar_emoji ?? demo.glyph;
 
@@ -66,7 +81,7 @@ export function ShowroomDemo({ agent, className }: ShowroomDemoProps) {
 
         <div className="flex min-w-0 flex-col gap-2">
           <dl className="bg-card-surface m-0 grid rounded-[13px] border border-[#1c2638] px-2.5 py-1">
-            {demo.readout.map((row) => (
+            {READOUT.map((row) => (
               <div
                 key={row.label}
                 className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-[#161f30] py-1.5 last:border-0"
@@ -93,7 +108,7 @@ export function ShowroomDemo({ agent, className }: ShowroomDemoProps) {
       </div>
 
       <small className="text-[10.5px] text-muted">
-        {demo.pipeline} · {demo.durationLabel} · {formatCents(demo.priceCents)} · Simulated
+        {demo.pipeline} · {demo.durationLabel} · {formatCents(DEMO_PRICE_CENTS)} · Simulated
         run
       </small>
     </div>

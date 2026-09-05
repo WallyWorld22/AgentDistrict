@@ -70,7 +70,7 @@ export default async function Page({ params }: { params: Params }) {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Inset className="grid gap-0.5">
           <small className="text-[10.5px] text-muted">Rating</small>
           <Rating value={guild.rating_avg} count={guild.rating_count} size="lg" />

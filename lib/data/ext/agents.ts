@@ -9,7 +9,6 @@
  * browser bundle.
  */
 
-import { siteUrl } from "@/lib/site";
 import type { Repository } from "@/lib/data/repository";
 import type {
   Agent,
@@ -29,37 +28,11 @@ import type {
 /* Request origin                                                              */
 /* -------------------------------------------------------------------------- */
 
-/** The subset of `Headers` / Next's `ReadonlyHeaders` this module needs. */
-export type HeaderReader = { get(name: string): string | null };
-
-function firstValue(raw: string | null): string {
-  return (raw ?? "").split(",")[0]?.trim() ?? "";
-}
-
-function isLoopback(host: string): boolean {
-  const name = host.split(":")[0]?.toLowerCase() ?? "";
-  return name === "localhost" || name === "127.0.0.1" || name === "[::1]" || name === "::1";
-}
-
 /**
- * The origin a machine caller should use to reach *this* deployment.
- *
- * `siteUrl()` answers `http://localhost:3000` whenever no explicit site URL is
- * configured, which is exactly the wrong thing to print in the passport's
- * machine block on a preview deployment. So: an explicitly configured origin
- * still wins (it is the canonical one), otherwise the origin is derived from
- * the request the page is rendering for, and `siteUrl()` is only the last
- * resort for a render with no request context at all.
+ * Re-exported so the Passport surfaces keep one import; the helper itself is
+ * generic and lives next to `siteUrl()` in `lib/site.ts`.
  */
-export function requestOrigin(headers: HeaderReader | null | undefined): string {
-  if (process.env.NEXT_PUBLIC_SITE_URL) return siteUrl();
-
-  const host = firstValue(headers?.get("x-forwarded-host") ?? null) || firstValue(headers?.get("host") ?? null);
-  if (!host) return siteUrl();
-
-  const proto = firstValue(headers?.get("x-forwarded-proto") ?? null) || (isLoopback(host) ? "http" : "https");
-  return `${proto}://${host}`;
-}
+export { requestOrigin, type HeaderReader } from "@/lib/site";
 
 /* -------------------------------------------------------------------------- */
 /* Directory browse                                                            */
@@ -616,32 +589,6 @@ export const DEFAULT_KEY_SCOPES = ["agents:read", "gigs:read", "jobs:read", "sta
 
 /** Every scope the form can emit — the action validates against this. */
 export const ALL_KEY_SCOPES = API_KEY_SCOPE_GROUPS.flatMap((group) => group.scopes);
-
-/**
- * `Repository` has no `revokeApiKey` yet (see this lane's report). Rather than
- * shipping a Revoke button that cannot work, the panel asks the repository
- * whether it can revoke and hides the control when it cannot — so the UI
- * lights up on its own the moment the method lands.
- */
-type RevocableRepository = Repository & {
-  revokeApiKey?: (id: UUID, profileId: UUID) => Promise<unknown>;
-};
-
-export function supportsApiKeyRevocation(repo: Repository): boolean {
-  return typeof (repo as RevocableRepository).revokeApiKey === "function";
-}
-
-/** Revoke through the optional method; `false` when the adapter lacks it. */
-export async function revokeApiKey(
-  repo: Repository,
-  id: UUID,
-  profileId: UUID,
-): Promise<boolean> {
-  const revoke = (repo as RevocableRepository).revokeApiKey;
-  if (typeof revoke !== "function") return false;
-  await revoke.call(repo, id, profileId);
-  return true;
-}
 
 /** Serialisable API key row for the client panel — never carries the hash. */
 export type ApiKeyView = {

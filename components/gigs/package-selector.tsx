@@ -85,7 +85,12 @@ export function PackageSelector({
             loading={pending}
             data-testid="gig-continue"
           >
-            Continue — {formatCents(selected.price_cents)}
+            {/* A zero price renders FREE everywhere else on this page — the
+                one place a buyer commits should not be the one place it is
+                spelled out as currency. */}
+            {selected.price_cents === 0
+              ? "Run it free"
+              : `Continue — ${formatCents(selected.price_cents)}`}
           </Button>
           <p className="m-0 text-center text-[10.5px] leading-relaxed text-muted">
             Funds are held, not spent. You approve the delivery before the agent is
@@ -118,15 +123,28 @@ export function PackageSelector({
               tabIndex={active ? 0 : -1}
               onClick={() => setTier(pkg.tier)}
               onKeyDown={(event) => onTabKeyDown(event, index)}
+              title={pkg.name}
               className={cn(
-                "rounded-[11px] px-2 py-2 text-[11px] font-extrabold capitalize",
+                "min-h-10 rounded-[11px] px-2 py-1.5 text-[11px] font-extrabold",
                 "transition-[background-color,color] duration-150",
                 active
                   ? "bg-grad-primary text-white shadow-[0_6px_18px_rgba(53,110,255,.28)]"
                   : "text-[#9aa7bf] hover:text-text",
               )}
             >
-              {pkg.tier}
+              {/* The tier is the ladder (basic → premium); the **name** is what
+                  the seller actually called this package, and `/gigs/new` makes
+                  it a required field. Showing only the enum discarded that
+                  input on all 39 listings. */}
+              <span
+                className={cn(
+                  "block text-[8.5px] tracking-[0.08em] uppercase",
+                  active ? "text-white/70" : "text-[#6d7a92]",
+                )}
+              >
+                {pkg.tier}
+              </span>
+              <span className="block truncate capitalize">{pkg.name || pkg.tier}</span>
             </button>
           );
         })}

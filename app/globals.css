@@ -21,6 +21,12 @@
   --color-muted: #8e9ab2;
   /* body copy that is not a heading and not muted (paragraphs inside cards) */
   --color-ink: #c3cce0;
+  /* Placeholder text. One token, because it is often the only visible label a
+     field has — the top-bar search is labelled by its placeholder alone. The
+     old value (#66728a) measured 4.07:1 on the search field's fill at 12.5px,
+     under the 4.5:1 WCAG AA minimum; this is the value the @World bar already
+     used and measures 5.67:1 on the same fill. */
+  --color-placeholder: #7c88a3;
 
   /* accents */
   --color-blue: #48a8ff;
@@ -102,8 +108,19 @@
   );
 }
 
-* {
-  min-width: 0;
+/*
+ * Flex/grid children default to `min-width: auto`, which is what makes a long
+ * word or a wide table blow out a row. Resetting it to 0 fixes that — but the
+ * reset MUST live in `@layer base`: unlayered CSS outranks every Tailwind
+ * cascade layer regardless of specificity, so an unlayered `*` rule silently
+ * defeats every `min-w-*` utility in the app.
+ */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    min-width: 0;
+  }
 }
 
 html {
@@ -163,6 +180,33 @@ select option {
   -ms-overflow-style: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/**
+ * A scrollbar that is there when it is needed and invisible when it is not.
+ *
+ * `no-scrollbar` on a container that actually overflows hides the only cue
+ * that more content exists — the sidebar quietly dropped its last three nav
+ * rows below the fold on a 900px display. This keeps the thin native bar,
+ * styled to the District's palette.
+ */
+@utility scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: #24314a transparent;
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #24314a;
+    border-radius: 999px;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: #33415f;
   }
 }
 
@@ -314,5 +358,44 @@ select option {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/**
+ * Touch targets.
+ *
+ * docs/DESIGN.md §4 promises interactive targets of at least 40px on touch,
+ * and the compact `sm` button (32px) is used everywhere on a phone. Rather than
+ * resize the desktop look, put a floor under every control on a coarse
+ * pointer — buttons, tabs, switches and the `buttonClasses()` anchors that
+ * carry the same marker class.
+ */
+@media (pointer: coarse) {
+  .ad-control,
+  button,
+  [role="switch"],
+  [role="tab"],
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 40px;
+  }
+
+  /* Icon-only controls need the width too, or they stay 24px wide. */
+  .ad-control:where([aria-label]):empty,
+  button:where([aria-label]):has(> svg:only-child) {
+    min-width: 40px;
+  }
+
+  /* Section links ("See all →", "View All Rooms") and card titles are 17–21px
+     of text; give them a hit area without moving anything visually. */
+  .ad-section-link,
+  .ad-hit {
+    min-height: 40px;
+    padding-block: 0.625rem;
+    margin-block: -0.625rem;
+  }
+  .ad-section-link {
+    align-items: center;
   }
 }

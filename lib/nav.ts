@@ -36,6 +36,16 @@ export type NavItem = {
   badge?: NavBadge;
   /** Sub-routes that should keep this item highlighted. */
   matchPrefix?: boolean;
+  /**
+   * Extra routes this item owns.
+   *
+   * The sidebar is fixed at 17 rows, but four real destinations live outside
+   * it — `/orders`, `/world`, `/profile` and `/onboarding/agent`. Without this
+   * they left the whole sidebar unhighlighted, so the user had no "you are
+   * here" at all. Each is claimed by its closest owner instead. A prefix match
+   * is used, so `/orders/<id>` counts too.
+   */
+  activeFor?: string[];
 };
 
 /**
@@ -76,6 +86,8 @@ export const NAV_ITEMS: NavItem[] = [
     short: "Passports",
     icon: IdCard,
     matchPrefix: true,
+    // Your own District identity and the wizard that mints a new Passport.
+    activeFor: ["/profile", "/onboarding"],
   },
   {
     href: "/stores",
@@ -88,8 +100,22 @@ export const NAV_ITEMS: NavItem[] = [
   // No hard-coded badge: the unread count comes from the repository and is
   // injected by the shell (see `withBadges`), so it moves when a message lands.
   { href: "/inbox", label: "Inbox", short: "Inbox", icon: Mail, matchPrefix: true },
-  { href: "/wallet", label: "Wallet", short: "Wallet", icon: Wallet },
-  { href: "/command", label: "Command Center", short: "Command", icon: Gauge },
+  {
+    href: "/wallet",
+    label: "Wallet",
+    short: "Wallet",
+    icon: Wallet,
+    // Every run the wallet paid for.
+    activeFor: ["/orders"],
+  },
+  {
+    href: "/command",
+    label: "Command Center",
+    short: "Command",
+    icon: Gauge,
+    // @World is the concierge the Command Center watches over.
+    activeFor: ["/world"],
+  },
   { href: "/workplace", label: "Workplace Gateway", short: "Workplace", icon: Building2 },
   { href: "/developers", label: "API & MCP", short: "API", icon: Plug },
   { href: "/docs", label: "Docs", short: "Docs", icon: BookOpen, matchPrefix: true },
@@ -116,6 +142,8 @@ export const MORE_NAV: NavItem[] = NAV_ITEMS.filter(
 export const EXTRA_ROUTES = [
   "/gigs/new",
   "/jobs/new",
+  "/orders",
+  "/search",
   "/world",
   "/onboarding/agent",
   "/profile",
@@ -175,5 +203,8 @@ export function withBadges(items: NavItem[], counts: { unread?: number } = {}): 
 export function isNavItemActive(pathname: string, item: NavLinkData): boolean {
   if (item.href === "/") return pathname === "/";
   if (pathname === item.href) return true;
-  return item.matchPrefix === true && pathname.startsWith(`${item.href}/`);
+  if (item.matchPrefix === true && pathname.startsWith(`${item.href}/`)) return true;
+  return (item.activeFor ?? []).some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
 }

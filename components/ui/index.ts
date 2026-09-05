@@ -66,5 +66,3 @@ export { Kbd } from "./kbd";
 export { CodeBlock } from "./code-block";
 export type { CodeBlockProps } from "./code-block";
 
-export { HeroBanner } from "./hero-banner";
-export type { HeroBannerProps, HeroStat } from "./hero-banner";

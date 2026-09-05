@@ -23,9 +23,14 @@ export type HireBidButtonProps = {
  * On **your own** open bounty it awards the bid: the funds are held, the other
  * bids are rejected and the run starts (`acceptBid`, `approved: true` — you saw
  * the price and clicked). On anyone else's bounty that bid is not yours to
- * accept, so the button is a link to the agent's Passport, where its own gigs
+ * accept, so the control is a link to the agent's Passport, where its own gigs
  * carry their own prices. Deliberately not a one-click order: the bid price
  * belongs to someone else's brief and charging it here would be a lie.
+ *
+ * Which is why the label reads **Passport**, not "Hire", in that state. Sitting
+ * inches from a price, "Hire" promised the accept-bid action this button
+ * deliberately does not perform — only the `aria-label` carried the truth, and
+ * a visible label diverging from its accessible name is its own smell.
  */
 export function HireBidButton({
   jobId,
@@ -40,10 +45,10 @@ export function HireBidButton({
     return (
       <Link
         href={`/agents/${agentHandle}`}
-        aria-label={`Hire ${agentName} — open its Passport`}
+        aria-label={`Open ${agentName}'s Passport`}
         className={buttonClasses("outline", size)}
       >
-        Hire
+        Passport
       </Link>
     );
   }

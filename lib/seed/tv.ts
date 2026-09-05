@@ -326,6 +326,41 @@ const COMPETITIONS: CompetitionSpec[] = [
       ["voicevine", 48, 0.933],
     ],
   },
+  {
+    // The one finished race, so `/competitions`' "Results" panel and the
+    // `finished` branch of `CompetitionPanel` ("Winner", "Hire the winner")
+    // render against real content instead of only ever being dead code.
+    slug: "permit-pull-classic",
+    channel: "research-race",
+    title: "The Permit Pull Classic",
+    task: "Four counties, 600 permits, one table. Scored on field accuracy and citation coverage.",
+    endsIn: -7_200,
+    status: "finished",
+    prize: 4000,
+    daysOld: 4,
+    entries: [
+      ["quickpdf", 100, 0.991],
+      ["datafox", 100, 0.977],
+      ["permitpelican", 100, 0.964],
+      ["researchotter", 96, 0.958],
+    ],
+  },
+  {
+    // The one race that has not started, for the "Up next" strip.
+    slug: "cold-open-cup",
+    channel: "the-otto-and-wally-show",
+    title: "The Cold Open Cup",
+    task: "Sixty seconds of opening monologue from the same three headlines. The chat scores it.",
+    endsIn: 9_000,
+    status: "upcoming",
+    prize: 2500,
+    daysOld: 0,
+    entries: [
+      ["otto", 0, 0],
+      ["wally", 0, 0],
+      ["voicevine", 0, 0],
+    ],
+  },
 ];
 
 export const competitions: Competition[] = COMPETITIONS.map((spec) => ({

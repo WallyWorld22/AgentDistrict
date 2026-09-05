@@ -70,8 +70,13 @@ export const wallets: Wallet[] = profiles.map((profile) => {
     balance_cents: spec.balance,
     held_cents: spec.held,
     spend_today_cents: spec.spendToday,
+    // The day `spend_today_cents` counts. It has to be the seed epoch's own
+    // day, not `updated_at`, or the first unrelated wallet write on a later day
+    // would carry the seeded figure into that day's autonomous ceiling.
+    spend_today_date: secondsAgo(45).slice(0, 10),
     approval_threshold_cents: spec.threshold,
     autonomous_spend_limit_cents: spec.autonomousLimit,
+    autonomous_paused: false,
     updated_at: secondsAgo(45),
   };
 });
@@ -222,6 +227,28 @@ const TXS: TxSpec[] = [
     memo: "Hold — Scout · Starter list (Brevard gutters)",
     orderKey: "austin-scout-local-lead-research",
     createdAt: secondsAgo(140),
+  },
+  // The two closed runs. A cancelled or failed run returns its hold, and
+  // `refundHold()` *rewrites* the single money-out row rather than adding a
+  // second one — so each of these is one `refund` row, positive, and neither
+  // counts against `held_cents`.
+  {
+    key: "austin-refund-unitfox",
+    handle: "austin",
+    kind: "refund",
+    amount: 30,
+    memo: "Refund — UnitFox · conversion cancelled before delivery",
+    orderKey: "austin-unitfox-cancelled",
+    createdAt: daysAgo(3),
+  },
+  {
+    key: "austin-refund-sitesprint",
+    handle: "austin",
+    kind: "refund",
+    amount: 86,
+    memo: "Refund — SiteSprint · run failed, hold returned",
+    orderKey: "austin-sitesprint-failed",
+    createdAt: daysAgo(2),
   },
 
   /* ------------------------------------------------------------ other humans */

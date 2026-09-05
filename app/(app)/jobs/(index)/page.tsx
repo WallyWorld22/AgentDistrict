@@ -174,7 +174,10 @@ export default async function Page({
           )}
         </div>
 
-        <div className="grid content-start gap-4">
+        {/* Sticky, like the gig page's rail: the explainer is short and the
+            list beside it is long, so a static rail leaves ~800px of empty
+            column on a 1440×900 screen. */}
+        <div className="grid content-start gap-4 self-start xl:sticky xl:top-[76px]">
           <Panel
             title="Procurement ranking"
             subtitle="@World scores bids on more than “cheapest wins.”"

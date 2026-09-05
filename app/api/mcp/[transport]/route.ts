@@ -1,10 +1,14 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-import { requireProfile } from "@/lib/auth";
+import { hasBearerHeader, requireAuth, requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import type { Repository } from "@/lib/data/repository";
+import type { Profile } from "@/lib/data/types";
 import { toDistrictError } from "@/lib/data/errors";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS, PACKAGE_TIERS } from "@/lib/data/types";
-import { SITE_DESCRIPTION, siteUrl } from "@/lib/site";
+import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
+import { headers } from "next/headers";
+import { SITE_DESCRIPTION, requestOrigin } from "@/lib/site";
 import { routeOutcome } from "@/lib/world";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +48,40 @@ function fail(error: unknown): ToolResult {
   };
 }
 
+/**
+ * The origin to print in a tool result.
+ *
+ * Tools are registered once, outside any request, so the origin cannot be
+ * closed over — but a tool handler still runs inside the Route Handler's
+ * request scope, where `headers()` resolves. That keeps every URL an MCP
+ * client is handed pointing at the deployment it is actually talking to.
+ */
+async function origin(): Promise<string> {
+  return requestOrigin(await headers());
+}
+
+/**
+ * Who is calling a mutating tool, and which repository serves them.
+ *
+ * An MCP client is a machine: it sends `Authorization: Bearer ad_live_…`, not a
+ * cookie. The header reaches a tool handler through `headers()` (tool handlers
+ * run inside the Route Handler's request scope), so the same API-key path the
+ * REST surface uses applies here — including the service-role repository that
+ * lets a keyed caller actually write in supabase mode. A browser-based client
+ * with a session still falls through to `requireProfile()`.
+ */
+async function caller(scope: string): Promise<{ profile: Profile; repo: Repository }> {
+  const probe = new Request("https://agentdistrict.invalid/api/mcp", {
+    headers: await headers(),
+  });
+  if (hasBearerHeader(probe)) {
+    const context = await requireAuth(probe, { scope });
+    return { profile: context.profile, repo: context.repo };
+  }
+  const repo = getRepo();
+  return { profile: await requireProfile(repo), repo };
+}
+
 async function attempt(work: () => Promise<unknown>): Promise<ToolResult> {
   try {
     return ok(await work());
@@ -70,6 +108,7 @@ const handler = createMcpHandler(
       },
       async (args) =>
         attempt(async () => {
+          const base = await origin();
           const agents = await getRepo().listAgents({
             q: args.query,
             category: args.category,
@@ -91,7 +130,7 @@ const handler = createMcpHandler(
               rating_avg: agent.rating_avg,
               rating_count: agent.rating_count,
               avg_latency_sec: agent.avg_latency_sec,
-              passport: `${siteUrl()}/agents/${agent.handle}`,
+              passport: `${base}/agents/${agent.handle}`,
             })),
           };
         }),
@@ -108,6 +147,7 @@ const handler = createMcpHandler(
       async ({ handle }) =>
         attempt(async () => {
           const repo = getRepo();
+          const base = await origin();
           const agent = await repo.getAgentByHandle(handle);
           if (!agent) return { error: `No agent @${handle}` };
           const [gigs, reviews, peers] = await Promise.all([
@@ -129,7 +169,7 @@ const handler = createMcpHandler(
             })),
             reviews: reviews.map((review) => ({ rating: review.rating, body: review.body })),
             works_well_with: peers.map((peer) => peer.handle),
-            agent_card: `${siteUrl()}/agents/${agent.handle}/agent-card.json`,
+            agent_card: `${base}/agents/${agent.handle}/agent-card.json`,
           };
         }),
     );
@@ -191,8 +231,7 @@ const handler = createMcpHandler(
       },
       async (args) =>
         attempt(async () => {
-          const repo = getRepo();
-          const profile = await requireProfile(repo);
+          const { profile, repo } = await caller("jobs:write");
           const job = await repo.createJob(
             {
               title: args.title,
@@ -208,7 +247,15 @@ const handler = createMcpHandler(
             },
             profile.id,
           );
-          return { job_id: job.id, url: `${siteUrl()}/jobs/${job.id}`, status: job.status };
+          // Wake the matching agents, exactly as posting through the site does,
+          // so `get_bids` has something to return.
+          const agentsNotified = await inviteBidsFor(repo, job.id, profile.id);
+          return {
+            job_id: job.id,
+            url: `${await origin()}/jobs/${job.id}`,
+            status: job.status,
+            agents_notified: agentsNotified,
+          };
         }),
     );
 
@@ -253,8 +300,7 @@ const handler = createMcpHandler(
       },
       async (args) =>
         attempt(async () => {
-          const repo = getRepo();
-          const profile = await requireProfile(repo);
+          const { profile, repo } = await caller("orders:write");
           const order = await repo.orderGig({
             gigSlug: args.gig_slug,
             tier: args.tier ?? "standard",
@@ -266,7 +312,7 @@ const handler = createMcpHandler(
             status: order.status,
             amount_cents: order.amount_cents,
             eta_seconds: order.eta_seconds,
-            watch: `${siteUrl()}/orders/${order.id}`,
+            watch: `${await origin()}/orders/${order.id}`,
           };
         }),
     );
@@ -329,6 +375,7 @@ const handler = createMcpHandler(
       },
       async ({ channel_slug }) =>
         attempt(async () => {
+          const base = await origin();
           const channel = await getRepo().getChannelBySlug(channel_slug);
           if (!channel) return { error: `No channel ${channel_slug}` };
           return {
@@ -338,7 +385,7 @@ const handler = createMcpHandler(
               is_live: channel.is_live,
               viewers: channel.viewers,
               schedule: channel.schedule,
-              watch_url: `${siteUrl()}/tv/${channel.slug}`,
+              watch_url: `${base}/tv/${channel.slug}`,
             },
             hosts: channel.hosts.map((host) => ({ handle: host.handle, name: host.name })),
             competition: channel.competition,

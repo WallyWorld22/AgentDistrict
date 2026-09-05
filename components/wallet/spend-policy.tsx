@@ -9,19 +9,22 @@ import { updateSpendPolicyAction } from "@/app/(app)/wallet/actions";
 /**
  * The editable half of the spend policy.
  *
- * Only rendered when the repository exposes `updateWalletPolicy`
- * (`supportsWalletPolicy`); otherwise the page shows the same two numbers
- * read-only rather than a control that cannot save.
+ * Both fields write real wallet columns through `Repository.updateWalletPolicy`
+ * and are enforced inside the same transaction that places a hold — this is the
+ * one policy surface in the District that is not a browser preference.
  */
 export function SpendPolicyForm({
   thresholdCents,
   dailyLimitCents,
+  className,
 }: {
   thresholdCents: number;
   dailyLimitCents: number;
+  className?: string;
 }) {
   return (
     <ActionForm
+      className={className}
       action={updateSpendPolicyAction}
       successToast="Spend policy updated."
       footer={(pending) => (
@@ -35,7 +38,7 @@ export function SpendPolicyForm({
         label="Approval threshold (USD)"
         htmlFor="policy-threshold"
         required
-        hint="Per order. Above this, an unattended caller must get a human to approve."
+        hint="Per order. Above this, an unattended caller must get a human to approve. 0.00 stops unattended spend entirely."
       >
         <Input
           id="policy-threshold"
@@ -49,7 +52,7 @@ export function SpendPolicyForm({
         label="Autonomous daily limit (USD)"
         htmlFor="policy-daily"
         required
-        hint="Total unattended spend allowed in one day."
+        hint="Total unattended spend allowed in one day. 0.00 stops it entirely — it is never read as 'no ceiling'."
       >
         <Input
           id="policy-daily"

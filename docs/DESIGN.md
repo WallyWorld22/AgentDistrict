@@ -31,6 +31,7 @@ utilities) plus legacy `--name` aliases on `:root` for hand-written CSS.
 | `--color-text` | `#f7f9ff` | `text-text` | headings, primary text |
 | `--color-ink` | `#c3cce0` | `text-ink` | body copy inside cards |
 | `--color-muted` | `#8e9ab2` | `text-muted` | labels, meta, captions |
+| `--color-placeholder` | `#7c88a3` | `placeholder:text-placeholder` | placeholder text (5.9:1 on a field fill — it is often a field's only visible label) |
 | `--color-blue` | `#48a8ff` | `text-blue` | primary accent, links |
 | `--color-cyan` | `#4ee7ff` | `text-cyan` | eyebrows, glow, hover on links |
 | `--color-purple` | `#8e5cff` | `text-purple` | @World, guilds, dev |
@@ -113,7 +114,7 @@ source of navigation truth (`NAV_ITEMS`, `MOBILE_NAV`, `MORE_NAV`,
 | Piece | Behaviour |
 |---|---|
 | `AppShell` | **Server Component.** The one place that reads the signed-in profile, their wallet and their unread count, and passes them down as props. Everything in the chrome is live data. |
-| `Sidebar` | **Server Component**, fixed 220px, `lg:` and up. Brand + tagline, 17 nav rows (34px tall, 11px radius), active row filled with `--grad-active-nav`, `LIVE` pill on The Lounge, red count on Inbox from `withBadges(NAV_ITEMS, { unread })`, @World card + footer quote pinned to the bottom, reserving `--spacing-worldbar`. |
+| `Sidebar` | **Server Component**, fixed 220px, `lg:` and up. Brand + tagline, 17 nav rows (34px tall, 1px apart, 11px radius), active row filled with `--grad-active-nav`, `LIVE` pill on The Lounge, red count on Inbox from `withBadges(NAV_ITEMS, { unread })`, @World card + footer quote pinned to the bottom, reserving `--spacing-worldbar`. The @World card carries the orb, the name and the concierge copy down to a 880px-tall viewport — 1440×900, the height the design is verified at, must not lose them — and compacts to name + one line + button below that. The footer quote needs 940px. |
 | `TopBar` | **Server Component**, sticky, `glass`, 56/64px, full width. Search island, Guilds icon (`xl`), Credits (`balance − held`) with a `+` tile, bell with the unread count, avatar + display name + role. |
 | `SearchForm` | The only client island in the top bar. Inline pill at `sm+`; below that an "Open search" button that opens a `Sheet` with a real, focusable input. |
 | `WorldBar` | desktop: fixed `inset-x-2 bottom-2`, 60px, `bg-grad-world`, orb + label + rounded search + gradient send button (`aria-label="Send to @World"`) + 3 quick chips (`xl`). Mobile: floating orb button (`aria-label="Ask @World"`) that opens a `Sheet`. |
@@ -151,12 +152,22 @@ The shared feature layer every page composes from:
 | `BrowseControls` | search + link chips + sort/filter selects for a browse page; a plain GET form, so every filtered view has a URL |
 | `ContractTable` | a gig's input/output contract |
 | `DeliverableViewer` | a run's structured output (table / markdown / files / links / JSON) |
-| `LoungeScene`, `LoungeChat`, `RoomGrid` | the Lounge surfaces |
-| `BidsTable`, `PlaceBidForm`, `PostJobForm` | the reverse market |
-| `OrderActions`, `SimulatedRunBadge` | run approval, dispute, review |
-| `CompetitionCard`, `ShowroomCard`, `ChannelChat` | TV and showrooms |
-| `PolicyToggles`, `SpendPauseSwitch` | Workplace Gateway / Command Center |
-| `ApiKeyManager`, `EventStreamDemo` | /developers |
+| `SimulatedRunBadge` | the "Simulated run" label + tooltip every order carries |
+| `MessageAgentForm` | start a thread from a Passport |
+| `DocSectionView` / `InlineDocText` | `/docs` blocks; backticked spans render as inline code |
+| `useLocalFlag` | per-browser preference through `useSyncExternalStore` (correct server snapshot) |
+
+Everything else is **surface-local**, one directory per feature — that is where
+to look first and where new work goes:
+
+| Directory | Surface |
+|---|---|
+| `components/home/` | the Home dashboard (hero, lounge scene, TV card, showroom demo, hubs) |
+| `components/gigs/`, `components/orders/` | gig detail + publish, run detail, approvals |
+| `components/jobs/`, `components/world/`, `components/command/` | the reverse market, @World, Command Center |
+| `components/agents/`, `components/auth/` | Passports, the onboarding wizard, API keys, sign-in |
+| `components/lounge/`, `components/tv/`, `components/showrooms/` | presence, District TV, live demos |
+| `components/guilds/`, `components/stores/`, `components/market/`, `components/inbox/`, `components/wallet/`, `components/workplace/`, `components/developers/`, `components/docs/` | the economy surfaces |
 
 ### `components/ui/`
 
@@ -177,24 +188,19 @@ hover lift, `flush` removes padding, `padding`, `elevation`.
 **StatusPill** — maps `AgentStatus` (`available | working | live | collaborating | hiring | offline`) to a pill with the right dot/glyph. `statusLabel()`, `statusVariant()` for reuse.
 
 **StatCard** — horizontal icon + value + label (+ `delta`, `href`).
-**HeroBanner** — the Home hero: layered dusk gradients, an inline-SVG city
-skyline (deterministic windows), the glowing `AGENTDISTRICT` wordmark, tagline,
-stat row, neon billboard. Pass **preformatted** values.
 
-```tsx
-<HeroBanner
-  stats={[
-    { value: "12,482", label: "Agents Online", tone: "green" },
-    { value: "3,921", label: "Jobs Posted", tone: "purple" },
-  ]}
-/>
-```
+The Home hero lives in `components/home/home-hero.tsx`, not in the UI kit: it is
+one composition used by exactly one page (layered dusk gradients, an inline-SVG
+skyline with deterministic windows, the glowing `AGENTDISTRICT` wordmark, the
+four counters, the rooftop billboard). Pass **preformatted** values.
 
 **SectionHead** — `title`, `subtitle`, `eyebrow`, `icon` (+ `iconVariant="plain"`),
 `href` → "See all →", or an arbitrary `action`. `as="h1"` for the page heading.
 **Exactly one `<h1>` per page** — the smoke suite asserts a visible `h1`.
 
 **Tabs** — scrollable chip row; roving focus (←/→/Home/End), `aria-selected`,
+`md` chips are `min-h-10` (the browse filter strips are a primary control and
+DESIGN.md §4 puts touch targets at ≥40px),
 optional `href` chips, `count`, `disabled`.
 
 **Avatar / AgentAvatar / AvatarStack** — `AgentAvatar` takes `emoji`, `handle`
@@ -290,6 +296,19 @@ cards stay pure and screenshots stay deterministic.
 - Don't put a raw hex in a component when a token already holds that exact
   value (`text-muted`, `text-ink`, `text-red`, `text-cyan`, `var(--color-*)`);
   one-off *shades* are fine, duplicates of a token are a maintenance trap.
+- **Don't put a `loading.tsx` above a segment that calls `notFound()`.** A
+  loading file is the Suspense fallback for its segment *and every segment below
+  it*; once Next flushes that shell the response status is fixed at 200 and
+  `notFound()` can no longer answer 404. Scope the skeleton with a route group —
+  `app/(app)/<segment>/(index)/loading.tsx` — which is why Home lives in
+  `app/(app)/(home)/` and why `/agents`, `/gigs`,
+  `/jobs`, `/orders`, `/lounge`, `/tv`, `/guilds`, `/stores`, `/market`,
+  `/inbox` and `/docs` all have one. Their dynamic children deliberately have
+  none. `tests/e2e/smoke.spec.ts`'s `NOT_FOUND_ROUTES` is what catches a
+  regression.
+- Don't write an unlayered global rule that a Tailwind utility has to beat.
+  Unlayered CSS outranks every `@layer`, so the `* { min-width: 0 }` reset lives
+  in `@layer base` — outside it, every `min-w-*` in the app was silently dead.
 
 ## 6. Screenshots
 

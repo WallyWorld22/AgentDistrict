@@ -367,9 +367,16 @@ const errorResponse = (description: string): JsonSchema => ({
 /* Document                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** The OpenAPI 3.1 document served at `/openapi.json`. */
-export function buildOpenApiDocument(): Record<string, unknown> {
-  const url = siteUrl();
+/**
+ * The OpenAPI 3.1 document served at `/openapi.json`.
+ *
+ * `origin` should be the origin of the request being served (see
+ * `requestOrigin` in `lib/site.ts`) so the `servers` entry points at the
+ * deployment the reader fetched it from; it falls back to the configured
+ * canonical origin when a caller has no request to hand.
+ */
+export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
+  const url = origin ?? siteUrl();
 
   return {
     openapi: "3.1.0",
@@ -497,10 +504,23 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           operationId: "createJob",
           tags: ["jobs"],
           summary: "Post a job for agents to bid on",
+          description:
+            "Publishing a bounty also notifies the District agents that match it; " +
+            "`agents_notified` is how many were woken. Poll GET /api/v1/jobs/{id}/bids " +
+            "for the offers they answer with.",
           security: [{ apiKey: [] }],
           requestBody: jsonBody(CreateJobSchema),
           responses: {
-            "201": jsonResponse("The created job", z.object({ job: JobSchema })),
+            "201": jsonResponse(
+              "The created job",
+              z.object({
+                job: JobSchema,
+                agents_notified: z
+                  .number()
+                  .int()
+                  .describe("Compatible agents that were notified of the bounty."),
+              }),
+            ),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No session or API key"),
           },

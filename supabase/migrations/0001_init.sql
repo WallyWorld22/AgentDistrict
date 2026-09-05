@@ -151,6 +151,29 @@ create table if not exists public.stores (
 create unique index if not exists stores_slug_key on public.stores (slug);
 create index if not exists stores_owner_id_idx on public.stores (owner_id);
 
+-- =============================================================================
+-- Immutable text join (needed by the full-text indexes below)
+--
+-- `array_to_string()` is marked STABLE in Postgres, not IMMUTABLE, so an index
+-- expression that calls it is rejected outright:
+--   ERROR: functions in index expression must be marked IMMUTABLE
+-- This is the standard workaround — a thin IMMUTABLE wrapper. Every expression
+-- index below and every search function in 0003/0006 uses it, and they must
+-- keep using the *same* expression or the planner stops choosing the index.
+-- =============================================================================
+
+create or replace function public.text_join(p_values text[], p_separator text default ' ')
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select coalesce(array_to_string(p_values, p_separator), '');
+$$;
+
+comment on function public.text_join(text[], text) is
+  'IMMUTABLE array_to_string, so text[] columns can take part in an expression index.';
+
 -- agents ---------------------------------------------------------------------
 create table if not exists public.agents (
   id                    uuid primary key default gen_random_uuid(),
@@ -199,7 +222,7 @@ create index if not exists agents_search_idx on public.agents using gin (
     'english',
     coalesce(name, '') || ' ' || coalesce(handle, '') || ' ' ||
     coalesce(tagline, '') || ' ' || coalesce(description, '') || ' ' ||
-    array_to_string(skills, ' ')
+    public.text_join(skills)
   )
 );
 
@@ -258,7 +281,7 @@ create index if not exists gigs_search_idx on public.gigs using gin (
   to_tsvector(
     'english',
     coalesce(title, '') || ' ' || coalesce(description, '') || ' ' ||
-    array_to_string(tags, ' ')
+    public.text_join(tags)
   )
 );
 
@@ -368,7 +391,7 @@ create index if not exists market_items_search_idx on public.market_items using 
   to_tsvector(
     'english',
     coalesce(title, '') || ' ' || coalesce(description, '') || ' ' ||
-    array_to_string(tags, ' ')
+    public.text_join(tags)
   )
 );
 
@@ -479,8 +502,17 @@ create table if not exists public.wallets (
   balance_cents                 integer not null default 0,
   held_cents                    integer not null default 0 check (held_cents >= 0),
   spend_today_cents             integer not null default 0 check (spend_today_cents >= 0),
+  -- The UTC day `spend_today_cents` counts. It is deliberately NOT `updated_at`:
+  -- every unrelated wallet write (a top-up, a policy save, the Command Center
+  -- pause) bumps that column, which silently carried yesterday's spend forward
+  -- into today's autonomous ceiling. See 0008_integrity.sql.
+  spend_today_date              date not null default (now() at time zone 'utc')::date,
   approval_threshold_cents      integer not null default 500 check (approval_threshold_cents >= 0),
   autonomous_spend_limit_cents  integer not null default 500 check (autonomous_spend_limit_cents >= 0),
+  -- The Command Center kill switch. Server state, not a browser preference, so
+  -- every caller — the site, an API key, an MCP client — sees the same answer.
+  -- A zero limit means "no unattended spend at all", never "no ceiling".
+  autonomous_paused             boolean not null default false,
   updated_at                    timestamptz not null default now()
 );
 

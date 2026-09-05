@@ -15,24 +15,61 @@ import { SupabaseRepository } from "./supabase";
  * every request would get a fresh copy of the seed and mutations would vanish
  * between a Server Action and the redirect that follows it.
  *
+ * The memo lives on `globalThis`, not in module scope: Next emits this module
+ * into more than one server bundle (the page/Server-Action bundle and the
+ * Route-Handler bundle), and a module-scoped `let` would give each bundle its
+ * own store — everything the machine surface (REST + MCP) wrote would be
+ * invisible to the UI, and the same credits could be spent twice.
+ *
  * The Supabase client is injected lazily so this module — and everything that
  * imports it, including unit tests — never pulls `next/headers` into a context
  * that has no request.
  */
 
-let demoSingleton: DemoRepository | null = null;
-let supabaseSingleton: SupabaseRepository | null = null;
+const DEMO_SLOT = Symbol.for("agentdistrict.demoRepository");
+const SUPABASE_SLOT = Symbol.for("agentdistrict.supabaseRepository");
+
+type RepoGlobal = {
+  [DEMO_SLOT]?: DemoRepository;
+  [SUPABASE_SLOT]?: SupabaseRepository;
+};
+
+const repoGlobal = globalThis as unknown as RepoGlobal;
 
 export function getRepo(): Repository {
   if (isSupabaseDataMode()) {
-    supabaseSingleton ??= new SupabaseRepository(async () => {
+    return (repoGlobal[SUPABASE_SLOT] ??= new SupabaseRepository(async () => {
       const { createClient } = await import("@/lib/supabase/server");
       return createClient();
-    });
-    return supabaseSingleton;
+    }));
   }
-  demoSingleton ??= createDemoRepository();
-  return demoSingleton;
+  return (repoGlobal[DEMO_SLOT] ??= createDemoRepository());
+}
+
+/**
+ * A repository that acts as `profileId` **without a browser session** — how an
+ * API-key or MCP caller reaches the data layer.
+ *
+ * In demo mode the store is already process-local and unauthenticated, so the
+ * ordinary repository is right. In supabase mode a machine caller has no JWT,
+ * so a cookie-built client would arrive as `anon`: reads of `orders`, `wallets`
+ * and `threads` return zero rows and every write is refused by RLS. This binds
+ * the service-role client to one profile instead; the money/event RPCs receive
+ * the same id as `p_actor`.
+ *
+ * Returns `null` when `SUPABASE_SERVICE_ROLE_KEY` is not configured — the
+ * caller then falls back to the session-scoped repository (reads still work).
+ */
+export function getRepoActingAs(profileId: string): Repository | null {
+  if (!isSupabaseDataMode()) return null;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+  return new SupabaseRepository(
+    async () => {
+      const { createServiceClient } = await import("@/lib/supabase/service");
+      return createServiceClient();
+    },
+    { actAs: profileId },
+  );
 }
 
 /** Which adapter `getRepo()` will hand back, without constructing it. */
@@ -47,8 +84,8 @@ export function isDemoMode(): boolean {
 
 /** Test seam: drop the memoized adapters (used by `tests/unit`). */
 export function resetRepoForTests(): void {
-  demoSingleton = null;
-  supabaseSingleton = null;
+  delete repoGlobal[DEMO_SLOT];
+  delete repoGlobal[SUPABASE_SLOT];
 }
 
 export { districtNow, districtNowIso } from "./clock";

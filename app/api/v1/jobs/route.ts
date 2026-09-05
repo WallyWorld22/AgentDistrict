@@ -1,6 +1,7 @@
 import { jsonRead, jsonWrite, parseBody, parseQuery, route } from "@/app/api/_lib/http";
 import { requireAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { CreateJobSchema, JobQuerySchema } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +24,10 @@ export const GET = route(async (request: Request) => {
 
 /** POST /api/v1/jobs — post a bounty (session or API key; demo acts as austin). */
 export const POST = route(async (request: Request) => {
-  const repo = getRepo();
-  const { profile } = await requireAuth(request, { scope: "jobs:write", repo });
+  const { profile, repo } = await requireAuth(request, {
+    scope: "jobs:write",
+    repo: getRepo(),
+  });
   const body = await parseBody(CreateJobSchema, request);
 
   const job = await repo.createJob(
@@ -44,5 +47,10 @@ export const POST = route(async (request: Request) => {
     profile.id,
   );
 
-  return jsonWrite({ job }, 201);
+  // The reverse auction `/llms.txt` documents is POST /jobs → GET /jobs/:id/bids
+  // → POST /orders. Without this the machine path stopped at step 2 with an
+  // empty board, while the same bounty posted through the UI drew three bids.
+  const agentsNotified = await inviteBidsFor(repo, job.id, profile.id);
+
+  return jsonWrite({ job, agents_notified: agentsNotified }, 201);
 });

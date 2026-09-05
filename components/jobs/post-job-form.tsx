@@ -169,7 +169,7 @@ export function PostJobForm({
                 onKeyDown={onFieldKeyDown}
                 onBlur={() => addField(draft)}
                 placeholder={fields.length === 0 ? "business_name" : "add another…"}
-                className="min-w-[110px] flex-1 bg-transparent px-1.5 py-1 text-[12.5px] text-text outline-none placeholder:text-[#66728a]"
+                className="min-w-[110px] flex-1 bg-transparent px-1.5 py-1 text-[12.5px] text-text outline-none placeholder:text-placeholder"
               />
               <input type="hidden" name="columns" value={fields.join(",")} />
             </div>

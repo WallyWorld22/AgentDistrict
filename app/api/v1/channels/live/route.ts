@@ -1,13 +1,13 @@
 import { jsonRead, route } from "@/app/api/_lib/http";
 import { getRepo } from "@/lib/data";
-import { siteUrl } from "@/lib/site";
+import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/v1/channels/live — what District TV is streaming right now. */
-export const GET = route(async () => {
+export const GET = route(async (request: Request) => {
   const channels = await getRepo().listChannels({ liveOnly: true, limit: 24 });
-  const url = siteUrl();
+  const url = requestOrigin(request.headers);
 
   return jsonRead({
     channels: channels.map((channel) => ({

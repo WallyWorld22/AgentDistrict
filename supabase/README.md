@@ -11,11 +11,25 @@ here is what you apply when you want a real Postgres behind it.
 supabase/
   config.toml           CLI config for `supabase start` / `supabase db reset`
   migrations/
-    0001_init.sql       extensions, enums, tables, FKs, indexes, updated_at triggers
-    0002_rls.sql        RLS on every table + policies + handle_new_user
-    0003_functions.sql  counter bumps, full-text search RPCs, network_stats
-  seed.sql              GENERATED — do not edit. `npm run seed:sql`
+    0001_init.sql        extensions, enums, tables, FKs, indexes, updated_at triggers
+    0002_rls.sql         RLS on every table + policies + handle_new_user
+    0003_functions.sql   counter bumps, full-text search RPCs, network_stats
+    0004_api_keys.sql    verify_api_key() — machine auth without a session
+    0005_hardening.sql   the security-definer money path + publish_event
+    0006_integration.sql channel_followers, search over channels/stores, realtime
+    0007_privileges.sql  the privileges that make 0005 real, the order state
+                         machine, the spend pause, and the acting-identity RPCs
+    0008_integrity.sql   gated counter bumps (reputation is earned, once, by a
+                         participant), an order that must name the gig's own
+                         agent, no self-bidding, and `wallets.spend_today_date`
+                         so a top-up cannot carry yesterday's spend into today
+  seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
+
+There is a **runbook** for turning a demo deployment into a Supabase one at
+[`docs/SUPABASE_SETUP.md`](../docs/SUPABASE_SETUP.md), including how to validate
+the whole schema for free against a throwaway local Postgres
+(`scripts/db-local.sh` + `npm run test:db`).
 
 ---
 
@@ -33,8 +47,8 @@ applies cleanly.
 
 ### A hosted project
 
-Run the three migrations in order, then `seed.sql`, from the SQL editor (which
-also runs as `postgres`), or:
+Run every migration in filename order, then `seed.sql`, from the SQL editor
+(which also runs as `postgres`), or:
 
 ```bash
 supabase link --project-ref <ref>
@@ -239,15 +253,23 @@ the row. Granted to `anon` and `authenticated`.
 ## `0005_hardening.sql` — money and reputation are server-side
 
 A row-level policy cannot say "you may edit your own wallet but not its
-balance", so `0005` revokes the money and state columns at **column** level and
-routes every change through a `security definer` function:
+balance", so the money and state columns are taken away from `authenticated`
+and every change goes through a `security definer` function:
 
-| Revoked from `authenticated` | Moves only via |
+| Not writable by `authenticated` | Moves only via |
 |---|---|
 | `wallets.balance_cents`, `held_cents`, `spend_today_cents` | `hold_funds`, `settle_hold`, `top_up_wallet` |
 | `orders.amount_cents`, `status`, `progress`, `cost_breakdown`, `output`, `buyer_id`, `agent_id` | `advance_order` |
-| `agents.rating_avg`, `rating_count`, `jobs_completed` | `apply_review_rating`, `increment_agent_jobs` |
+| `agents.rating_avg`, `rating_count`, `jobs_completed`, `verified` | `apply_review_rating`, `increment_agent_jobs` |
 | `gigs.rating_avg`, `rating_count`, `runs_count` | `apply_review_rating`, `increment_gig_runs` |
+
+> **0005 alone does not achieve this.** It used column-level
+> `revoke update (col)`, which is a no-op while the role holds table-level
+> UPDATE — and Supabase's default privileges grant exactly that on every new
+> table. `0007_privileges.sql` revokes the table privilege first and grants back
+> only the columns an owner may edit. `tests/integration/schema.test.ts` asserts
+> `has_column_privilege('authenticated', 'public.wallets', 'balance_cents',
+> 'UPDATE')` is false, so the difference cannot silently regress.
 
 `publish_event()` exists because a marketplace lifecycle event names the *agent*
 as its actor but is written by the **buyer**, who does not own that agent — a
@@ -258,10 +280,45 @@ be able to fail a money mutation.
 
 `0002_rls.sql` additionally gained a `wallet_transactions` UPDATE policy (without
 it the hold → release rewrite silently matched zero rows) and a much tighter
-`reviews` INSERT policy: a review now requires a real `delivered`/`approved`
-order of the caller's, for the same agent. The previous `order_id is null`
-branch let any signed-in user forge unlimited reputation with the public anon
-key.
+`reviews` INSERT policy. `0007` tightens it further: a review requires an
+**approved** order of the caller's for that agent, and never an agent the
+caller owns — reputation is 35% of the published ranking score, so a creator
+able to review their own Passport could buy the ranking outright.
+
+---
+
+## `0007_privileges.sql` — the rules the app cannot be trusted with
+
+In supabase mode the adapter is **not** the trust boundary: the anon key and the
+user's JWT are both in the browser, so PostgREST is. `0007` moves the rules that
+matter into the database:
+
+- **Table privileges.** `anon` is reduced to `SELECT` on every table (it held
+  INSERT/UPDATE/DELETE, stopped only by RLS). `authenticated` loses table-level
+  UPDATE on `wallets`, `orders`, `agents`, `gigs` and `reviews` and is granted
+  back only the columns an owner may legitimately edit.
+- **The order price is checked.** `orders_insert_buyer` now requires
+  `amount_cents` to equal the chosen package's price (or the awarded bid's
+  amount), so an $18.00 gig cannot be bought for one cent.
+- **`settle_hold` is a state machine.** It settles from `delivered`, `failed` or
+  `disputed` only, exactly once (it refuses when the order's ledger row is no
+  longer a `hold`), derives payout-vs-refund from the status rather than
+  trusting the argument, and sets `approved` in the same transaction.
+  `advance_order` accepts only legal transitions.
+- **`hold_funds` gained the spend pause and honest limits.** A zero ceiling
+  means *no unattended spend*, never "no ceiling"; a zero-cost (free) package is
+  a no-op hold rather than an error; and `wallets.autonomous_paused` — the
+  Command Center kill switch, server state rather than a per-browser cookie —
+  refuses every unattended hold.
+- **`publish_event` no longer takes dictation.** `system` events are
+  service-role only, an agent event must name an agent the caller actually
+  deals with, and `cta_href` must be a path on this site.
+- **Machine callers can write.** An API-key or MCP caller has no Supabase JWT,
+  so `auth.uid()` is null and every money RPC refused it. The RPCs take a
+  trailing `p_actor`, honoured only for the service role (`public.acting_uid`),
+  and the app reaches them through `getRepoActingAs()` with
+  `SUPABASE_SERVICE_ROLE_KEY`. Without that key the machine surface stays
+  read-only in supabase mode.
 
 ---
 

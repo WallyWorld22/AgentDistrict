@@ -25,6 +25,8 @@ import { jobId } from "../../lib/seed";
 
 const REROOF_JOB = jobId("500-reroof-opportunities-orlando");
 const AWARDED_JOB = jobId("landing-page-stuart-hvac");
+/** The demo human's own open bounty — the one that exposes the Award buttons. */
+const OWN_OPEN_JOB = jobId("verify-treasure-coast-contractor-licences");
 const ROOFING_OUTCOME = "Find 200 roofing companies in Tampa under $10";
 /** Routes to a guild of three cheap agents — see the cleanup note above. */
 const ASSEMBLY_OUTCOME = "Convert 40 scanned PDFs to text and clean the CSV";
@@ -69,9 +71,11 @@ test.describe("the bounty board", () => {
       "aria-selected",
       "true",
     );
-    expect(
-      await page.getByRole("article").getByText("In progress", { exact: true }).count(),
-    ).toBe(0);
+    // `toHaveCount` retries; a bare `count()` could read the pre-navigation
+    // DOM and pass for the wrong reason.
+    await expect(
+      page.getByRole("article").getByText("In progress", { exact: true }),
+    ).toHaveCount(0);
 
     // Sorting by budget puts the biggest bounty first.
     await page.goto("/jobs?sort=budget");
@@ -86,22 +90,65 @@ test.describe("the bounty board", () => {
     await expect(page.getByText(/10–\d+ of \d+ bounties/)).toBeVisible();
   });
 
-  test("each card shows its top bids inline with a way to hire", async ({ page }) => {
+  test("each card shows its top bids inline with a way to reach the agent", async ({
+    page,
+  }) => {
     await page.goto("/jobs?status=open");
 
-    const card = page.getByRole("article").first();
+    // Somebody else's bounty: the control beside a bid opens that agent's
+    // Passport (it is not yours to award), and it says so.
+    const card = page.getByRole("article").filter({ hasText: "500 Reroof Opportunities" });
     await expect(card).toBeVisible();
     await expect(card.getByText(/\d+ bids?/)).toBeVisible();
 
-    // Up to three bids, each with an agent link and a Hire control.
-    const hires = card.getByRole("link", { name: /^Hire / });
-    expect(await hires.count()).toBeGreaterThan(0);
-    await expect(hires.first()).toHaveAttribute("href", /^\/agents\//);
+    const passports = card.getByRole("link", { name: /^Open .+'s Passport$/ });
+    expect(await passports.count()).toBeGreaterThan(0);
+    await expect(passports.first()).toHaveAttribute("href", /^\/agents\//);
+    await expect(passports.first()).toHaveText("Passport");
+  });
+
+  test("your own open bounty offers the award, not a Passport link", async ({ page }) => {
+    // The seeded District has to make the award-a-bid loop reachable: without
+    // an *open* bounty posted by the demo human, the headline capability of
+    // /jobs/[id] could only be reached by first posting one.
+    await page.goto(`/jobs/${OWN_OPEN_JOB}`);
+
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      "Verify 300 Treasure Coast contractor licences",
+    );
+
+    const awards = page.getByRole("button", { name: /^Award \$/ });
+    expect(await awards.count()).toBeGreaterThanOrEqual(3);
+    await expect(awards.first()).toHaveText("Award");
+    // Nothing on your own bounty pretends to be a hire link.
+    await expect(page.getByRole("link", { name: /Passport$/ })).toHaveCount(0);
   });
 
   test("search narrows the board and keeps the query in the URL", async ({ page }) => {
     await page.goto("/jobs?q=roofing");
-    await expect(page.getByRole("article").first()).toContainText(/roof/i);
+
+    // Shareable: the query round-trips into the field, so a copied URL rebuilds
+    // the same view.
+    await expect(page.locator('input[name="q"]')).toHaveValue("roofing");
+
+    // Narrower than the unfiltered board, and every match is a real one — a
+    // bounty matches on its brief as well as its title, so the assertion is on
+    // the result set, not on the first card's visible text.
+    //
+    // The board streams in behind the segment's Suspense skeleton and `count()`
+    // does not retry, so wait for the first card first — the search field is
+    // readable a beat earlier (it is matched by CSS, not by role, so it counts
+    // even while the streamed subtree is still hidden) and counting there
+    // reads zero cards off a board that is about to render two.
+    const cards = page.getByRole("article");
+    await expect(cards.first()).toBeVisible();
+    const matching = await cards.count();
+    expect(matching).toBeGreaterThan(0);
+    expect(await cards.filter({ hasText: /roof/i }).count()).toBeGreaterThan(0);
+
+    await page.goto("/jobs");
+    await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThan(matching);
   });
 });
 
@@ -246,14 +293,25 @@ test.describe("@World", () => {
 
   test("says so plainly when nothing fits", async ({ page }) => {
     await page.goto("/world?outcome=zzzz%20qqqq%20wwww%20vvvv");
-    const nothing = page.getByText("Nothing in the District fits that yet");
-    const ranked = page.getByRole("heading", { name: "Ranked agents" });
     // Either a graceful empty state or a real shortlist — never a broken page.
-    expect((await nothing.count()) + (await ranked.count())).toBeGreaterThan(0);
+    // `count()` does not retry, so summing two of them raced the streamed
+    // Suspense boundary and failed on a slower machine; `expect(...).or()`
+    // auto-waits for whichever arrives.
+    await expect(
+      page
+        .getByText("Nothing in the District fits that yet")
+        .or(page.getByRole("heading", { name: "Ranked agents" }))
+        .first(),
+    ).toBeVisible();
   });
 });
 
 test.describe("the Command Center", () => {
+  // The spend pause is real server state on the wallet row, not a per-browser
+  // cookie — that is the point of it, and it means the test that pauses and
+  // the test that spends cannot run at the same time in different workers.
+  test.describe.configure({ mode: "serial" });
+
   test("reports runs, spend, approvals and network health", async ({ page }) => {
     await page.goto("/command");
 
@@ -290,11 +348,27 @@ test.describe("the Command Center", () => {
       timeout: 20_000,
     });
 
+    // …and so does an API key, which is the half the copy names explicitly and
+    // the half a per-browser cookie could never have stopped.
+    const refused = await page.request.post("/api/v1/orders", {
+      headers: { authorization: "Bearer ad_live_bldr_9d41c07eb35a86f2" },
+      data: {
+        gig_slug: "pdf-summary-with-page-refs",
+        tier: "basic",
+        brief: "E2E: a machine caller while spending is paused.",
+      },
+    });
+    expect(refused.status()).toBe(409);
+    expect((await refused.json()).error.message).toMatch(/paused/i);
+
     // And it lifts again.
     await page.goto("/command");
     await hydrated(page, '[role="switch"]');
     await page.getByRole("switch", { name: /Pause all external agent spending/ }).click();
     await expect(page.getByTestId("spend-paused-banner")).toBeHidden({ timeout: 20_000 });
+
+    // The ceiling was never clamped, so resuming cannot strand it at a cent.
+    await expect(page.getByText("$20.00").first()).toBeVisible();
   });
 
   test("@World assembles a guild into real runs on the Command Center", async ({ page }) => {

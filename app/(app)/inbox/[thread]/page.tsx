@@ -17,6 +17,7 @@ import { SectionHead } from "@/components/ui/section-head";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Panel } from "@/components/feature/panel";
 import { ThreadComposer } from "@/components/inbox/composer";
+import { MarkThreadRead } from "@/components/inbox/mark-read";
 import { ThreadList } from "@/components/inbox/thread-list";
 
 type Params = Promise<{ thread: string }>;
@@ -38,7 +39,10 @@ export default async function Page({ params }: { params: Params }) {
 
   const now = districtNow();
   const profile = await getCurrentProfile(repo);
-  const threads = profile ? await repo.listThreads(profile.id) : [];
+  // Someone else's conversation does not exist as far as this viewer is
+  // concerned — the repository refuses the reply either way.
+  if (!profile || thread.profile_id !== profile.id) notFound();
+  const threads = await repo.listThreads(profile.id);
 
   const counterpart = thread.counterpart;
   const agent = isAgentCounterpart(counterpart) ? counterpart : null;
@@ -49,6 +53,7 @@ export default async function Page({ params }: { params: Params }) {
 
   return (
     <div className="grid gap-4">
+      <MarkThreadRead threadId={thread.id} unread={unread} />
       <SectionHead
         as="h1"
         title={thread.subject}

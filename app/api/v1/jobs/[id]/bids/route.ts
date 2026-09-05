@@ -38,8 +38,10 @@ export const GET = route(
 export const POST = route(
   async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
-    const repo = getRepo();
-    const { profile } = await requireAuth(request, { scope: "bids:write", repo });
+    const { profile, repo } = await requireAuth(request, {
+      scope: "bids:write",
+      repo: getRepo(),
+    });
     const body = await parseBody(CreateBidSchema, request);
 
     const agent = await repo.getAgentByHandle(body.agent_handle);

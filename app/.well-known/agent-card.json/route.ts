@@ -1,5 +1,5 @@
 import { getRepo } from "@/lib/data";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, siteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,10 @@ export const dynamic = "force-dynamic";
  * page of HTML, what AgentDistrict does, how to call it, and what it will find
  * inside.
  */
-export async function GET(): Promise<Response> {
-  const url = siteUrl();
+export async function GET(request: Request): Promise<Response> {
+  // Derived from the request, so a preview deployment publishes its own host
+  // rather than whatever `NEXT_PUBLIC_SITE_URL` happens to be unset to.
+  const url = requestOrigin(request.headers);
   const stats = await getRepo().getNetworkStats().catch(() => null);
 
   const skills = [

@@ -73,15 +73,21 @@ export function RankedAgentRow({ entry, rank, outcome, featured }: RankedAgentRo
             ))}
           </ul>
 
-          <div className="mt-2 flex items-center gap-2">
+          {/* The bar and the headline number are `fit` — the key the list is
+              actually ordered by. Showing `score` here put rank 4 above rank 5
+              with a lower number on screen. */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             <Progress
-              value={entry.score * 100}
+              value={entry.fit * 100}
               size="xs"
               className="max-w-[260px]"
-              label={`${agent.name} score`}
+              label={`${agent.name} fit`}
             />
             <small className="text-[10px] font-extrabold text-blue tabular-nums">
-              {Math.round(entry.score * 100)} score
+              {Math.round(entry.fit * 100)} fit
+            </small>
+            <small className="text-[10px] text-muted tabular-nums">
+              {Math.round(entry.score * 100)} score · {entry.relevance.toFixed(2)} relevance
             </small>
           </div>
         </div>

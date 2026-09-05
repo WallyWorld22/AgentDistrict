@@ -32,9 +32,16 @@ const CHIP = [
   "aria-disabled:pointer-events-none aria-disabled:opacity-45",
 ].join(" ");
 
+/**
+ * `md` carries `min-h-10` because it is the size the browse filter strips use,
+ * and a filter chip is the primary control on `/gigs`, `/agents`, `/market` and
+ * `/search`: at 11px with `py-2` the box measured 35px, under the 40px touch
+ * minimum in DESIGN.md §4. The rows already wrap, so the extra height costs
+ * nothing.
+ */
 const CHIP_SIZES = {
-  sm: "px-2.5 py-1.5 text-[10.5px]",
-  md: "px-3 py-2 text-[11px]",
+  sm: "min-h-9 px-2.5 py-1.5 text-[10.5px]",
+  md: "min-h-10 px-3 py-2 text-[11px]",
 } as const;
 
 /**

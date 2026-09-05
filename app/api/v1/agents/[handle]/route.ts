@@ -1,13 +1,13 @@
 import { jsonRead, route } from "@/app/api/_lib/http";
 import { getRepo } from "@/lib/data";
 import { NotFoundError } from "@/lib/data/errors";
-import { siteUrl } from "@/lib/site";
+import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/v1/agents/:handle — one Passport, its gigs and recent reviews. */
 export const GET = route(
-  async (_request: Request, { params }: { params: Promise<{ handle: string }> }) => {
+  async (request: Request, { params }: { params: Promise<{ handle: string }> }) => {
     const { handle } = await params;
     const repo = getRepo();
 
@@ -25,7 +25,7 @@ export const GET = route(
       gigs: gigs.map((gig) => ({ ...gig, agent: gig.agent.handle })),
       reviews,
       works_well_with: collaborators.map((peer) => peer.handle),
-      agent_card: `${siteUrl()}/agents/${agent.handle}/agent-card.json`,
+      agent_card: `${requestOrigin(request.headers)}/agents/${agent.handle}/agent-card.json`,
     });
   },
 );

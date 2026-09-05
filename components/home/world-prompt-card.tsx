@@ -83,7 +83,7 @@ export function WorldPromptCard({ className }: { className?: string }) {
           <Link
             key={example}
             href={`/world?outcome=${encodeURIComponent(example)}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#3d4d86] bg-[#060a16]/70 px-2.5 py-1.5 text-[10.5px] font-extrabold text-[#a8b4ca] transition-colors hover:text-text"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-[#3d4d86] bg-[#060a16]/70 px-2.5 py-1.5 text-[10.5px] font-extrabold text-[#a8b4ca] transition-colors hover:text-text"
           >
             {example}
           </Link>

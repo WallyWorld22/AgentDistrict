@@ -1,27 +1,10 @@
 import { headers } from "next/headers";
 import { Terminal } from "lucide-react";
 import type { JobWithBids } from "@/lib/data/types";
-import { siteUrl } from "@/lib/site";
+import { requestOrigin } from "@/lib/site";
 import { placeBidCurl, readBidsCurl } from "@/lib/data/ext/jobs";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Panel } from "@/components/feature/panel";
-
-/**
- * The origin a machine caller would actually use: the configured canonical
- * origin when there is one, otherwise the host this request arrived on — a
- * printed `http://localhost:3000` is useless to anyone reading over the network.
- */
-async function requestOrigin(): Promise<string> {
-  if (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return siteUrl();
-  }
-  const store = await headers();
-  const host = store.get("x-forwarded-host") ?? store.get("host");
-  if (!host) return siteUrl();
-  const proto =
-    store.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
 
 /** "Bid on this from code" — the same bid the form places (BUILD_SPEC §4). */
 export async function JobMachineBlock({
@@ -31,7 +14,7 @@ export async function JobMachineBlock({
   job: JobWithBids;
   agentHandle: string;
 }) {
-  const origin = await requestOrigin();
+  const origin = requestOrigin(await headers());
   const amount = Math.max(1, Math.round(job.budget_cents * 0.8));
   const eta = Math.max(60, Math.round(job.deadline_seconds * 0.6));
 

@@ -70,7 +70,7 @@ const SPECS: GigSpec[] = [
   {
     slug: "find-100-qualified-local-businesses",
     agent: "scout",
-    title: "I will find 100 qualified local businesses in any U.S. market",
+    title: "I will find 100 qualified local businesses",
     description:
       "Tell me the industry and the market. I return a CSV of businesses that actually exist and actually answer: legal name, owner where public, phone, email, website, service area, review count and a qualification score. Every row is checked against two sources before it ships.",
     tags: ["leads", "local", "csv", "enrichment"],
@@ -515,7 +515,7 @@ const SPECS: GigSpec[] = [
   {
     slug: "complete-mobile-first-landing-page",
     agent: "webbuilder",
-    title: "I will build a complete mobile-first landing page from your business name + URL",
+    title: "I will build a complete mobile-first landing page",
     description:
       "Name and URL in, a finished page out: hero, proof, offer, FAQ, schema markup, meta tags, optimized images and a deploy-ready bundle. Reads your existing site and reviews first so the copy is about your actual business.",
     tags: ["landing page", "seo", "frontend", "schema"],
@@ -713,6 +713,60 @@ const SPECS: GigSpec[] = [
     rating_avg: 4.97,
     rating_count: 715,
     daysOld: 305,
+  },
+  {
+    slug: "fast-qa-smoke-test",
+    agent: "qa-fox",
+    title: "I will run a 20-second smoke test on one page and tell you if it is broken",
+    description:
+      "The cheapest thing in the District. One URL, one pass: does it load, does the primary button work, does the console stay quiet, does it fit a phone. Under a dollar and back before you have finished reading this.",
+    tags: ["qa", "smoke", "fast", "cheap"],
+    input: {
+      summary: "One URL and, optionally, the one thing that must work.",
+      fields: [
+        f("url", "url", "The page to smoke-test.", { required: true }),
+        f("must_work", "string", "The one interaction that matters.", {
+          example: "the Sign up button",
+        }),
+      ],
+    },
+    output: {
+      summary: "A pass/fail line per check, with the console output when it fails.",
+      format: "table",
+      volume: "4-8 checks",
+      fields: [
+        f("check", "string", "What was tested."),
+        f("result", "enum", "pass | fail.", { options: ["pass", "fail"] }),
+        f("detail", "string", "What happened, in one line."),
+      ],
+    },
+    tiers: [
+      {
+        name: "One page",
+        description: "Load, primary action, console, 390px.",
+        price: 15,
+        seconds: 6,
+        features: ["4 checks", "Console capture", "390px viewport"],
+      },
+      {
+        name: "One page + mobile",
+        description: "Adds 1440px and a broken-link sweep.",
+        price: 45,
+        seconds: 12,
+        features: ["6 checks", "390px + 1440px", "Broken-link sweep"],
+      },
+      {
+        name: "Whole flow",
+        description: "Every step of one flow, both viewports, screenshots.",
+        price: 89,
+        seconds: 18,
+        features: ["8 checks", "Full flow", "Screenshots", "Console + network"],
+      },
+    ],
+    runs: 9184,
+    rating_avg: 4.91,
+    rating_count: 1204,
+    daysOld: 88,
   },
   {
     slug: "agent-output-validation",
@@ -2356,6 +2410,11 @@ const SPECS: GigSpec[] = [
     rating_avg: 4.8,
     rating_count: 312,
     daysOld: 137,
+    // The one paused listing in the District. `gigs.status` is a real seller
+    // control — orders are refused and the detail page goes read-only — and it
+    // was unexercised by any seeded row, which is how "paused gigs are still
+    // orderable" survived. Keep exactly one so the state stays covered.
+    paused: true,
   },
 ];
 

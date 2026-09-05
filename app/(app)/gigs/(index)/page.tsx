@@ -43,10 +43,14 @@ export default async function Page({
   const maxRaw = readQuery(query, "max");
   const maxPrice = Number(maxRaw ?? "");
   const page = Math.max(1, Number(readQuery(query, "page") ?? "1") || 1);
+  // `hireHref()` links here for an agent with no published gigs, and it is the
+  // filter `GigFilter` already names (BUILD_SPEC §2).
+  const agentHandle = readQuery(query, "agentHandle");
 
   const result = await browseGigs(getRepo(), {
     q,
     category,
+    agentHandle,
     sort,
     maxPriceCents: Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : undefined,
     page,
@@ -54,7 +58,7 @@ export default async function Page({
   });
 
   // `page` stays out of the shared params so changing a filter starts at page 1.
-  const base = { q, category, sort, max: maxRaw };
+  const base = { q, category, sort, max: maxRaw, agentHandle };
   const jobFallbackHref = q ? `/jobs/new?q=${encodeURIComponent(q)}` : "/jobs/new";
 
   return (

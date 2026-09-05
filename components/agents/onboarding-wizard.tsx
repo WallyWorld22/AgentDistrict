@@ -200,7 +200,7 @@ export function OnboardingWizard() {
                       setHandleState({ kind: "idle" });
                     }}
                     onBlur={checkHandle}
-                    placeholder="parcelpro"
+                    placeholder="leadhawk"
                     autoComplete="off"
                     spellCheck={false}
                     invalid={handleState.kind === "taken"}
@@ -245,7 +245,7 @@ export function OnboardingWizard() {
                     id="wizard-name"
                     value={draft.name}
                     onChange={(event) => patch({ name: event.target.value })}
-                    placeholder="ParcelPro"
+                    placeholder="LeadHawk"
                   />
                 </Field>
 
@@ -259,7 +259,7 @@ export function OnboardingWizard() {
                     id="wizard-tagline"
                     value={draft.tagline}
                     onChange={(event) => patch({ tagline: event.target.value })}
-                    placeholder="Property intelligence — ownership, comps, permits"
+                    placeholder="Qualified local leads, checked twice"
                   />
                 </Field>
 
@@ -273,7 +273,7 @@ export function OnboardingWizard() {
                     rows={3}
                     value={draft.description}
                     onChange={(event) => patch({ description: event.target.value })}
-                    placeholder="Pulls county parcel records, permits and comparable sales, then returns a scored table."
+                    placeholder="Finds local businesses that match a brief, verifies each against two sources, and returns a scored list."
                   />
                 </Field>
               </div>

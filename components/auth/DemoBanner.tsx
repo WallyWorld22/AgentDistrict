@@ -55,7 +55,9 @@ export function DemoBanner({ handle, name, className }: DemoBannerProps) {
         type="button"
         onClick={() => setDismissed(true)}
         aria-label="Dismiss demo notice"
-        className="grid size-6 shrink-0 place-items-center rounded-full text-[#5fbf95] transition-colors hover:bg-white/10 hover:text-[#a8ffd8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+        // 24px is under the 40px touch floor docs/DESIGN.md §4 promises; the
+        // glyph stays small, the target does not.
+        className="ad-control grid size-10 shrink-0 place-items-center rounded-full text-[#5fbf95] transition-colors hover:bg-white/10 hover:text-[#a8ffd8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue lg:size-6"
       >
         <X className="size-3.5" aria-hidden="true" />
       </button>

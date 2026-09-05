@@ -1,5 +1,5 @@
 import { getRepo } from "@/lib/data";
-import { SITE_NAME, siteUrl } from "@/lib/site";
+import { SITE_NAME, requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
  * reputation, endpoints) plus a pointer to each agent's own A2A card. This is
  * the file a crawler or another marketplace reads to index the District.
  */
-export async function GET(): Promise<Response> {
-  const url = siteUrl();
+export async function GET(request: Request): Promise<Response> {
+  const url = requestOrigin(request.headers);
   const repo = getRepo();
   const agents = await repo.listAgents({ limit: 200, sort: "rating" });
 

@@ -117,8 +117,7 @@ export type JobBoard = {
  * `listJobs` returns bid *counts*, not bids, and there is no repository method
  * that reads bids for many jobs at once — so this fans out `getJob` over the
  * nine rows of the current page only (never the whole board). A
- * `listBidsForJobs(jobIds)` on the `Repository` would make it one round trip;
- * it is listed in this lane's report.
+ * The bids for the whole page come back in one `listBidsForJobs` round trip.
  */
 export async function loadJobBoard(
   repo: Repository,
@@ -149,17 +148,18 @@ export async function loadJobBoard(
   const page = paginate(matching.length, filter.page);
   const slice = matching.slice(page.offset, page.offset + JOBS_PAGE_SIZE);
 
-  const jobs = await Promise.all(
-    slice.map(async (job): Promise<BoardJob> => {
-      const detail = job.bidCount > 0 ? await repo.getJob(job.id) : null;
-      const bids = detail?.bids ?? [];
-      return {
-        ...job,
-        bids: previewBids(bids, job),
-        winner: bids.find((bid) => bid.status === "accepted") ?? null,
-      };
-    }),
+  const bidsByJob = await repo.listBidsForJobs(
+    slice.filter((job) => job.bidCount > 0).map((job) => job.id),
   );
+
+  const jobs = slice.map((job): BoardJob => {
+    const bids = bidsByJob[job.id] ?? [];
+    return {
+      ...job,
+      bids: previewBids(bids, job),
+      winner: bids.find((bid) => bid.status === "accepted") ?? null,
+    };
+  });
 
   return { jobs, page, counts };
 }
@@ -412,17 +412,16 @@ function autoBidNote(agent: Agent, index: number): string {
 /**
  * The run an awarded bounty became, when the signed-in buyer can see it.
  *
- * `OrderFilter` has no `jobId`, so this filters the buyer's own runs — which is
- * also the only set Supabase RLS would return. A `listOrders({ jobId })` filter
- * is listed in this lane's report.
+ * Scoped to the buyer as well as the job: Supabase RLS would return nothing
+ * else anyway, and in demo mode it keeps another poster's run out of view.
  */
 export async function findOrderForJob(
   repo: Repository,
   jobId: UUID,
   buyerId: UUID,
 ): Promise<OrderDetail | null> {
-  const orders = await repo.listOrders({ buyerId, limit: 100 });
-  return orders.find((order) => order.job_id === jobId) ?? null;
+  const orders = await repo.listOrders({ buyerId, jobId, limit: 1 });
+  return orders[0] ?? null;
 }
 
 /**
@@ -530,36 +529,6 @@ export function networkHealth(agents: Agent[]): number {
   if (online.length === 0) return 0;
   const total = online.reduce((sum, agent) => sum + agent.reliability, 0);
   return Math.round((total / online.length) * 1000) / 10;
-}
-
-/* ------------------------------------------------------- the spend pause */
-
-export type WalletPolicyPatch = {
-  autonomous_spend_limit_cents?: Cents;
-  approval_threshold_cents?: Cents;
-};
-
-type WalletPolicyWriter = {
-  setWalletPolicy(profileId: UUID, patch: WalletPolicyPatch): Promise<unknown>;
-};
-
-/**
- * The `Repository` has no way to write a wallet's policy columns yet, so the
- * Command Center's pause is enforced by the District's own spend guard (see
- * `app/(app)/command/actions.ts`). This feature-detects the method so that the
- * moment `setWalletPolicy` lands on both adapters the switch also clamps the
- * wallet's daily autonomous ceiling — no page change required.
- *
- * Note the ceiling is clamped to **one cent**, not zero: `holdFunds` treats a
- * zero limit as "no limit at all", so writing 0 would *remove* the ceiling.
- */
-export const PAUSED_AUTONOMOUS_LIMIT_CENTS = 1;
-
-export function walletPolicyWriter(repo: Repository): WalletPolicyWriter | null {
-  const candidate = repo as Partial<WalletPolicyWriter>;
-  return typeof candidate.setWalletPolicy === "function"
-    ? (candidate as WalletPolicyWriter)
-    : null;
 }
 
 /* -------------------------------------------------------- machine surface */

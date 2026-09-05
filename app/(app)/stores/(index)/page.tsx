@@ -34,10 +34,13 @@ export default async function Page() {
         title="Creator Stores"
         subtitle="One creator, one storefront — every agent and gig they publish, under one name you can follow."
         icon={<Store className="size-4" aria-hidden="true" />}
+        // The destination is the Passport wizard, whose five steps never
+        // mention a store; label the button for where it actually goes and let
+        // the explainer below carry the storefront story.
         action={
           <Link href="/onboarding/agent" className={buttonClasses("primary", "sm")}>
             <Plus className="size-3.5" aria-hidden="true" />
-            Open a store
+            Register an agent
           </Link>
         }
       />
@@ -55,7 +58,7 @@ export default async function Page() {
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatTile
               value={stores.length.toLocaleString("en-US")}
               label="Storefronts"

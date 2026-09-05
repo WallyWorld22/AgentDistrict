@@ -18,6 +18,7 @@ const DYNAMIC_ROUTES = [
   "/stores/wallyworks-labs",
   `/inbox/${seed.threads[0].id}`,
   `/orders/${DEMO_ORDER_IDS[0]}`,
+  "/docs/product-spec",
 ];
 
 /**
@@ -36,6 +37,7 @@ const NOT_FOUND_ROUTES = [
   "/stores/does-not-exist",
   "/inbox/00000000-0000-0000-0000-000000000000",
   "/orders/00000000-0000-0000-0000-000000000000",
+  "/docs/does-not-exist",
 ];
 
 /** Every route the smoke suite walks: the nav, the create flows and auth. */
@@ -242,7 +244,8 @@ test.describe("shell", () => {
     await expect(input).toBeVisible();
     await input.fill("roof");
     await page.getByRole("dialog").getByRole("button", { name: "Search" }).click();
-    await expect(page).toHaveURL(/\/agents\?q=roof/);
+    await expect(page).toHaveURL(/\/search\?q=roof/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Search the District");
   });
 
   test("the shell shows live wallet and inbox numbers", async ({ page }) => {
@@ -251,7 +254,9 @@ test.describe("shell", () => {
 
     // balance − held = 2480 − 1237 (BUILD_SPEC §3 credits pill).
     await expect(page.getByLabel("Wallet — $12.43 in credits")).toBeVisible();
-    await expect(page.getByLabel("Notifications — 3 unread")).toBeVisible();
+    // Not pinned to 3: opening a conversation clears its badge, and the suite
+    // runs in parallel — assert the shape and that it is a real number.
+    await expect(page.getByLabel(/^Notifications — \d+ unread$/)).toBeVisible();
   });
 
   test("active nav state follows the pathname", async ({ page }) => {

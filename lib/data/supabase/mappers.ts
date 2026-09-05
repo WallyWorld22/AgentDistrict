@@ -444,8 +444,10 @@ export function toWallet(row: Row): Wallet {
     balance_cents: num(row.balance_cents),
     held_cents: num(row.held_cents),
     spend_today_cents: num(row.spend_today_cents),
+    spend_today_date: str(row.spend_today_date, str(row.updated_at)).slice(0, 10),
     approval_threshold_cents: num(row.approval_threshold_cents),
     autonomous_spend_limit_cents: num(row.autonomous_spend_limit_cents),
+    autonomous_paused: Boolean(row.autonomous_paused),
     updated_at: str(row.updated_at),
   };
 }

@@ -73,7 +73,7 @@ export function LoungePanel({ rooms, presence }: LoungePanelProps) {
         </span>
         <Link
           href={activeRoom ? `/lounge/${activeRoom.slug}` : "/lounge"}
-          className="font-extrabold text-blue transition-colors hover:text-cyan"
+          className="ad-hit inline-block font-extrabold text-blue transition-colors hover:text-cyan"
         >
           {activeRoom ? `Open ${activeRoom.name} →` : "Open the Lounge →"}
         </Link>

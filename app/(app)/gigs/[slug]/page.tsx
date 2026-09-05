@@ -73,11 +73,26 @@ export default async function Page({
   const showAllReviews = readQuery(query, "reviews") === "all";
   const now = districtNow();
 
-  const [reviews, siblings, profile] = await Promise.all([
-    repo.listReviewsForAgent(gig.agent.handle, showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW),
+  const limit = showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW;
+  const [gigReviews, agentReviews, siblings, profile] = await Promise.all([
+    repo.listReviewsForGig(gig.slug, limit),
+    repo.listReviewsForAgent(gig.agent.handle, limit + REVIEW_ALL),
     moreFromAgent(repo, gig.agent.handle, gig.slug, 3),
     getCurrentProfile(repo),
   ]);
+  /*
+   * Reviews left on runs of THIS gig lead; the agent's other reviews top the
+   * list up so a gig with one run still reads like a real reputation page.
+   * The "This gig" pill is what keeps the distinction honest.
+   */
+  const gigReviewIds = new Set(gigReviews.map((review) => review.id));
+  const reviews = [
+    ...gigReviews.map((review) => ({ review, onThisGig: true })),
+    ...agentReviews
+      .filter((review) => !gigReviewIds.has(review.id))
+      .map((review) => ({ review, onThisGig: false })),
+  ].slice(0, limit);
+
   const wallet = profile ? await repo.getWallet(profile.id) : null;
   const available = wallet ? wallet.balance_cents - wallet.held_cents : undefined;
 
@@ -184,11 +199,12 @@ export default async function Page({
 
           <div id="reviews" className="scroll-mt-20">
             <Panel
-              title={`Reviews for ${gig.agent.name}`}
+              title="Reviews"
               subtitle={
-                gig.agent.rating_count > 0 ? (
+                gig.rating_count > 0 ? (
                   <>
-                    ★ {gig.agent.rating_avg.toFixed(2)} from{" "}
+                    ★ {gig.rating_avg.toFixed(2)} on this gig · {gig.agent.name} is ★{" "}
+                    {gig.agent.rating_avg.toFixed(2)} across{" "}
                     <span data-testid="agent-rating-count">
                       {gig.agent.rating_count.toLocaleString("en-US")}
                     </span>{" "}
@@ -218,12 +234,19 @@ export default async function Page({
               }
             >
               <ul className="m-0 grid list-none gap-2 p-0">
-                {reviews.map((review) => (
+                {reviews.map(({ review, onThisGig }) => (
                   <li key={review.id}>
                     <Inset>
                       <div className="flex items-center justify-between gap-2">
-                        <b className="text-[12px] font-extrabold">
-                          {review.reviewer?.display_name ?? "A buyer"}
+                        <b className="flex min-w-0 items-center gap-1.5 text-[12px] font-extrabold">
+                          <span className="truncate">
+                            {review.reviewer?.display_name ?? "A buyer"}
+                          </span>
+                          {onThisGig ? (
+                            <Pill size="sm" variant="blue">
+                              This gig
+                            </Pill>
+                          ) : null}
                         </b>
                         <Rating value={review.rating} />
                       </div>
@@ -266,14 +289,48 @@ export default async function Page({
             block is its own row, so it would not travel at all. */}
         <div className="order-2 min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="flex flex-col gap-4 lg:sticky lg:top-[76px]">
-            <Panel title="Choose a package" bodyClassName="grid gap-3">
-              <PackageSelector
-                gigSlug={gig.slug}
-                packages={gig.packages}
-                inputSummary={gig.input_contract.summary}
-                briefPlaceholder={briefPlaceholder}
-                availableCents={available}
-              />
+            <Panel
+              title={gig.status === "paused" ? "Not taking orders" : "Choose a package"}
+              bodyClassName="grid gap-3"
+            >
+              {/* A paused gig is read-only: the repository refuses the order,
+                  so the page must not offer it. The packages still show — this
+                  is a listing, not a 404. */}
+              {gig.status === "paused" ? (
+                <>
+                  <p className="m-0 text-[12.5px] leading-relaxed text-ink">
+                    {gig.agent.name} has paused this gig, so it is not taking new
+                    orders right now. The packages below are what it sells when it
+                    reopens.
+                  </p>
+                  <ul className="m-0 grid list-none gap-2 p-0">
+                    {gig.packages.map((pkg) => (
+                      <li key={pkg.tier}>
+                        <Inset className="flex items-baseline justify-between gap-2">
+                          <span className="text-[12px] font-extrabold capitalize">
+                            {pkg.tier} · {pkg.name}
+                          </span>
+                          <Price cents={pkg.price_cents} tone="green" />
+                        </Inset>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href={`/agents/${gig.agent.handle}`}
+                    className={buttonClasses("outline", "sm", "w-full")}
+                  >
+                    See {gig.agent.name}&rsquo;s other gigs
+                  </Link>
+                </>
+              ) : (
+                <PackageSelector
+                  gigSlug={gig.slug}
+                  packages={gig.packages}
+                  inputSummary={gig.input_contract.summary}
+                  briefPlaceholder={briefPlaceholder}
+                  availableCents={available}
+                />
+              )}
             </Panel>
 
             <Panel title="The agent behind it">

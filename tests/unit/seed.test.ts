@@ -66,7 +66,9 @@ describe("seed — quantities (BUILD_SPEC §2)", () => {
     expect(seedCounts.guilds).toBe(6);
     expect(seedCounts.stores).toBe(5);
     expect(seedCounts.channels).toBe(8);
-    expect(seedCounts.competitions).toBe(3);
+    // Three live races, plus one finished and one upcoming so those statuses
+    // and the UI branches that render them are exercised by real content.
+    expect(seedCounts.competitions).toBe(5);
     expect(seedCounts.rooms).toBe(6);
   });
 
@@ -117,6 +119,41 @@ describe("seed — quantities (BUILD_SPEC §2)", () => {
       expect(count, `job "${job.title}" has ${count} bids`).toBeGreaterThanOrEqual(2);
       expect(count, `job "${job.title}" has ${count} bids`).toBeLessThanOrEqual(4);
     }
+  });
+
+  it("never lets one agent bid against itself on the same bounty", () => {
+    // Three jobs used to list the same agent twice at two prices — same avatar,
+    // same name, side by side. The reverse-market pitch is that agents compete;
+    // one agent underbidding itself reads as a bug on the bid table.
+    const handleOf = new Map(seed.agents.map((agent) => [agent.id, agent.handle]));
+    for (const job of seed.jobs) {
+      const handles = seed.bids
+        .filter((bid) => bid.job_id === job.id)
+        .map((bid) => handleOf.get(bid.agent_id));
+      expect(new Set(handles).size, `"${job.title}" has a repeated bidder`).toBe(handles.length);
+    }
+  });
+
+  it("never lets a poster bid on their own bounty", () => {
+    // Post → bid → award → approve would mint a completed job for a cent. Both
+    // adapters refuse it now; the seed must not contradict them.
+    const ownerOf = new Map(seed.agents.map((agent) => [agent.id, agent.owner_id]));
+    const posterOf = new Map(seed.jobs.map((job) => [job.id, job.poster_id]));
+    for (const bid of seed.bids) {
+      expect(ownerOf.get(bid.agent_id)).not.toBe(posterOf.get(bid.job_id));
+    }
+  });
+
+  it("gives the demo human an open bounty to award", () => {
+    // Without one, the award-a-bid loop — the headline capability of
+    // /jobs/[id] — is unreachable without first posting a bounty.
+    const own = seed.jobs.filter(
+      (job) => job.poster_id === DEMO_PROFILE_ID && job.status === "open",
+    );
+    expect(own.length).toBeGreaterThan(0);
+    const bids = seed.bids.filter((bid) => bid.job_id === own[0].id);
+    expect(bids.length).toBeGreaterThanOrEqual(3);
+    expect(bids.every((bid) => bid.status === "pending")).toBe(true);
   });
 
   it("includes an awarded, an in-progress and a completed job", () => {
@@ -381,7 +418,10 @@ describe("seed — money and numbers", () => {
     for (const entry of seed.competitionEntries) {
       expect(entry.progress).toBeGreaterThanOrEqual(0);
       expect(entry.progress).toBeLessThanOrEqual(100);
-      expect(entry.accuracy).toBeGreaterThan(0);
+      // A race that has not started has no accuracy yet; every entry that has
+      // actually run must have one.
+      if (entry.progress > 0) expect(entry.accuracy).toBeGreaterThan(0);
+      expect(entry.accuracy).toBeGreaterThanOrEqual(0);
       expect(entry.accuracy).toBeLessThanOrEqual(1);
     }
   });

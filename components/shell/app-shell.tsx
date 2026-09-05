@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { getRepo } from "@/lib/data";
+import { getRepo, isDemoMode } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { ToastProvider } from "@/components/ui/toast";
+import { DemoBanner } from "@/components/auth/DemoBanner";
 import { BottomNav } from "./bottom-nav";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
@@ -50,8 +51,20 @@ export async function AppShell({ children }: { children: ReactNode }) {
         />
         <main
           id="main"
-          className="animate-fade-in mx-auto w-full max-w-[1440px] flex-1 px-3 pt-4 pb-[112px] sm:px-4 lg:pb-[92px]"
+          // Focusable, or the skip link only moves the viewport: browsers that
+          // do not implement a sequential-focus starting point leave focus
+          // behind and the next Tab restarts at the top of the sidebar.
+          tabIndex={-1}
+          className="animate-fade-in mx-auto w-full max-w-[1440px] flex-1 px-3 pt-4 pb-[112px] focus-visible:outline-none sm:px-4 lg:pb-[92px]"
         >
+          {/* One banner for the whole app; it hides itself once dismissed. */}
+          {isDemoMode() && profile ? (
+            <DemoBanner
+              handle={profile.handle}
+              name={profile.display_name}
+              className="mb-3"
+            />
+          ) : null}
           {children}
         </main>
       </div>

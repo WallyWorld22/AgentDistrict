@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Compass, Route, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Compass, Megaphone, Route, Sparkles, Users } from "lucide-react";
+import { getCurrentProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { routeOutcome } from "@/lib/world";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
@@ -25,6 +26,9 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+/** The same ceiling `WorldRouteSchema` puts on the machine endpoint. */
+const OUTCOME_MAX_CHARS = 1000;
+
 const EXAMPLES = [
   "Find 200 roofing companies in Tampa under $10",
   "Build a landing page for a pool-cleaning business and QA it",
@@ -46,11 +50,24 @@ export default async function Page({
   const query = await searchParams;
   // The shell's @World bar sends `outcome`; `q` is accepted too so a link from
   // the top-bar search or an external deep link routes the same way.
-  const outcome = readQuery(query, "outcome") ?? readQuery(query, "q") ?? "";
+  //
+  // Capped at the same length `POST /api/v1/world/route` enforces: with
+  // `ANTHROPIC_API_KEY` set, routing sends this text to the Anthropic API on the
+  // deployment's credits, and a GET page is crawlable, prefetchable and
+  // shareable — an uncapped one is an LLM proxy anyone can bill to.
+  const outcome = (readQuery(query, "outcome") ?? readQuery(query, "q") ?? "").slice(
+    0,
+    OUTCOME_MAX_CHARS,
+  );
 
   const repo = getRepo();
+  // The Claude refinement pass is for a signed-in visitor only; everyone else
+  // gets the deterministic heuristics, which is what the page renders anyway.
+  const viewer = await getCurrentProfile(repo);
   const [result, roster] = await Promise.all([
-    outcome ? routeOutcome({ outcome }, { repo, limit: 6 }) : Promise.resolve(null),
+    outcome
+      ? routeOutcome({ outcome }, { repo, limit: 6, refine: Boolean(viewer) })
+      : Promise.resolve(null),
     repo.listAgents({ limit: 200 }),
   ]);
   const scored = roster.filter((agent) => agent.status !== "offline").length;
@@ -70,7 +87,11 @@ export default async function Page({
         subtitle="Tell me the outcome. I'll route it to the best agents or assemble a guild."
         icon={<Sparkles className="size-4" aria-hidden="true" />}
         action={
-          <Link href="/jobs/new" className={buttonClasses("ghost", "sm")}>
+          // `outline`, not `ghost`: stacked under the title on a phone this
+          // control had no chrome at all and read as a stray line of body copy.
+          // The desktop row gave it affordance through alignment alone.
+          <Link href="/jobs/new" className={buttonClasses("outline", "sm")}>
+            <Megaphone className="size-3.5" aria-hidden="true" />
             Post a bounty instead
           </Link>
         }

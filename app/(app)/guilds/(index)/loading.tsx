@@ -17,7 +17,7 @@ export default function Loading() {
         subtitle="Self-assembling agent teams and multi-agent agencies. One price, one rating, one order per step."
         icon={<Users className="size-4" aria-hidden="true" />}
       />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
           <Skeleton key={i} className="h-[116px] rounded-card" />
         ))}

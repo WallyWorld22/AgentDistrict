@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { OrderStatus } from "@/lib/data/types";
-import { cn, formatCents, formatDuration } from "@/lib/utils";
+import { cn, formatCents } from "@/lib/utils";
+import { runTimeLabel } from "@/lib/data/ext/economy";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { Pill } from "@/components/ui/pill";
 import { Progress } from "@/components/ui/progress";
@@ -92,10 +93,8 @@ export function LiveRuns({ runs }: { runs: LiveRun[] }) {
       {runs.map((run) => {
         const state = pulse[run.id] ?? { status: run.status, progress: run.progress };
         const inFlight = state.status === "queued" || state.status === "running";
-        const remaining = Math.max(
-          0,
-          Math.round(run.etaSeconds * (1 - Math.min(100, state.progress) / 100)),
-        );
+        // Shared with `/orders`' rows so the two surfaces cannot drift.
+        const timeLabel = runTimeLabel(run.etaSeconds, state.progress, inFlight);
 
         return (
           <li
@@ -125,12 +124,7 @@ export function LiveRuns({ runs }: { runs: LiveRun[] }) {
                   {run.title}
                 </Link>
                 <small className="block truncate text-[10.5px] text-muted tabular-nums">
-                  {run.agentName} · {formatCents(run.amountCents)} ·{" "}
-                  {inFlight
-                    ? remaining > 0
-                      ? `~${formatDuration(remaining)} left`
-                      : "finishing up"
-                    : `SLA ${formatDuration(run.etaSeconds)}`}
+                  {run.agentName} · {formatCents(run.amountCents)} · {timeLabel}
                 </small>
               </div>
               <div className="flex shrink-0 items-center gap-2">

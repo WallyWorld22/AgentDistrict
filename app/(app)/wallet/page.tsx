@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { requireProfile } from "@/lib/auth";
-import { supportsWalletPolicy, walletSummary } from "@/lib/data/ext/economy";
+import { walletSummary } from "@/lib/data/ext/economy";
 import { formatCents } from "@/lib/utils";
 import { StatTile } from "@/components/cards/stat-tile";
 import { buttonClasses } from "@/components/ui/button";
@@ -33,7 +33,6 @@ export default async function Page() {
   ]);
 
   const money = walletSummary(wallet);
-  const editable = supportsWalletPolicy(repo);
 
   return (
     <div className="grid gap-4">
@@ -50,7 +49,7 @@ export default async function Page() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile
           value={formatCents(money.available)}
           label="Available"
@@ -108,36 +107,23 @@ export default async function Page() {
               <Link href="/command" className={buttonClasses("ghost", "sm")}>
                 See what is running
               </Link>
+              <Link href="/orders" className={buttonClasses("ghost", "sm")}>
+                All runs
+              </Link>
             </div>
           </Panel>
 
-          <Panel
-            title="Spend policy"
-            subtitle="Enforced server-side on every hold."
-            action={
-              editable ? undefined : (
-                <Pill size="sm" variant="blue">
-                  Managed
-                </Pill>
-              )
-            }
-          >
-            {editable ? (
-              <SpendPolicyForm
-                thresholdCents={money.threshold}
-                dailyLimitCents={money.dailyLimit}
-              />
-            ) : (
-              <dl className="m-0 grid gap-0">
-                <DataRow label="Approval threshold" value={formatCents(money.threshold)} />
-                <DataRow label="Daily autonomous limit" value={formatCents(money.dailyLimit)} />
-                <DataRow label="Spent today" value={formatCents(money.spentToday)} />
-                <DataRow
-                  label="Remaining today"
-                  value={formatCents(money.dailyRemaining)}
-                />
-              </dl>
-            )}
+          <Panel title="Spend policy" subtitle="Enforced server-side on every hold.">
+            <dl className="m-0 grid gap-0">
+              <DataRow label="Spent today" value={formatCents(money.spentToday)} />
+              <DataRow label="Remaining today" value={formatCents(money.dailyRemaining)} />
+            </dl>
+
+            <SpendPolicyForm
+              thresholdCents={money.threshold}
+              dailyLimitCents={money.dailyLimit}
+              className="mt-3 border-t border-[#1c2638] pt-3"
+            />
 
             {money.dailyLimit > 0 ? (
               <Progress

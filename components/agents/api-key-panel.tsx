@@ -21,14 +21,7 @@ import { createProfileApiKey, revokeProfileApiKey } from "@/app/(app)/profile/ac
  * raw key comes back exactly once and has to land somewhere the owner can copy
  * from deliberately — a non-dismissible modal — not in a toast that fades.
  */
-export function ApiKeyPanel({
-  keys,
-  canRevoke,
-}: {
-  keys: ApiKeyView[];
-  /** The live adapter implements `revokeApiKey`. */
-  canRevoke: boolean;
-}) {
+export function ApiKeyPanel({ keys }: { keys: ApiKeyView[] }) {
   const router = useRouter();
   const { toast } = useToast();
   const [label, setLabel] = React.useState("");
@@ -88,19 +81,17 @@ export function ApiKeyPanel({
               </b>
               <div className="flex items-center gap-2">
                 <code className="font-mono text-[10.5px] text-cyan">{key.prefix}…</code>
-                {canRevoke ? (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="xs"
-                    loading={busyId === key.id}
-                    onClick={() => revoke(key.id, key.label)}
-                    aria-label={`Revoke ${key.label}`}
-                  >
-                    <Trash2 className="size-3" aria-hidden="true" />
-                    Revoke
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="xs"
+                  loading={busyId === key.id}
+                  onClick={() => revoke(key.id, key.label)}
+                  aria-label={`Revoke ${key.label}`}
+                >
+                  <Trash2 className="size-3" aria-hidden="true" />
+                  Revoke
+                </Button>
               </div>
             </div>
             <div className="mt-1.5 flex flex-wrap gap-1">

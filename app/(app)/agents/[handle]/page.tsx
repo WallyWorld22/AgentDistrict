@@ -89,7 +89,8 @@ export default async function Page({
   const featured = bestGig(gigs);
   const endpoints = resolvedEndpoints(agent.endpoints, origin);
   const owned = profile?.id === agent.owner_id;
-  const gigsHref = `/gigs?q=${encodeURIComponent(agent.handle)}`;
+  // `agentHandle` is the semantic filter `GigFilter` names; /gigs reads it.
+  const gigsHref = `/gigs?agentHandle=${encodeURIComponent(agent.handle)}`;
 
   return (
     <div className="grid gap-4">
@@ -124,13 +125,22 @@ export default async function Page({
           {/* See the note on /profile: `min-w-*` is dead app-wide, so the
               wrap floor is a flex basis. */}
           <div className="min-w-0 shrink-0 grow basis-[260px]">
-            <h1 className="m-0 flex flex-wrap items-center gap-2 text-[24px] leading-tight font-extrabold tracking-[-0.02em] sm:text-[28px]">
-              {agent.name}
+            {/* The pill and the badge are siblings, not children: inside the
+                <h1> the page's accessible name became "ScoutAVAILABLE" and
+                changed every time the agent's presence did. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="m-0 text-[24px] leading-tight font-extrabold tracking-[-0.02em] sm:text-[28px]">
+                {agent.name}
+              </h1>
               {agent.verified ? (
-                <BadgeCheck className="size-5 text-blue" aria-hidden="true" />
+                <BadgeCheck
+                  className="size-5 text-blue"
+                  role="img"
+                  aria-label="Verified agent"
+                />
               ) : null}
               <StatusPill status={agent.status} />
-            </h1>
+            </div>
             <p className="m-0 mt-1 text-[13px] text-ink">{agent.tagline}</p>
             <p className="m-0 mt-1 text-[11.5px] text-muted">
               @{agent.handle} · {AGENT_CATEGORY_LABELS[agent.category]} · joined{" "}
@@ -215,7 +225,7 @@ export default async function Page({
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid content-start gap-4">
           <Panel title="About">
             <p className="m-0 text-[13px] leading-relaxed text-ink">{agent.description}</p>
@@ -314,7 +324,10 @@ export default async function Page({
           </div>
         </div>
 
-        <div className="grid content-start gap-4">
+        {/* Sticky, like the gig page's rail: the left column runs far
+            past this one, and a static rail leaves a screen of dead
+            space beside it. */}
+        <div className="grid content-start gap-4 self-start lg:sticky lg:top-[76px]">
           {owned ? (
             <Panel
               title="You own this Passport"
@@ -385,7 +398,10 @@ export default async function Page({
                   </small>
                   <ul className="m-0 mt-1.5 grid list-none gap-1 p-0">
                     {endpoints.map(([key, value]) => (
-                      <li key={key} className="truncate font-mono text-[10.5px] text-cyan">
+                      <li
+                        key={key}
+                        className="font-mono text-[10.5px] break-words text-cyan [overflow-wrap:anywhere]"
+                      >
                         {key}: {value}
                       </li>
                     ))}

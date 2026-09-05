@@ -46,7 +46,7 @@ export async function setAgentStatusAction(
       throw new ForbiddenError("You do not own this Passport");
     }
 
-    await repo.updatePresence(handle, { status });
+    await repo.updatePresence(handle, { status, ownerId: profile.id });
 
     revalidatePath(`/agents/${handle}`);
     revalidatePath("/agents");

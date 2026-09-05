@@ -26,8 +26,6 @@ import {
   restSnippets,
   sortMarketItems,
   storeTotals,
-  supportsWalletPolicy,
-  setWalletPolicy,
   walletSummary,
 } from "@/lib/data/ext/economy";
 
@@ -282,17 +280,25 @@ describe("wallet summary", () => {
     });
   });
 
-  it("reports the wallet-policy capability honestly and refuses without it", async () => {
-    // `updateWalletPolicy` is not on `Repository` yet — see this lane's report.
-    expect(supportsWalletPolicy(repo)).toBe(false);
-    await expect(
-      setWalletPolicy(repo, "any-profile", { approvalThresholdCents: 500 }),
-    ).rejects.toThrow(/read-only/i);
+  it("writes both spend-policy columns and refuses a negative limit", async () => {
+    const profile = await repo.getCurrentProfile();
+    expect(profile).not.toBeNull();
 
-    const capable = Object.assign(Object.create(Object.getPrototypeOf(repo)), repo, {
-      updateWalletPolicy: async () => (await repo.getWallet("x")) ?? null,
+    const updated = await repo.updateWalletPolicy(profile!.id, {
+      approvalThresholdCents: 750,
+      autonomousSpendLimitCents: 3000,
     });
-    expect(supportsWalletPolicy(capable as Repository)).toBe(true);
+    expect(updated.approval_threshold_cents).toBe(750);
+    expect(updated.autonomous_spend_limit_cents).toBe(3000);
+
+    // A partial patch leaves the other column alone.
+    const partial = await repo.updateWalletPolicy(profile!.id, { approvalThresholdCents: 500 });
+    expect(partial.approval_threshold_cents).toBe(500);
+    expect(partial.autonomous_spend_limit_cents).toBe(3000);
+
+    await expect(
+      repo.updateWalletPolicy(profile!.id, { approvalThresholdCents: -1 }),
+    ).rejects.toThrow(/negative/i);
   });
 });
 

@@ -604,8 +604,23 @@ export type Wallet = {
   balance_cents: Cents;
   held_cents: Cents;
   spend_today_cents: Cents;
+  /**
+   * The UTC day (`YYYY-MM-DD`) `spend_today_cents` counts.
+   *
+   * Deliberately not `updated_at`: every unrelated wallet write — a top-up, a
+   * spend-policy save, the Command Center pause — refreshes that column, which
+   * silently carried yesterday's spend forward into today's autonomous ceiling.
+   */
+  spend_today_date: string;
   approval_threshold_cents: Cents;
   autonomous_spend_limit_cents: Cents;
+  /**
+   * The Command Center kill switch. Server state on the wallet row rather than
+   * a per-browser cookie, so the site, an API key and an MCP client all get the
+   * same answer — and so the switch and the limit it enforces can never
+   * disagree between two browsers.
+   */
+  autonomous_paused: boolean;
   updated_at: ISODateString;
 };
 
@@ -705,8 +720,15 @@ export type StoreWithAgents = Store & { agents: Agent[]; owner: Profile | null }
 
 export type StoreDetail = StoreWithAgents & { gigs: Gig[] };
 
-export type ChannelDetail = Channel & {
-  hosts: Agent[];
+/**
+ * `listChannels()` — the hosts come with the row.
+ *
+ * Every District TV surface draws the hosts on the stage, and fetching them
+ * per channel is an N+1 the Supabase adapter cannot afford.
+ */
+export type ChannelWithHosts = Channel & { hosts: Agent[] };
+
+export type ChannelDetail = ChannelWithHosts & {
   chat: ChatMessage[];
   competition: Competition | null;
 };
@@ -739,6 +761,48 @@ export type ThreadWithMessages = Thread & {
 };
 
 export type MarketItemWithStore = MarketItem & { store: Store | null };
+
+/* ------------------------------------------------------------ district search */
+
+/** Every kind of row `searchDistrict()` can return. */
+export const SEARCH_KINDS = [
+  "agent",
+  "gig",
+  "job",
+  "guild",
+  "channel",
+  "market_item",
+  "store",
+] as const;
+export type SearchKind = (typeof SEARCH_KINDS)[number];
+
+/**
+ * One row of the top-bar search results.
+ *
+ * Deliberately flat and adapter-agnostic: in Supabase mode it is the
+ * `search_district()` RPC's result set, in demo mode the same shape scored in
+ * memory, so `/search` renders one component for both.
+ */
+export type SearchHit = {
+  kind: SearchKind;
+  id: UUID;
+  /** Route segment: an agent handle, a slug, or a job id. */
+  slug: string;
+  title: string;
+  subtitle: string;
+  /** Where the result links. Always a real route. */
+  href: string;
+  /** Higher is a better match. Ordering key. */
+  rank: number;
+};
+
+export type SearchResults = {
+  query: string;
+  hits: SearchHit[];
+  /** Hit count per kind, for the result-page filter chips. */
+  counts: Record<SearchKind, number>;
+  total: number;
+};
 
 /* -------------------------------------------------------------------------- */
 /* Filters & list options                                                      */
@@ -791,6 +855,8 @@ export type OrderFilter = ListOptions & {
   buyerId?: UUID;
   agentHandle?: Handle;
   status?: OrderStatus;
+  /** The run that came out of a bounty — one job has at most one order. */
+  jobId?: UUID;
 };
 
 export type MarketFilter = ListOptions & {
@@ -805,6 +871,13 @@ export type ChannelFilter = ListOptions & {
 
 export type EventFilter = ListOptions & {
   kind?: EventKind;
+  /** Any-of filter. Combined with `kind` it narrows further. */
+  kinds?: EventKind[];
+};
+
+export type CompetitionFilter = ListOptions & {
+  status?: CompetitionStatus;
+  channelId?: UUID;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -899,6 +972,20 @@ export type UpdatePresenceInput = {
   roomSlug?: Slug;
   capacity?: number;
   queueLen?: number;
+  /**
+   * The profile making the change. The adapter enforces that the agent belongs
+   * to it — the same ownership guard `updateAgent` applies. Required, so a new
+   * call site cannot forget it and get an unauthenticated presence write.
+   */
+  ownerId: UUID;
+};
+
+/** The two wallet columns a human may edit (BUILD_SPEC §2 `wallets`). */
+export type WalletPolicyPatch = {
+  approvalThresholdCents?: Cents;
+  autonomousSpendLimitCents?: Cents;
+  /** The Command Center kill switch — see `Wallet.autonomous_paused`. */
+  autonomousPaused?: boolean;
 };
 
 export type PostLoungeMessageInput = {

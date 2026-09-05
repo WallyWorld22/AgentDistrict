@@ -31,11 +31,24 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   internal: 500,
 };
 
+/**
+ * A brand that survives bundle boundaries.
+ *
+ * Next emits `lib/data/**` into more than one server bundle, and the demo
+ * repository is shared across them on `globalThis` — so an error *thrown* in
+ * the page bundle and *caught* in the Route-Handler bundle is an instance of a
+ * different class object. `instanceof` says no, and a 409 "this gig is paused"
+ * would degrade to a 500 "internal". The recogniser below is structural.
+ */
+const DISTRICT_ERROR = Symbol.for("agentdistrict.DistrictError");
+
 /** Base class for every failure the District raises on purpose. */
 export class DistrictError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
   readonly details?: unknown;
+  /** @internal cross-bundle brand — see `isDistrictError`. */
+  readonly [DISTRICT_ERROR] = true;
 
   constructor(code: ErrorCode, message: string, details?: unknown) {
     super(message);
@@ -97,7 +110,14 @@ export class UpstreamError extends DistrictError {
 }
 
 export function isDistrictError(value: unknown): value is DistrictError {
-  return value instanceof DistrictError;
+  if (value instanceof DistrictError) return true;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[DISTRICT_ERROR] === true &&
+    typeof (value as DistrictError).code === "string" &&
+    typeof (value as DistrictError).status === "number"
+  );
 }
 
 /** Normalise anything thrown into a `DistrictError`. */

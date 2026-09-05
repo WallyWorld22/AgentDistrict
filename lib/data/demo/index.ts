@@ -19,7 +19,7 @@ import { API_KEY_PREFIX, apiKeyMatches, apiKeyPrefix, generateApiKey, hashApiKey
 import { districtNow } from "../clock";
 import type { Repository, RepositoryMode } from "../repository";
 import { headlineStats } from "../stats";
-import { trendDeltaFor } from "../trending";
+import { compareTrendingGigs, trendDeltaFor } from "../trending";
 import type {
   AcceptBidInput,
   Agent,
@@ -30,7 +30,9 @@ import type {
   Channel,
   ChannelDetail,
   ChannelFilter,
+  ChannelWithHosts,
   ChatMessage,
+  CompetitionFilter,
   CompetitionWithEntries,
   CreateAgentInput,
   CreateApiKeyInput,
@@ -70,10 +72,14 @@ import type {
   Review,
   ReviewWithReviewer,
   RoomWithCounts,
+  SearchHit,
+  SearchKind,
+  SearchResults,
   SendMessageInput,
   Slug,
   StoreDetail,
   StoreWithAgents,
+  Thread,
   ThreadListItem,
   ThreadWithMessages,
   TrendingAgent,
@@ -81,8 +87,10 @@ import type {
   UpdateAgentInput,
   UpdatePresenceInput,
   Wallet,
+  WalletPolicyPatch,
   WalletTransaction,
 } from "../types";
+import { emptySearchCounts, filterByTerms, rankSearchHits } from "../search";
 
 /** Sentinel: a handle filter that matched nothing, so the page is empty. */
 const MISSING = "\u0000missing";
@@ -109,6 +117,12 @@ export class DemoRepository implements Repository {
   private readonly db: DistrictDataset;
   private readonly now: () => number;
   private readonly listeners = new Set<(event: DistrictEvent) => void>();
+  /**
+   * `"<channelId>:<profileId>"` for every follow. Demo mode has no
+   * `channel_followers` table to clone, so the set lives beside the dataset
+   * and — like every other demo mutation — resets on cold start.
+   */
+  private readonly channelFollows = new Set<string>();
 
   constructor(options: { now?: () => number; dataset?: DistrictDataset } = {}) {
     this.db = options.dataset ?? structuredClone(seed);
@@ -179,8 +193,9 @@ export class DemoRepository implements Repository {
    *   in the UI (`options.approved`). A machine caller never sets that flag, so
    *   an API key cannot silently spend more than the threshold allows;
    * - `autonomous_spend_limit_cents` — a hard daily ceiling;
-   * - `spend_today_cents` resets when the wallet was last touched on an earlier
-   *   UTC day, so it is a *daily* figure rather than a number that only grows.
+   * - `spend_today_cents` resets when the last *spend* was on an earlier UTC
+   *   day (`spend_today_date`), so it is a daily figure rather than a number
+   *   that only grows.
    */
   private holdFunds(
     profileId: UUID,
@@ -201,20 +216,22 @@ export class DemoRepository implements Repository {
     if (!options.approved) {
       // Autonomous spend only: a human who clicked "Continue ($x)" has already
       // seen and approved the price, which is what the threshold is for.
-      if (
-        wallet.approval_threshold_cents > 0 &&
-        amount > wallet.approval_threshold_cents
-      ) {
+      if (wallet.autonomous_paused) {
+        throw new ConflictError(
+          "External agent spending is paused in the Command Center — no unattended run can start.",
+        );
+      }
+      // A ceiling of zero means "no unattended spend at all". It must never
+      // read as "no ceiling": saving 0.00 in the spend policy is the *tightest*
+      // setting a buyer can ask for, not the loosest.
+      if (amount > wallet.approval_threshold_cents) {
         throw new ConflictError(
           `${formatCents(amount)} is over the ${formatCents(
             wallet.approval_threshold_cents,
           )} approval threshold — a human has to approve this spend.`,
         );
       }
-      if (
-        wallet.autonomous_spend_limit_cents > 0 &&
-        spentToday + amount > wallet.autonomous_spend_limit_cents
-      ) {
+      if (spentToday + amount > wallet.autonomous_spend_limit_cents) {
         throw new ConflictError(
           `This would take today's autonomous spend past the ${formatCents(
             wallet.autonomous_spend_limit_cents,
@@ -225,6 +242,7 @@ export class DemoRepository implements Repository {
 
     wallet.held_cents += amount;
     wallet.spend_today_cents = spentToday + amount;
+    wallet.spend_today_date = this.today();
     wallet.updated_at = this.nowIso();
     this.db.walletTransactions.unshift({
       id: this.id(),
@@ -237,23 +255,44 @@ export class DemoRepository implements Repository {
     });
   }
 
-  /** `spend_today_cents`, zeroed when the last write was on an earlier UTC day. */
+  /** Today, as `YYYY-MM-DD` on the District clock. */
+  private today(): string {
+    return new Date(this.now()).toISOString().slice(0, 10);
+  }
+
+  /**
+   * `spend_today_cents`, zeroed when the last **spend** was on an earlier UTC
+   * day. Reading `updated_at` here was a real bug: a top-up or a policy save
+   * refreshes it without touching the counter, so the day never rolled over and
+   * yesterday's spend was charged against today's ceiling for ever.
+   */
   private spendToday(wallet: Wallet): number {
-    const day = (value: number | string) => new Date(value).toISOString().slice(0, 10);
-    return day(wallet.updated_at) === day(this.now()) ? wallet.spend_today_cents : 0;
+    return wallet.spend_today_date >= this.today() ? wallet.spend_today_cents : 0;
   }
 
   /**
    * Return an order's hold to the buyer and rewrite its single money-out ledger
    * row as a `refund`. Used when a run is disputed or fails — leaving the hold
    * in place locked the buyer's credits forever.
+   *
+   * Settling is **idempotent**: an order whose ledger row is no longer a `hold`
+   * has already been released or refunded, and touching the wallet again would
+   * free `held_cents` belonging to *other* in-flight orders (and drive
+   * `spend_today_cents` to zero, defeating the daily ceiling).
    */
   private refundHold(order: Order, memo: string): void {
     const wallet = this.db.wallets.find((row) => row.profile_id === order.buyer_id);
     if (!wallet) return;
+    const settled = this.db.walletTransactions.some(
+      (tx) => tx.order_id === order.id && (tx.kind === "refund" || tx.kind === "release"),
+    );
+    if (settled) return;
     const timestamp = this.nowIso();
     wallet.held_cents = Math.max(0, wallet.held_cents - order.amount_cents);
+    // A refund only gives back *today's* spend. On a stale counter the day has
+    // rolled over, so there is nothing of today's to reduce.
     wallet.spend_today_cents = Math.max(0, this.spendToday(wallet) - order.amount_cents);
+    wallet.spend_today_date = this.today();
     wallet.updated_at = timestamp;
 
     const holdRow = this.db.walletTransactions.find(
@@ -353,9 +392,10 @@ export class DemoRepository implements Repository {
   }
 
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
-    const { limit = 20, offset = 0, kind } = filter;
+    const { limit = 20, offset = 0, kind, kinds } = filter;
     return this.db.events
       .filter((event) => (kind ? event.kind === kind : true))
+      .filter((event) => (kinds && kinds.length > 0 ? kinds.includes(event.kind) : true))
       .slice()
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(offset, offset + limit);
@@ -379,6 +419,102 @@ export class DemoRepository implements Repository {
     return event;
   }
 
+  /* ---------------------------------------------------------------- search */
+
+  async searchDistrict(query: string, limit = 24): Promise<SearchResults> {
+    const needle = query.trim();
+    if (!needle) {
+      return { query: "", hits: [], counts: emptySearchCounts(), total: 0 };
+    }
+
+    const candidates: Array<SearchHit & { haystack: string }> = [];
+    const push = (
+      kind: SearchKind,
+      id: UUID,
+      slug: string,
+      title: string,
+      subtitle: string,
+      href: string,
+      extra: string,
+    ) => {
+      candidates.push({
+        kind,
+        id,
+        slug,
+        title,
+        subtitle,
+        href,
+        rank: 0,
+        haystack: `${title} ${subtitle} ${extra}`,
+      });
+    };
+
+    for (const agent of this.db.agents) {
+      push(
+        "agent",
+        agent.id,
+        agent.handle,
+        agent.name,
+        agent.tagline,
+        `/agents/${agent.handle}`,
+        `${agent.handle} ${agent.skills.join(" ")} ${agent.regions.join(" ")} ${agent.category}`,
+      );
+    }
+    for (const gig of this.db.gigs) {
+      if (gig.status !== "active") continue;
+      push(
+        "gig",
+        gig.id,
+        gig.slug,
+        gig.title,
+        gig.description,
+        `/gigs/${gig.slug}`,
+        `${gig.tags.join(" ")} ${gig.category}`,
+      );
+    }
+    for (const job of this.db.jobs) {
+      push("job", job.id, job.id, job.title, job.description, `/jobs/${job.id}`, job.category);
+    }
+    for (const guild of this.db.guilds) {
+      push(
+        "guild",
+        guild.id,
+        guild.slug,
+        guild.name,
+        guild.pipeline || guild.description,
+        `/guilds/${guild.slug}`,
+        guild.description,
+      );
+    }
+    for (const channel of this.db.channels) {
+      push(
+        "channel",
+        channel.id,
+        channel.slug,
+        channel.title,
+        channel.description,
+        `/tv/${channel.slug}`,
+        `${channel.kind} ${channel.schedule}`,
+      );
+    }
+    for (const item of this.db.marketItems) {
+      push(
+        "market_item",
+        item.id,
+        item.slug,
+        item.title,
+        item.description,
+        `/market/${item.slug}`,
+        `${item.tags.join(" ")} ${item.kind}`,
+      );
+    }
+    for (const store of this.db.stores) {
+      push("store", store.id, store.slug, store.name, store.tagline, `/stores/${store.slug}`, "");
+    }
+
+    return rankSearchHits(needle, candidates, limit);
+  }
+
   /* ---------------------------------------------------------------- agents */
 
   async listAgents(filter: AgentFilter = {}): Promise<Agent[]> {
@@ -399,9 +535,9 @@ export class DemoRepository implements Repository {
     const storeId = storeSlug
       ? (this.db.stores.find((store) => store.slug === storeSlug)?.id ?? null)
       : null;
-    const needle = q?.trim().toLowerCase();
+    const needle = q?.trim();
 
-    const rows = this.db.agents.filter((agent) => {
+    const matching = this.db.agents.filter((agent) => {
       if (category && agent.category !== category) return false;
       if (room && agent.room_slug !== room) return false;
       if (status && agent.status !== status) return false;
@@ -413,21 +549,24 @@ export class DemoRepository implements Repository {
         const wanted = skills.map((skill) => skill.toLowerCase());
         if (!wanted.some((skill) => owned.some((have) => have.includes(skill)))) return false;
       }
-      if (needle) {
-        const haystack = [
-          agent.name,
-          agent.handle,
-          agent.tagline,
-          agent.description,
-          ...agent.skills,
-          ...agent.regions,
-        ]
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
       return true;
     });
+
+    // Per-term, not whole-phrase: the Supabase adapter runs `q` through
+    // `websearch_to_tsquery`, so anything else made the two modes disagree and
+    // made every multi-word query return nothing in demo mode.
+    const rows = needle
+      ? filterByTerms(matching, needle, (agent) =>
+          [
+            agent.name,
+            agent.handle,
+            agent.tagline,
+            agent.description,
+            ...agent.skills,
+            ...agent.regions,
+          ].join(" "),
+        )
+      : matching;
 
     const sorted = rows.slice().sort((a, b) => {
       switch (sort) {
@@ -577,6 +716,11 @@ export class DemoRepository implements Repository {
 
   async updatePresence(agentHandle: Handle, input: UpdatePresenceInput): Promise<Presence> {
     const agent = this.requireAgentByHandle(agentHandle);
+    // Same guard `updateAgent` applies — presence is part of an agent's public
+    // record, so only its owner may move it.
+    if (agent.owner_id !== input.ownerId) {
+      throw new ForbiddenError("You do not own this agent");
+    }
     let presence = this.db.presence.find((row) => row.agent_id === agent.id);
     if (!presence) {
       presence = {
@@ -610,18 +754,57 @@ export class DemoRepository implements Repository {
       .map((review) => ({ ...review, reviewer: this.profileById(review.reviewer_id) }));
   }
 
+  /**
+   * Reviews left on runs of one gig. Reviews point at an order, and an order
+   * carries the gig it came from, so this is the gig-scoped counterpart to
+   * `listReviewsForAgent` (which is broader — every run by that agent).
+   */
+  async listReviewsForGig(slug: Slug, limit = 12): Promise<ReviewWithReviewer[]> {
+    const gig = this.db.gigs.find((row) => row.slug === slug);
+    if (!gig) return [];
+    const orderIds = new Set(
+      this.db.orders.filter((order) => order.gig_id === gig.id).map((order) => order.id),
+    );
+    return this.db.reviews
+      .filter((review) => review.order_id !== null && orderIds.has(review.order_id))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit)
+      .map((review) => ({ ...review, reviewer: this.profileById(review.reviewer_id) }));
+  }
+
   async createReview(input: CreateReviewInput, reviewerId: UUID): Promise<Review> {
-    if (input.rating < 1 || input.rating > 5) {
-      throw new ValidationError("Rating must be between 1 and 5");
+    // `Number.isInteger` first: `NaN < 1` and `NaN > 5` are both false, so a
+    // range check alone let an un-parsed rating through and folded `NaN` into
+    // the agent's lifetime average, unrecoverably.
+    if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
+      throw new ValidationError("Rating must be a whole number between 1 and 5");
     }
     const order = this.db.orders.find((row) => row.id === input.orderId);
     if (!order) throw new NotFoundError("Order");
     if (order.buyer_id !== reviewerId) throw new ForbiddenError("Only the buyer can review a run");
-    if (order.status !== "approved" && order.status !== "delivered") {
-      throw new ConflictError("Only a delivered order can be reviewed");
+    // Reputation only moves once money has actually moved, and never in favour
+    // of your own agent — otherwise a creator can farm 5-star reviews on a free
+    // package of their own gig, and rating is 35% of the ranking score.
+    if (order.status !== "approved") {
+      throw new ConflictError("Only an approved run can be reviewed");
+    }
+    if (this.requireAgentById(order.agent_id).owner_id === reviewerId) {
+      throw new ForbiddenError("You cannot review your own agent");
     }
     if (this.db.reviews.some((review) => review.order_id === order.id)) {
       throw new ConflictError("This order already has a review");
+    }
+    // Free runs cost nothing to mint, so without this an agent's rating could
+    // be walked anywhere at zero cost. One review per reviewer per agent from a
+    // free run; a paid run is rate-limited by the buyer's own wallet.
+    // `reviews_insert_reviewer` (0008) enforces the same rule in SQL.
+    if (
+      order.amount_cents === 0 &&
+      this.db.reviews.some(
+        (review) => review.agent_id === order.agent_id && review.reviewer_id === reviewerId,
+      )
+    ) {
+      throw new ConflictError("You have already reviewed this agent from a free run");
     }
 
     const review: Review = {
@@ -664,18 +847,10 @@ export class DemoRepository implements Repository {
     return { ...gig, agent: this.requireAgentById(gig.agent_id) };
   }
 
-  async listGigs(filter: GigFilter = {}): Promise<GigWithAgent[]> {
-    const {
-      q,
-      category,
-      agentHandle,
-      maxPriceCents,
-      tags,
-      sort = "trending",
-      limit = 48,
-      offset = 0,
-    } = filter;
-    const needle = q?.trim().toLowerCase();
+  /** Every gig matching `filter`, sorted, *before* `limit`/`offset` is applied. */
+  private matchingGigs(filter: GigFilter = {}): Gig[] {
+    const { q, category, agentHandle, maxPriceCents, tags, sort = "trending" } = filter;
+    const needle = q?.trim();
     // A list read returns an empty page for an unknown handle rather than
     // throwing — see the Repository contract in `lib/data/repository.ts`.
     const agentId = agentHandle
@@ -683,7 +858,7 @@ export class DemoRepository implements Repository {
       : null;
     if (agentId === MISSING) return [];
 
-    const rows = this.db.gigs.filter((gig) => {
+    const matching = this.db.gigs.filter((gig) => {
       if (gig.status !== "active") return false;
       if (category && gig.category !== category) return false;
       if (agentId && gig.agent_id !== agentId) return false;
@@ -692,15 +867,21 @@ export class DemoRepository implements Repository {
         const owned = gig.tags.map((tag) => tag.toLowerCase());
         if (!tags.some((tag) => owned.includes(tag.toLowerCase()))) return false;
       }
-      if (needle) {
-        const agent = this.agentById(gig.agent_id);
-        const haystack = [gig.title, gig.description, ...gig.tags, agent?.name ?? "", agent?.handle ?? ""]
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
       return true;
     });
+
+    const rows = needle
+      ? filterByTerms(matching, needle, (gig) => {
+          const agent = this.agentById(gig.agent_id);
+          return [
+            gig.title,
+            gig.description,
+            ...gig.tags,
+            agent?.name ?? "",
+            agent?.handle ?? "",
+          ].join(" ");
+        })
+      : matching;
 
     const sorted = rows.slice().sort((a, b) => {
       switch (sort) {
@@ -714,11 +895,22 @@ export class DemoRepository implements Repository {
           return a.delivery_seconds - b.delivery_seconds;
         case "trending":
         default:
-          return b.runs_count - a.runs_count || b.rating_avg - a.rating_avg;
+          return compareTrendingGigs(a, b);
       }
     });
 
-    return sorted.slice(offset, offset + limit).map((gig) => this.withAgent(gig));
+    return sorted;
+  }
+
+  async listGigs(filter: GigFilter = {}): Promise<GigWithAgent[]> {
+    const { limit = 48, offset = 0 } = filter;
+    return this.matchingGigs(filter)
+      .slice(offset, offset + limit)
+      .map((gig) => this.withAgent(gig));
+  }
+
+  async countGigs(filter: GigFilter = {}): Promise<number> {
+    return this.matchingGigs(filter).length;
   }
 
   async getGigBySlug(slug: Slug): Promise<GigWithAgent | null> {
@@ -787,6 +979,9 @@ export class DemoRepository implements Repository {
   async orderGig(input: OrderGigInput): Promise<Order> {
     const gig = this.db.gigs.find((row) => row.slug === input.gigSlug);
     if (!gig) throw new NotFoundError(`Gig ${input.gigSlug}`);
+    if (gig.status !== "active") {
+      throw new ConflictError("This gig is paused and is not taking new orders.");
+    }
     const pkg = gig.packages.find((candidate) => candidate.tier === input.tier);
     if (!pkg) throw new ValidationError(`Gig ${gig.slug} has no ${input.tier} package`);
     const agent = this.requireAgentById(gig.agent_id);
@@ -861,15 +1056,17 @@ export class DemoRepository implements Repository {
 
   async listJobs(filter: JobFilter = {}): Promise<JobWithBidCount[]> {
     const { q, category, status, posterId, sort = "newest", limit = 48, offset = 0 } = filter;
-    const needle = q?.trim().toLowerCase();
+    const needle = q?.trim();
 
-    const rows = this.db.jobs.filter((job) => {
+    const matching = this.db.jobs.filter((job) => {
       if (category && job.category !== category) return false;
       if (status && job.status !== status) return false;
       if (posterId && job.poster_id !== posterId) return false;
-      if (needle && !`${job.title} ${job.description}`.toLowerCase().includes(needle)) return false;
       return true;
     });
+    const rows = needle
+      ? filterByTerms(matching, needle, (job) => `${job.title} ${job.description}`)
+      : matching;
 
     const decorated = rows.map((job) => ({ ...job, bidCount: this.bidCount(job.id) }));
 
@@ -946,6 +1143,13 @@ export class DemoRepository implements Repository {
     if (job.status !== "open") throw new ConflictError("This job is no longer open for bids");
     const agent = this.requireAgentByHandle(input.agentHandle);
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
+    // The reverse auction only means anything if the poster is not also the
+    // seller: post → bid → award → approve would otherwise mint a completed job
+    // for the price of one cent. The friendlier wording lives in the form
+    // action; this is the trust boundary, so every caller hits it.
+    if (job.poster_id === agent.owner_id) {
+      throw new ForbiddenError("You cannot bid on your own bounty");
+    }
 
     const guild = input.guildSlug
       ? (this.db.guilds.find((row) => row.slug === input.guildSlug) ?? null)
@@ -977,6 +1181,24 @@ export class DemoRepository implements Repository {
     return bid;
   }
 
+  async listBidsForJobs(jobIds: UUID[]): Promise<Record<UUID, BidWithAgent[]>> {
+    const wanted = new Set(jobIds);
+    const out: Record<UUID, BidWithAgent[]> = {};
+    for (const id of jobIds) out[id] = [];
+    for (const bid of this.db.bids) {
+      if (!wanted.has(bid.job_id)) continue;
+      out[bid.job_id].push({
+        ...bid,
+        agent: this.requireAgentById(bid.agent_id),
+        guild: this.db.guilds.find((guild) => guild.id === bid.guild_id) ?? null,
+      });
+    }
+    for (const id of jobIds) {
+      out[id].sort((a, b) => a.amount_cents - b.amount_cents || a.eta_seconds - b.eta_seconds);
+    }
+    return out;
+  }
+
   async acceptBid(input: AcceptBidInput): Promise<Order> {
     const job = this.db.jobs.find((row) => row.id === input.jobId);
     if (!job) throw new NotFoundError("Job");
@@ -988,6 +1210,10 @@ export class DemoRepository implements Repository {
     const bid = this.db.bids.find((row) => row.id === input.bidId && row.job_id === job.id);
     if (!bid) throw new NotFoundError("Bid");
     const agent = this.requireAgentById(bid.agent_id);
+    // Mirror of the `placeBid` guard, for a bid that predates it.
+    if (job.poster_id === agent.owner_id) {
+      throw new ForbiddenError("You cannot award your own bounty to your own agent");
+    }
 
     const timestamp = this.nowIso();
     const order: Order = {
@@ -1059,8 +1285,9 @@ export class DemoRepository implements Repository {
 
   /* ---------------------------------------------------------------- orders */
 
-  async listOrders(filter: OrderFilter = {}): Promise<OrderDetail[]> {
-    const { buyerId, agentHandle, status, limit = 50, offset = 0 } = filter;
+  /** Advances every match, then returns them newest-first (pre-pagination). */
+  private async matchingOrders(filter: OrderFilter = {}): Promise<Order[]> {
+    const { buyerId, agentHandle, status, jobId } = filter;
     const agentId = agentHandle
       ? (this.db.agents.find((agent) => agent.handle === agentHandle)?.id ?? MISSING)
       : null;
@@ -1069,6 +1296,7 @@ export class DemoRepository implements Repository {
     const rows = this.db.orders.filter((order) => {
       if (buyerId && order.buyer_id !== buyerId) return false;
       if (agentId && order.agent_id !== agentId) return false;
+      if (jobId && order.job_id !== jobId) return false;
       return true;
     });
 
@@ -1076,9 +1304,17 @@ export class DemoRepository implements Repository {
 
     return rows
       .filter((order) => (status ? order.status === status : true))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .slice(offset, offset + limit)
-      .map((order) => this.decorateOrder(order));
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  async listOrders(filter: OrderFilter = {}): Promise<OrderDetail[]> {
+    const { limit = 50, offset = 0 } = filter;
+    const rows = await this.matchingOrders(filter);
+    return rows.slice(offset, offset + limit).map((order) => this.decorateOrder(order));
+  }
+
+  async countOrders(filter: OrderFilter = {}): Promise<number> {
+    return (await this.matchingOrders(filter)).length;
   }
 
   async getOrder(id: UUID): Promise<OrderDetail | null> {
@@ -1185,6 +1421,15 @@ export class DemoRepository implements Repository {
     if (!order) throw new NotFoundError("Order");
     if (order.buyer_id !== buyerId) throw new ForbiddenError("Only the buyer can dispute this run");
     if (order.status === "approved") throw new ConflictError("This run has already been approved");
+    // Terminal states are already settled — disputing again would refund a
+    // second time, releasing held credits that belong to other live orders.
+    if (
+      order.status === "disputed" ||
+      order.status === "failed" ||
+      order.status === "cancelled"
+    ) {
+      return order;
+    }
 
     const timestamp = this.nowIso();
     order.status = "disputed";
@@ -1249,16 +1494,16 @@ export class DemoRepository implements Repository {
 
   async listMarketItems(filter: MarketFilter = {}): Promise<MarketItemWithStore[]> {
     const { kind, q, limit = 48, offset = 0 } = filter;
-    const needle = q?.trim().toLowerCase();
-    return this.db.marketItems
-      .filter((item) => {
-        if (kind && item.kind !== kind) return false;
-        if (needle) {
-          const haystack = [item.title, item.description, ...item.tags].join(" ").toLowerCase();
-          if (!haystack.includes(needle)) return false;
-        }
-        return true;
-      })
+    const needle = q?.trim();
+    const matching = this.db.marketItems.filter((item) => !kind || item.kind === kind);
+    return (
+      needle
+        ? filterByTerms(matching, needle, (item) =>
+            [item.title, item.description, ...item.tags].join(" "),
+          )
+        : matching
+    )
+      .slice()
       .sort((a, b) => b.downloads - a.downloads)
       .slice(offset, offset + limit)
       .map((item) => ({
@@ -1282,7 +1527,15 @@ export class DemoRepository implements Repository {
 
   /* -------------------------------------------------------------------- tv */
 
-  async listChannels(filter: ChannelFilter = {}): Promise<Channel[]> {
+  private hostsFor(channelId: UUID): Agent[] {
+    return this.db.channelHosts
+      .filter((host) => host.channel_id === channelId)
+      .sort((a, b) => a.position - b.position)
+      .map((host) => this.agentById(host.agent_id))
+      .filter((agent): agent is Agent => Boolean(agent));
+  }
+
+  async listChannels(filter: ChannelFilter = {}): Promise<ChannelWithHosts[]> {
     const { liveOnly, kind, limit = 24, offset = 0 } = filter;
     return this.db.channels
       .filter((channel) => {
@@ -1291,17 +1544,40 @@ export class DemoRepository implements Repository {
         return true;
       })
       .sort((a, b) => Number(b.is_live) - Number(a.is_live) || b.viewers - a.viewers)
-      .slice(offset, offset + limit);
+      .slice(offset, offset + limit)
+      .map((channel) => ({ ...channel, hosts: this.hostsFor(channel.id) }));
+  }
+
+  async setChannelFollow(slug: Slug, profileId: UUID, following: boolean): Promise<Channel> {
+    const channel = this.db.channels.find((row) => row.slug === slug);
+    if (!channel) throw new NotFoundError(`Channel ${slug}`);
+    const key = `${channel.id}:${profileId}`;
+    const had = this.channelFollows.has(key);
+    if (following && !had) {
+      this.channelFollows.add(key);
+      channel.followers += 1;
+    } else if (!following && had) {
+      this.channelFollows.delete(key);
+      channel.followers = Math.max(0, channel.followers - 1);
+    }
+    channel.updated_at = this.nowIso();
+    return channel;
+  }
+
+  async listFollowedChannelSlugs(profileId: UUID): Promise<Slug[]> {
+    const suffix = `:${profileId}`;
+    const ids = new Set(
+      [...this.channelFollows]
+        .filter((key) => key.endsWith(suffix))
+        .map((key) => key.slice(0, -suffix.length)),
+    );
+    return this.db.channels.filter((channel) => ids.has(channel.id)).map((channel) => channel.slug);
   }
 
   async getChannelBySlug(slug: Slug): Promise<ChannelDetail | null> {
     const channel = this.db.channels.find((row) => row.slug === slug);
     if (!channel) return null;
-    const hosts = this.db.channelHosts
-      .filter((host) => host.channel_id === channel.id)
-      .sort((a, b) => a.position - b.position)
-      .map((host) => this.agentById(host.agent_id))
-      .filter((agent): agent is Agent => Boolean(agent));
+    const hosts = this.hostsFor(channel.id);
     const chat = this.db.channelChat
       .filter((message) => message.channel_id === channel.id)
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -1310,15 +1586,23 @@ export class DemoRepository implements Repository {
     return { ...channel, hosts, chat, competition };
   }
 
-  async listCompetitions(): Promise<CompetitionWithEntries[]> {
-    return this.db.competitions.map((competition) => ({
+  async listCompetitions(filter: CompetitionFilter = {}): Promise<CompetitionWithEntries[]> {
+    const { status, channelId, limit = 24, offset = 0 } = filter;
+    return this.db.competitions
+      .filter((competition) => {
+        if (status && competition.status !== status) return false;
+        if (channelId && competition.channel_id !== channelId) return false;
+        return true;
+      })
+      .slice(offset, offset + limit)
+      .map((competition) => ({
       ...competition,
       channel: this.db.channels.find((row) => row.id === competition.channel_id) ?? null,
       entries: this.db.competitionEntries
         .filter((entry) => entry.competition_id === competition.id)
         .sort((a, b) => b.progress - a.progress)
         .map((entry) => ({ ...entry, agent: this.requireAgentById(entry.agent_id) })),
-    }));
+      }));
   }
 
   async postChannelChat(slug: Slug, authorName: string, body: string): Promise<ChatMessage> {
@@ -1368,9 +1652,14 @@ export class DemoRepository implements Repository {
       .filter((row): row is PresenceWithAgent => Boolean(row));
   }
 
-  async listLoungeMessages(roomSlug?: Slug, limit = 30): Promise<LoungeMessage[]> {
+  async listLoungeMessages(
+    roomSlug?: Slug,
+    limit = 30,
+    since?: string,
+  ): Promise<LoungeMessage[]> {
     return this.db.loungeMessages
       .filter((message) => (roomSlug ? message.room_slug === roomSlug : true))
+      .filter((message) => (since ? message.created_at > since : true))
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .slice(-limit);
   }
@@ -1378,6 +1667,12 @@ export class DemoRepository implements Repository {
   async postLoungeMessage(input: PostLoungeMessageInput): Promise<LoungeMessage> {
     const body = input.body.trim();
     if (!body) throw new ValidationError("Message body is required");
+    // In supabase mode the `room_slug` foreign key refuses an unknown room at
+    // write time; without this the two adapters disagreed and the demo store
+    // accumulated messages that render nowhere.
+    if (input.roomSlug && !this.db.rooms.some((room) => room.slug === input.roomSlug)) {
+      throw new NotFoundError("Room");
+    }
 
     let authorName = "Someone";
     if (input.authorType === "agent") {
@@ -1433,11 +1728,29 @@ export class DemoRepository implements Repository {
     };
   }
 
+  async markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread> {
+    const thread = this.db.threads.find((row) => row.id === threadId);
+    if (!thread) throw new NotFoundError("Thread");
+    if (thread.profile_id !== profileId) throw new ForbiddenError("This is not your conversation");
+    thread.unread_count = 0;
+    return thread;
+  }
+
   async sendMessage(input: SendMessageInput): Promise<Message> {
     const thread = this.db.threads.find((row) => row.id === input.threadId);
     if (!thread) throw new NotFoundError("Thread");
     const body = input.body.trim();
     if (!body) throw new ValidationError("Message body is required");
+    // Only the two participants may post: the profile the thread belongs to,
+    // or the thread's agent (posting as itself). `markThreadRead` already
+    // enforced this; sending did not, which is the half that mattered.
+    if (input.senderType === "human") {
+      if (thread.profile_id !== input.senderId) {
+        throw new ForbiddenError("This is not your conversation");
+      }
+    } else if (thread.agent_id !== input.senderId) {
+      throw new ForbiddenError("This agent is not part of that conversation");
+    }
 
     const senderName =
       input.senderType === "agent"
@@ -1485,7 +1798,12 @@ export class DemoRepository implements Repository {
   /* ---------------------------------------------------------------- wallet */
 
   async getWallet(profileId: UUID): Promise<Wallet | null> {
-    return this.db.wallets.find((wallet) => wallet.profile_id === profileId) ?? null;
+    const wallet = this.db.wallets.find((row) => row.profile_id === profileId);
+    if (!wallet) return null;
+    // Present the counter the way `hold_funds` reads it: a stale day is zero,
+    // so the Command Center and the Workplace Gateway never show yesterday's
+    // spend as though it counted against today's ceiling.
+    return { ...wallet, spend_today_cents: this.spendToday(wallet) };
   }
 
   async listTransactions(profileId: UUID, limit = 20): Promise<WalletTransaction[]> {
@@ -1509,6 +1827,27 @@ export class DemoRepository implements Repository {
       memo: "Added credits — demo top-up",
       created_at: this.nowIso(),
     });
+    return wallet;
+  }
+
+  async updateWalletPolicy(profileId: UUID, patch: WalletPolicyPatch): Promise<Wallet> {
+    const wallet = this.requireWallet(profileId);
+    if (patch.approvalThresholdCents !== undefined) {
+      if (patch.approvalThresholdCents < 0) {
+        throw new ValidationError("The approval threshold cannot be negative");
+      }
+      wallet.approval_threshold_cents = Math.round(patch.approvalThresholdCents);
+    }
+    if (patch.autonomousSpendLimitCents !== undefined) {
+      if (patch.autonomousSpendLimitCents < 0) {
+        throw new ValidationError("The daily autonomous ceiling cannot be negative");
+      }
+      wallet.autonomous_spend_limit_cents = Math.round(patch.autonomousSpendLimitCents);
+    }
+    if (patch.autonomousPaused !== undefined) {
+      wallet.autonomous_paused = patch.autonomousPaused;
+    }
+    wallet.updated_at = this.nowIso();
     return wallet;
   }
 
@@ -1549,6 +1888,15 @@ export class DemoRepository implements Repository {
     };
     this.db.apiKeys.unshift(record);
     return { key: raw, record };
+  }
+
+  async revokeApiKey(id: UUID, profileId: UUID): Promise<void> {
+    const index = this.db.apiKeys.findIndex((key) => key.id === id);
+    if (index === -1) throw new NotFoundError("API key");
+    if (this.db.apiKeys[index].profile_id !== profileId) {
+      throw new ForbiddenError("You do not own this API key");
+    }
+    this.db.apiKeys.splice(index, 1);
   }
 
   async verifyApiKey(rawKey: string): Promise<ApiKey | null> {

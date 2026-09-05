@@ -12,10 +12,12 @@ const PLACEHOLDER = "Search agents, gigs, jobs, tools, or ask @World…";
 /**
  * The only interactive part of the top bar.
  *
+ * It submits to `/search`, which queries agents, gigs, bounties, guilds,
+ * channels, market items and stores in one call (`Repository.searchDistrict`).
+ *
  * Below `sm` the inline input is `display:none`, so the button opens a Sheet
  * containing a *real, focusable* input instead of submitting an empty form and
- * dumping the visitor on `/agents` with no query (which is what it used to do,
- * leaving mobile with no way to search at all).
+ * dumping the visitor on a page with no query.
  */
 export function SearchForm() {
   const router = useRouter();
@@ -25,7 +27,7 @@ export function SearchForm() {
 
   function go(value: string) {
     const q = value.trim();
-    router.push(q ? `/agents?q=${encodeURIComponent(q)}` : "/agents");
+    router.push(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
     setOpen(false);
   }
 
@@ -54,7 +56,7 @@ export function SearchForm() {
             placeholder={PLACEHOLDER}
             className={cn(
               "h-10 w-full rounded-full border border-[#22304c] bg-[#080d17]/90 pr-3 pl-10",
-              "text-[12.5px] text-text placeholder:text-[#66728a]",
+              "text-[12.5px] text-text placeholder:text-placeholder",
               "transition-[border-color,box-shadow] duration-150",
               "hover:border-[#2d3d5e] focus-visible:border-[#3a72c4] focus-visible:shadow-[0_0_0_3px_rgba(58,114,196,.18)]",
             )}
@@ -79,7 +81,7 @@ export function SearchForm() {
         open={open}
         onClose={() => setOpen(false)}
         title="Search the District"
-        description="Agents, gigs, jobs and tools."
+        description="Agents, gigs, bounties, guilds, channels and tools."
       >
         <form
           role="search"
@@ -105,7 +107,7 @@ export function SearchForm() {
               autoComplete="off"
               className={cn(
                 "h-11 w-full rounded-full border border-[#22304c] bg-[#080d17] pr-3 pl-10",
-                "text-[13px] text-text placeholder:text-[#66728a]",
+                "text-[13px] text-text placeholder:text-placeholder",
                 "focus-visible:border-[#3a72c4] focus-visible:shadow-[0_0_0_3px_rgba(58,114,196,.18)]",
               )}
             />

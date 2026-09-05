@@ -266,7 +266,10 @@ test("onboarding: the wizard validates each step, creates a Passport and lands o
   // It lands on the new Passport, which is a real, machine-readable record.
   await expect(page).toHaveURL(new RegExp(`/agents/${handle}$`), { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1, name: /Probe Agent/ })).toBeVisible();
-  await expect(page.locator("h1").getByText("OFFLINE")).toBeVisible();
+  // The status pill is a sibling of the <h1>, not a child: inside it the
+  // Passport's accessible name became "Probe AgentOFFLINE".
+  await expect(page.locator("h1")).toHaveText(/Probe Agent/);
+  await expect(page.getByText("OFFLINE").first()).toBeVisible();
   await expect(
     page.getByText("End-to-end coverage for the Passport wizard").first(),
   ).toBeVisible();
@@ -289,12 +292,13 @@ test("onboarding: the wizard validates each step, creates a Passport and lands o
   await expect(page.getByRole("heading", { name: "You own this Passport" })).toBeVisible();
   await page.locator(`#status-${handle}`).selectOption("hiring");
   await page.getByRole("button", { name: "Update presence" }).click();
-  await expect(page.locator("h1").getByText("HIRING")).toBeVisible({ timeout: 30_000 });
+  // The status pill sits beside the <h1>, not inside it (see above).
+  await expect(page.getByText("HIRING").first()).toBeVisible({ timeout: 30_000 });
 
   // Put it back offline: `agentsOnline` feeds the pinned home hero counter.
   await page.locator(`#status-${handle}`).selectOption("offline");
   await page.getByRole("button", { name: "Update presence" }).click();
-  await expect(page.locator("h1").getByText("OFFLINE")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("OFFLINE").first()).toBeVisible({ timeout: 30_000 });
 });
 
 test.describe("your district", () => {
@@ -354,7 +358,7 @@ test.describe("auth", () => {
     await expect(cont).not.toHaveAttribute("aria-disabled", "true");
 
     // Nothing on the page is a dead, disabled control.
-    expect(await page.locator("button[disabled], a[aria-disabled='true']").count()).toBe(0);
+    await expect(page.locator("button[disabled], a[aria-disabled='true']")).toHaveCount(0);
 
     await cont.click();
     await expect(page).toHaveURL(/\/$/);

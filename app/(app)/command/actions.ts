@@ -6,12 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
 import type { OrderStatus } from "@/lib/data/types";
-import {
-  PAUSED_AUTONOMOUS_LIMIT_CENTS,
-  walletPolicyWriter,
-} from "@/lib/data/ext/jobs";
 import type { ActionState } from "@/app/actions";
-import { pausedPreviousLimitCents, writeSpendPause } from "./spend-pause";
 
 /**
  * Command Center Server Actions.
@@ -21,16 +16,21 @@ import { pausedPreviousLimitCents, writeSpendPause } from "./spend-pause";
  * moving without a page reload.
  */
 
-const PauseSchema = z.object({ paused: z.boolean() });
+/**
+ * The switch sends the state it *wants*, or `toggle` when it cannot be sure —
+ * a stale tab rendered before someone else flipped it. Either way the action
+ * reads the wallet first, so two submits in a row cannot leave the District in
+ * a state nobody asked for.
+ */
+const PauseSchema = z.object({ intent: z.enum(["pause", "resume", "toggle"]) });
 
 /**
  * "Pause all external agent spending".
  *
- * Writes the session-level pause (see `./spend-pause`) and, the moment the
- * repository grows a `setWalletPolicy`, clamps the wallet's daily autonomous
- * ceiling to one cent as well — one cent rather than zero, because the data
- * layer reads a zero limit as "no ceiling at all". Lifting the pause restores
- * the ceiling that was recorded when it went on.
+ * One write, to `wallets.autonomous_paused` — the same row `holdFunds` reads
+ * inside the transaction that places a hold, so @World, an API key and an MCP
+ * client are all refused while it is on, and every browser sees the same
+ * switch. Nothing is clamped and nothing has to be restored.
  */
 export async function setSpendPauseAction(
   _prev: ActionState,
@@ -38,28 +38,23 @@ export async function setSpendPauseAction(
 ): Promise<ActionState> {
   try {
     const profile = await requireProfile();
-    const { paused } = PauseSchema.parse({ paused: form.get("paused") === "1" });
+    const raw = String(form.get("intent") ?? "toggle");
+    const { intent } = PauseSchema.parse({
+      intent: raw === "pause" || raw === "resume" ? raw : "toggle",
+    });
 
     const repo = getRepo();
     const wallet = await repo.getWallet(profile.id);
-    const writer = walletPolicyWriter(repo);
-    const previous = wallet?.autonomous_spend_limit_cents ?? 0;
+    const current = wallet?.autonomous_paused ?? false;
+    const paused = intent === "toggle" ? !current : intent === "pause";
 
-    if (paused) {
-      await writeSpendPause(true, previous);
-      await writer?.setWalletPolicy(profile.id, {
-        autonomous_spend_limit_cents: PAUSED_AUTONOMOUS_LIMIT_CENTS,
-      });
-    } else {
-      const restore = (await pausedPreviousLimitCents()) ?? previous;
-      await writeSpendPause(false);
-      await writer?.setWalletPolicy(profile.id, {
-        autonomous_spend_limit_cents: restore,
-      });
+    if (paused !== current) {
+      await repo.updateWalletPolicy(profile.id, { autonomousPaused: paused });
     }
 
     revalidatePath("/command");
     revalidatePath("/workplace");
+    revalidatePath("/wallet");
     return {
       ok: true,
       message: paused

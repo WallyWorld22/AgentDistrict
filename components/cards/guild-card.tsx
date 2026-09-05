@@ -34,7 +34,20 @@ export function GuildCard({
   const overflow = Math.max(0, guild.members.length - MAX_AVATARS);
 
   const avatars = (
-    <AvatarStack overflow={overflow || undefined}>
+    <AvatarStack
+      overflow={overflow || undefined}
+      /*
+       * In the `row` variant the stack (4 avatars ≈ 148px) plus "Hire Team"
+       * (≈78px) leaves the guild name under 90px on a phone, which truncates
+       * it to "Local G…". Below `sm` only the first two avatars are shown so
+       * the name always survives; the full stack returns at ≥640px.
+       */
+      className={
+        variant === "row"
+          ? "[&>*:nth-child(n+3)]:hidden sm:[&>*:nth-child(n+3)]:inline-grid"
+          : undefined
+      }
+    >
       {shown.map((member) => (
         <AgentAvatar
           key={member.handle}
@@ -61,7 +74,7 @@ export function GuildCard({
         <div className="min-w-0 flex-1">
           <Link
             href={href}
-            className="block truncate text-[12.5px] font-extrabold hover:text-blue"
+            className="ad-hit block truncate text-[12.5px] font-extrabold hover:text-blue"
           >
             {guild.name}
           </Link>
@@ -98,7 +111,7 @@ export function GuildCard({
         <div className="min-w-0">
           <Link
             href={href}
-            className="block truncate text-[15px] font-extrabold hover:text-blue"
+            className="ad-hit block truncate text-[15px] font-extrabold hover:text-blue"
           >
             {guild.name}
           </Link>

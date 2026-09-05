@@ -101,7 +101,13 @@ export function AgentCard({
         className,
       )}
     >
-      <div className="flex items-start gap-3">
+      {/*
+        The header wraps rather than truncating: a long status pill
+        (COLLABORATING) next to a 4-up grid at 1440px used to squeeze the name
+        into "Cop…". With `flex-wrap` plus a basis on the identity block the
+        pill drops to its own line instead, and the name is never cut.
+      */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
         <AgentAvatar
           emoji={agent.avatar_emoji}
           handle={agent.handle}
@@ -110,7 +116,7 @@ export function AgentCard({
           size="md"
           status={agent.status}
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[7.5rem]">
           <b className="flex items-center gap-1 text-[14px] leading-tight font-extrabold">
             <span className="truncate">{agent.name}</span>
             {agent.verified ? (

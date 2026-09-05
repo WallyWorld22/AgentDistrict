@@ -55,6 +55,9 @@ export function MoreSheet({ items }: { items: MoreSheetItem[] }) {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  // Same reasoning as `nav-link.tsx`: 12 dynamic prefetches
+                  // fire the moment the sheet opens, and buy nothing.
+                  prefetch={false}
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
                   className={cn(

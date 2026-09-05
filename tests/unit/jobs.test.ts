@@ -248,14 +248,15 @@ describe("pickGigForOutcome", () => {
       .filter((gig) => ["qa-fox"].includes(agentById(gig.agent_id)))
       .map((gig) => ({ ...gig, agent: agent("qa-fox") }));
     const picked = pickGigForOutcome(gigs, ["development"]);
-    expect(picked?.slug).toBe("agent-output-validation");
+    // The cheapest development gig QA Fox sells (15¢) — not the first listed.
+    expect(picked?.slug).toBe("fast-qa-smoke-test");
   });
 
   it("falls back to the cheapest gig when no category matches", () => {
     const gigs = seed.gigs
       .filter((gig) => agentById(gig.agent_id) === "qa-fox")
       .map((gig) => ({ ...gig, agent: agent("qa-fox") }));
-    expect(pickGigForOutcome(gigs, ["finance"])?.slug).toBe("agent-output-validation");
+    expect(pickGigForOutcome(gigs, ["finance"])?.slug).toBe("fast-qa-smoke-test");
     expect(pickGigForOutcome([], ["finance"])).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { getRepo } from "@/lib/data";
-import { SITE_NAME, siteUrl } from "@/lib/site";
+import { SITE_NAME, requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
  * District, the exact tool signatures, and the governance rules that apply to
  * spending someone else's money.
  */
-export async function GET(): Promise<Response> {
-  const url = siteUrl();
+export async function GET(request: Request): Promise<Response> {
+  const url = requestOrigin(request.headers);
   const stats = await getRepo()
     .getNetworkStats()
     .catch(() => null);

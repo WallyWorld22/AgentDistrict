@@ -223,7 +223,8 @@ test("browse → filter → order → live run → approve → review on the pas
   // …then order the 12-second basic package, whose $0.00 hold leaves the
   // wallet (and therefore the pinned $12.43 credits pill) untouched.
   await page.getByRole("tab", { name: "basic" }).click();
-  await expect(page.getByTestId("gig-continue")).toHaveText(/Continue — \$0\.00/);
+  // A zero price reads FREE everywhere else, so the commit button says so too.
+  await expect(page.getByTestId("gig-continue")).toHaveText(/Run it free/);
   await page
     .getByLabel("Your brief")
     .fill("Convert the attached price sheet from EUR to USD and normalise the units.");

@@ -3,10 +3,13 @@ import type {
   AgentFilter,
   ApiKey,
   Bid,
+  BidWithAgent,
+  Channel,
   ChannelDetail,
   ChannelFilter,
-  Channel,
+  ChannelWithHosts,
   ChatMessage,
+  CompetitionFilter,
   CompetitionWithEntries,
   CreateAgentInput,
   CreateApiKeyInput,
@@ -45,6 +48,7 @@ import type {
   Review,
   ReviewWithReviewer,
   RoomWithCounts,
+  SearchResults,
   Slug,
   StoreDetail,
   StoreWithAgents,
@@ -56,7 +60,9 @@ import type {
   UpdatePresenceInput,
   PostLoungeMessageInput,
   SendMessageInput,
+  Thread,
   Wallet,
+  WalletPolicyPatch,
   WalletTransaction,
 } from "./types";
 
@@ -90,6 +96,16 @@ export interface Repository {
   listEvents(filter?: EventFilter): Promise<DistrictEvent[]>;
   publishEvent(input: PublishEventInput): Promise<DistrictEvent>;
 
+  /* ----------------------------------------------------------------- search */
+
+  /**
+   * One query across agents, gigs, jobs, guilds, channels, market items and
+   * stores — what the top-bar search box submits to `/search`. Supabase runs
+   * the `search_district()` RPC; the demo adapter scores the same fields in
+   * memory. Both return the rows already ranked, best first.
+   */
+  searchDistrict(query: string, limit?: number): Promise<SearchResults>;
+
   /* ----------------------------------------------------------------- agents */
 
   listAgents(filter?: AgentFilter): Promise<Agent[]>;
@@ -100,6 +116,7 @@ export interface Repository {
   listAgentsByOwner(ownerId: UUID): Promise<Agent[]>;
   createAgent(input: CreateAgentInput, ownerId: UUID): Promise<Agent>;
   updateAgent(handle: Handle, patch: UpdateAgentInput, ownerId: UUID): Promise<Agent>;
+  /** Pass `input.ownerId` to enforce the same ownership guard as `updateAgent`. */
   updatePresence(agentHandle: Handle, input: UpdatePresenceInput): Promise<Presence>;
   listReviewsForAgent(handle: Handle, limit?: number): Promise<ReviewWithReviewer[]>;
   createReview(input: CreateReviewInput, reviewerId: UUID): Promise<Review>;
@@ -107,7 +124,11 @@ export interface Repository {
   /* ------------------------------------------------------------------- gigs */
 
   listGigs(filter?: GigFilter): Promise<GigWithAgent[]>;
+  /** Total matching `filter` ignoring `limit`/`offset` — drives "12 of 38". */
+  countGigs(filter?: GigFilter): Promise<number>;
   getGigBySlug(slug: Slug): Promise<GigWithAgent | null>;
+  /** Reviews left on runs of *this gig* (not every run by its agent). */
+  listReviewsForGig(slug: Slug, limit?: number): Promise<ReviewWithReviewer[]>;
   getFeaturedGigs(limit?: number): Promise<GigWithAgent[]>;
   createGig(input: CreateGigInput, ownerId: UUID): Promise<Gig>;
   /** Creates the Order, holds the funds and publishes a `hired` event. */
@@ -119,12 +140,16 @@ export interface Repository {
   getJob(id: UUID): Promise<JobWithBids | null>;
   createJob(input: CreateJobInput, posterId: UUID): Promise<Job>;
   placeBid(input: PlaceBidInput): Promise<Bid>;
+  /** Bids for many jobs in one round trip — the board shows the top 3 per card. */
+  listBidsForJobs(jobIds: UUID[]): Promise<Record<UUID, BidWithAgent[]>>;
   /** Awards the job, rejects the other bids and creates the Order. */
   acceptBid(input: AcceptBidInput): Promise<Order>;
 
   /* ----------------------------------------------------------------- orders */
 
   listOrders(filter?: OrderFilter): Promise<OrderDetail[]>;
+  /** Total matching `filter` ignoring `limit`/`offset`. */
+  countOrders(filter?: OrderFilter): Promise<number>;
   getOrder(id: UUID): Promise<OrderDetail | null>;
   /** Deterministic progress from `started_at` + `eta_seconds` (BUILD_SPEC §6). */
   refreshOrder(id: UUID): Promise<Order>;
@@ -143,16 +168,21 @@ export interface Repository {
 
   /* --------------------------------------------------------------------- tv */
 
-  listChannels(filter?: ChannelFilter): Promise<Channel[]>;
+  listChannels(filter?: ChannelFilter): Promise<ChannelWithHosts[]>;
   getChannelBySlug(slug: Slug): Promise<ChannelDetail | null>;
-  listCompetitions(): Promise<CompetitionWithEntries[]>;
+  listCompetitions(filter?: CompetitionFilter): Promise<CompetitionWithEntries[]>;
   postChannelChat(slug: Slug, authorName: string, body: string): Promise<ChatMessage>;
+  /** Idempotent follow toggle; returns the channel with its new `followers`. */
+  setChannelFollow(slug: Slug, profileId: UUID, following: boolean): Promise<Channel>;
+  /** Slugs of the channels this profile follows. */
+  listFollowedChannelSlugs(profileId: UUID): Promise<Slug[]>;
 
   /* ----------------------------------------------------------------- lounge */
 
   listRooms(): Promise<RoomWithCounts[]>;
   listPresence(roomSlug?: Slug): Promise<PresenceWithAgent[]>;
-  listLoungeMessages(roomSlug?: Slug, limit?: number): Promise<LoungeMessage[]>;
+  /** `since` (exclusive, ISO) turns a poll into "only what is new". */
+  listLoungeMessages(roomSlug?: Slug, limit?: number, since?: string): Promise<LoungeMessage[]>;
   postLoungeMessage(input: PostLoungeMessageInput): Promise<LoungeMessage>;
 
   /* ------------------------------------------------------------------ inbox */
@@ -161,12 +191,16 @@ export interface Repository {
   getThread(id: UUID): Promise<ThreadWithMessages | null>;
   sendMessage(input: SendMessageInput): Promise<Message>;
   createThread(input: CreateThreadInput): Promise<ThreadWithMessages>;
+  /** Clears the thread's unread badge for its owner. */
+  markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread>;
 
   /* ----------------------------------------------------------------- wallet */
 
   getWallet(profileId: UUID): Promise<Wallet | null>;
   listTransactions(profileId: UUID, limit?: number): Promise<WalletTransaction[]>;
   topUp(profileId: UUID, amountCents: number): Promise<Wallet>;
+  /** Writes the two spend-policy columns (approval threshold, daily ceiling). */
+  updateWalletPolicy(profileId: UUID, patch: WalletPolicyPatch): Promise<Wallet>;
 
   /* --------------------------------------------------------------- profiles */
 
@@ -179,8 +213,26 @@ export interface Repository {
 
   listApiKeys(profileId: UUID): Promise<ApiKey[]>;
   createApiKey(input: CreateApiKeyInput): Promise<CreatedApiKey>;
+  /** Permanently deletes a key the profile owns. */
+  revokeApiKey(id: UUID, profileId: UUID): Promise<void>;
   /** Hash-compares `ad_live_…`; also stamps `last_used_at`. */
   verifyApiKey(rawKey: string): Promise<ApiKey | null>;
+
+  /* ---------------------------------------------------------------- realtime */
+
+  /**
+   * Live push for an adapter that can provide it — the in-memory demo store
+   * fans every mutation out to `/api/events`. Returns an unsubscribe function.
+   *
+   * Optional on purpose, and declared **here** rather than tested with
+   * `instanceof DemoRepository` at the call site: Next emits this module into
+   * more than one server bundle, so the singleton on `globalThis` is routinely
+   * an instance of a *different* copy of the class and `instanceof` silently
+   * answers false. A structural check cannot drift that way. The Supabase
+   * adapter has no in-process bus (its live feed is Supabase Realtime) and
+   * simply does not implement it.
+   */
+  subscribe?(listener: (event: DistrictEvent) => void): () => void;
 }
 
 export type RepositoryMode = "demo" | "supabase";

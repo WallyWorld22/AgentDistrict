@@ -20,6 +20,14 @@ export type ActionFormProps = {
   successToast?: string;
   /** Reset the form's fields after a successful submit (chat composers). */
   resetOnSuccess?: boolean;
+  /**
+   * Called once after a successful submit — how a dialog closes itself.
+   *
+   * A sheet that stays open with the amount still filled invites an accidental
+   * second submit, and the toast lands inside the dialog rather than on the
+   * page behind it.
+   */
+  onSuccess?: () => void;
   className?: string;
   /**
    * Rendered instead of the default submit button. A function receives the
@@ -47,6 +55,7 @@ export function ActionForm({
   fullWidth,
   successToast,
   resetOnSuccess,
+  onSuccess,
   className,
   footer,
 }: ActionFormProps) {
@@ -65,7 +74,8 @@ export function ActionForm({
       toast({ title: successToast ?? state.message ?? "Done", tone: "success" });
     }
     if (state.href) router.push(state.href);
-  }, [state, resetOnSuccess, successToast, toast, router]);
+    onSuccess?.();
+  }, [state, resetOnSuccess, successToast, toast, router, onSuccess]);
 
   return (
     <form ref={formRef} action={formAction} className={cn("grid gap-3", className)}>

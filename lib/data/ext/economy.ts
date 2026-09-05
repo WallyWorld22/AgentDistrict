@@ -10,7 +10,6 @@
  */
 
 import type { Repository } from "@/lib/data/repository";
-import { ValidationError } from "@/lib/data/errors";
 import type {
   Agent,
   Cents,
@@ -25,6 +24,7 @@ import type {
   UUID,
   Wallet,
 } from "@/lib/data/types";
+import { formatDuration } from "@/lib/utils";
 
 /* -------------------------------------------------------------------------- */
 /* Guilds                                                                      */
@@ -385,6 +385,38 @@ export function isAgentCounterpart(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Runs — how long is left                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How long an in-flight run still has, from its SLA and the progress the
+ * deterministic §6 clock has reached.
+ *
+ * `orders.eta_seconds` is the package's **whole delivery SLA**, never the time
+ * remaining. Printing it as "ETA" told a buyer on `/orders` that a run at 96%
+ * had "ETA 25 min" while the Command Center said "~1 min left" about the same
+ * order. Both surfaces now call this.
+ */
+export function remainingRunSeconds(etaSeconds: number, progress: number): number {
+  const done = Math.min(100, Math.max(0, progress)) / 100;
+  return Math.max(0, Math.round(etaSeconds * (1 - done)));
+}
+
+/**
+ * The time phrase for a run: what is left while it is in flight, and the
+ * neutral SLA once it is not (which is what `/orders/[id]` has always said).
+ */
+export function runTimeLabel(
+  etaSeconds: number,
+  progress: number,
+  inFlight: boolean,
+): string {
+  if (!inFlight) return `SLA ${formatDuration(etaSeconds)}`;
+  const remaining = remainingRunSeconds(etaSeconds, progress);
+  return remaining > 0 ? `~${formatDuration(remaining)} left` : "finishing up";
+}
+
+/* -------------------------------------------------------------------------- */
 /* Wallet                                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -434,47 +466,13 @@ export const TRANSACTION_LABELS: Record<
   fee: { label: "Fee", tone: "red" },
 };
 
-/* ------------------------------------------------- wallet policy (optional) */
-
-export type WalletPolicyPatch = {
-  approvalThresholdCents?: Cents;
-  autonomousSpendLimitCents?: Cents;
-};
+/* ---------------------------------------------------------- wallet policy */
 
 /**
- * The repository method the Workplace Gateway needs in order to make its two
- * money policies editable.
- *
- * It is **not** on `Repository` yet — see this lane's report
- * (`missingRepoMethods`). The surfaces detect it structurally so that the
- * moment the integrator adds `updateWalletPolicy` to both adapters, `/wallet`
- * and `/workplace` become editable with no further edits here; until then they
- * render the same numbers read-only with honest copy rather than a control that
- * silently does nothing.
+ * Re-exported so the pages and their actions import the patch shape from one
+ * place; the writer itself is `Repository.updateWalletPolicy`.
  */
-type WalletPolicyCapable = Repository & {
-  updateWalletPolicy(profileId: UUID, patch: WalletPolicyPatch): Promise<Wallet>;
-};
-
-export function supportsWalletPolicy(repo: Repository): boolean {
-  return (
-    typeof (repo as Partial<WalletPolicyCapable>).updateWalletPolicy === "function"
-  );
-}
-
-export async function setWalletPolicy(
-  repo: Repository,
-  profileId: UUID,
-  patch: WalletPolicyPatch,
-): Promise<Wallet> {
-  const capable = repo as Partial<WalletPolicyCapable>;
-  if (typeof capable.updateWalletPolicy !== "function") {
-    throw new ValidationError(
-      "Spend limits are read-only in this build — they are set by the District.",
-    );
-  }
-  return capable.updateWalletPolicy(profileId, patch);
-}
+export type { WalletPolicyPatch } from "@/lib/data/types";
 
 /* -------------------------------------------------------------------------- */
 /* Workplace Gateway                                                           */

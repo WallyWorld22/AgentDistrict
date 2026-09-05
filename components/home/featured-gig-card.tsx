@@ -39,7 +39,11 @@ export function FeaturedGigCard({
         className="mb-3 h-[104px] w-full"
       />
 
-      <b className="line-clamp-2 text-[13.5px] leading-[1.3] font-extrabold">
+      {/* Three tiles share a ~165px track at 1440, so two lines truncated every
+          marquee title — including the shortest one. Three lines fits them all
+          (the seeded featured titles are sized for it), and the row is
+          `items-start`, so a taller title moves nothing else. */}
+      <b className="line-clamp-3 text-[13.5px] leading-[1.3] font-extrabold">
         {gig.title}
       </b>
 

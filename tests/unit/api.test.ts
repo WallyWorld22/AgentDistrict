@@ -21,6 +21,8 @@ import { POST as worldRoute } from "@/app/api/v1/world/route/route";
 import { GET as llms } from "@/app/llms.txt/route";
 import { GET as openapi } from "@/app/openapi.json/route";
 import { GET as skill } from "@/app/skill.md/route";
+import { hireAgentMcpSnippet, orderGigCurl } from "@/lib/data/ext/gigs";
+import { CreateOrderSchema } from "@/lib/openapi";
 import { MCP_TOOLS } from "@/lib/site";
 import { DEMO_API_KEY, DEMO_WRITE_API_KEY, FEATURED_GIG_SLUGS } from "@/lib/seed";
 
@@ -213,8 +215,13 @@ describe("jobs", () => {
     );
     expect(refused.status).toBe(403);
 
-    const created = (await json(response)).job as { id: string; status: string };
+    const body = await json(response);
+    const created = body.job as { id: string; status: string };
     expect(created.status).toBe("open");
+    // Posting over REST wakes the matching agents, exactly as posting through
+    // the site does — otherwise the reverse auction `/llms.txt` documents
+    // ("POST /jobs, then GET /jobs/{id}/bids") dead-ends on an empty board.
+    expect(body.agents_notified).toBeGreaterThan(0);
 
     const list = await listJobs(get("/api/v1/jobs?status=open&limit=50"));
     const jobs = (await json(list)).jobs as Array<{ id: string }>;
@@ -222,7 +229,8 @@ describe("jobs", () => {
 
     const one = await getJob(get(`/api/v1/jobs/${created.id}`), params({ id: created.id }));
     expect(one.status).toBe(200);
-    expect((await json(one)).bids).toEqual([]);
+    const bids = (await json(one)).bids as Array<{ agent_handle?: string; amount_cents: number }>;
+    expect(bids.length).toBeGreaterThan(0);
   });
 });
 
@@ -291,7 +299,7 @@ describe("POST /api/v1/world/route", () => {
 
 describe("GET /api/v1/channels/live", () => {
   it("only returns channels that are actually live", async () => {
-    const response = await liveChannels();
+    const response = await liveChannels(get("/api/v1/channels/live"));
     expect(response.status).toBe(200);
     const channels = (await json(response)).channels as Array<{
       is_live: boolean;
@@ -307,7 +315,7 @@ describe("GET /api/v1/channels/live", () => {
 
 describe("machine surface", () => {
   it("openapi.json documents every /api/v1 route the app serves", async () => {
-    const response = await openapi();
+    const response = await openapi(get("/openapi.json"));
     expect(response.status).toBe(200);
 
     const document = await json(response);
@@ -336,7 +344,7 @@ describe("machine surface", () => {
   });
 
   it("serves the District agent card", async () => {
-    const response = await agentCard();
+    const response = await agentCard(get("/.well-known/agent-card.json"));
     expect(response.status).toBe(200);
     const card = await json(response);
     expect(card.protocolVersion).toBe("0.3.0");
@@ -345,7 +353,7 @@ describe("machine surface", () => {
   });
 
   it("serves the roster with a card link per agent", async () => {
-    const response = await agentsJson();
+    const response = await agentsJson(get("/.well-known/agents.json"));
     const body = await json(response);
     expect(body.count).toBeGreaterThan(20);
     const agents = body.agents as Array<{ handle: string; agentCard: string }>;
@@ -367,14 +375,14 @@ describe("machine surface", () => {
   });
 
   it("serves llms.txt and skill.md as text", async () => {
-    const llmsResponse = await llms();
+    const llmsResponse = await llms(get("/llms.txt"));
     expect(llmsResponse.headers.get("content-type")).toContain("text/plain");
     const llmsBody = await llmsResponse.text();
     expect(llmsBody).toContain("# AgentDistrict");
     expect(llmsBody).toContain("/api/mcp/mcp");
     expect(llmsBody).toContain("@scout");
 
-    const skillResponse = await skill();
+    const skillResponse = await skill(get("/skill.md"));
     expect(skillResponse.headers.get("content-type")).toContain("text/markdown");
     const skillBody = await skillResponse.text();
     for (const tool of MCP_TOOLS) expect(skillBody).toContain(tool);
@@ -389,6 +397,32 @@ describe("machine surface", () => {
     const body = await response.text(); // Resolves only because replay=only closes.
     expect(body).toContain("event: ready");
     expect(body.match(/event: district/g)?.length).toBe(5);
+  });
+
+  it("prints machine snippets that the real contracts accept", () => {
+    // The gig page's copyable snippets used to send `{ gig, tier, brief }`,
+    // which `POST /api/v1/orders` answers with a 400, and an MCP `hire_agent`
+    // call with an `agent` key the tool has no field for.
+    const curl = orderGigCurl("https://example.test", "some-gig", "basic", "A brief");
+    const body = JSON.parse(curl.slice(curl.indexOf("{"), curl.lastIndexOf("}") + 1));
+    expect(CreateOrderSchema.parse(body)).toMatchObject({
+      gig_slug: "some-gig",
+      tier: "basic",
+    });
+
+    const mcp = JSON.parse(hireAgentMcpSnippet("some-gig", "premium", "A brief"));
+    expect(mcp.tool).toBe("hire_agent");
+    expect(Object.keys(mcp.arguments).sort()).toEqual(["brief", "gig_slug", "tier"]);
+
+    // …and the tool's own zod schema, read from the route it is registered in.
+    const source = readFileSync(
+      new URL("../../app/api/mcp/[transport]/route.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf('"hire_agent"');
+    const schema = source.slice(start, source.indexOf("}),", start));
+    expect(schema).toContain("gig_slug: z.string()");
+    expect(schema).not.toContain("agent: z.string()");
   });
 
   it("registers all nine MCP tools", () => {

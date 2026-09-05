@@ -60,7 +60,13 @@ export function BrowseControls({
           <input key={key} type="hidden" name={key} value={value} />
         ))}
 
-        <div className="relative flex min-w-[200px] flex-1 items-center">
+        {/*
+          `basis-[220px] grow` (rather than `flex-1` alone) keeps the field
+          from being squeezed to a couple of characters when three selects and
+          the Apply button share the row at 390px: a flex basis is what decides
+          the wrap, and it is unaffected by the `min-width` base reset.
+        */}
+        <div className="relative flex min-w-[200px] grow basis-[220px] items-center">
           <label htmlFor={searchId} className="sr-only">
             {searchPlaceholder}
           </label>
@@ -75,7 +81,7 @@ export function BrowseControls({
             placeholder={searchPlaceholder}
             className={cn(
               "h-10 w-full rounded-full border border-[#22304c] bg-[#080d17]/90 pr-3 pl-10",
-              "text-[12.5px] text-text placeholder:text-[#66728a]",
+              "text-[12.5px] text-text placeholder:text-placeholder",
               "focus-visible:border-[#3a72c4] focus-visible:shadow-[0_0_0_3px_rgba(58,114,196,.18)]",
             )}
           />
@@ -113,14 +119,23 @@ export function BrowseControls({
       </form>
 
       {chips && chips.length > 0 ? (
-        <nav aria-label="Filters" className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 py-0.5">
+        // Wraps from `lg` up, where there is room for two rows and a mouse has
+        // no horizontal wheel: a `no-scrollbar` row cut "Support" to "Sup" with
+        // no cue and no way to reach it. Below `lg` it stays a swipe strip,
+        // with a right-edge fade so the overflow is visible.
+        <nav
+          aria-label="Filters"
+          className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 py-0.5 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] lg:flex-wrap lg:overflow-visible lg:[mask-image:none]"
+        >
           {chips.map((chip) => (
             <Link
               key={chip.href + chip.label}
               href={chip.href}
               aria-current={chip.active ? "page" : undefined}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[11px] font-extrabold whitespace-nowrap",
+                // `min-h-10`: these are the primary filtering control on every
+                // browse page, and DESIGN.md §4 puts touch targets at ≥40px.
+                "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[11px] font-extrabold whitespace-nowrap",
                 "transition-[background-color,border-color,color] duration-150",
                 chip.active
                   ? "border-transparent bg-grad-primary text-white shadow-[0_6px_18px_rgba(53,110,255,.28)]"

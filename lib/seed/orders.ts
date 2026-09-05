@@ -1,6 +1,5 @@
 import type {
   Agent,
-  ContractField,
   CostBreakdown,
   Gig,
   Order,
@@ -15,7 +14,8 @@ import { at, daysAgo, minutesAgo, secondsAgo } from "./clock";
 import { gig, gigs } from "./gigs";
 import { acceptedBidId, jobId } from "./jobs";
 import { BUYER_HANDLES, DEMO_PROFILE_ID, profileId } from "./profiles";
-import { intBetween, pick, rngFor, round, type Rng } from "./rng";
+import { buildContractDeliverable } from "../runtime/deliverable";
+import { intBetween, rngFor } from "./rng";
 import { id } from "./uuid";
 
 /**
@@ -37,180 +37,25 @@ import { id } from "./uuid";
 
 /* -------------------------------------------------------------------------- */
 /* Deliverable synthesis                                                       */
+/*                                                                             */
+/* One generator, shared with the runtime: `lib/runtime/deliverable.ts`. A      */
+/* second copy here is how seeded QA reports, ad copy and service areas all     */
+/* ended up filled from the same roofing-lead phrase pool.                      */
 /* -------------------------------------------------------------------------- */
 
-const FL_ADDRESSES = [
-  "1234 Palm Dr, Orlando, FL 32801",
-  "88 Seagrape Ln, Port St. Lucie, FL 34952",
-  "4517 Bayshore Blvd, Tampa, FL 33611",
-  "210 NE Ocean Blvd, Stuart, FL 34996",
-  "9032 Sabal Palm Way, Kissimmee, FL 34747",
-  "615 Indian River Dr, Fort Pierce, FL 34950",
-  "77 Coquina Ct, Vero Beach, FL 32963",
-  "3401 Curlew Rd, Palm Harbor, FL 34683",
-  "1120 Hibiscus Ave, Melbourne, FL 32901",
-  "560 Banyan Trail, Jupiter, FL 33458",
-  "2295 Citrus Grove Rd, Winter Garden, FL 34787",
-  "804 Mangrove Cir, Cape Coral, FL 33904",
-];
-
-const BUSINESSES = [
-  "Castellano Roofing",
-  "Sunstate Pool Service",
-  "Blue Heron Gutters",
-  "Treasure Coast HVAC",
-  "Palmetto Home Solutions",
-  "Riverbend Exteriors",
-  "Coastal Comfort Air",
-  "Gulfstream Plumbing",
-  "Everglade Landscaping",
-  "Lighthouse Electrical",
-  "Ibis Pressure Washing",
-  "Mariner Home Services",
-];
-
-const PEOPLE = [
-  "Ray Castellano",
-  "Denise Whitfield",
-  "Marcus Ellery",
-  "Priya Raman",
-  "Tom Vasquez",
-  "Ellen Brody",
-  "Sam Okonjo",
-  "Grace Lindqvist",
-];
-
-const PHRASES = [
-  "Confirmed against county records",
-  "Two sources agreed",
-  "Owner-occupied, no rental flag",
-  "Permit gap since 2019",
-  "Website live, form working",
-  "Listed hours match the phone greeting",
-  "Flagged for manual review",
-  "Matched on domain, not on name",
-];
-
-function phone(rng: Rng): string {
-  const area = pick(rng, ["407", "772", "813", "321", "561", "941"]);
-  return `+1${area}${intBetween(rng, 200, 989)}${intBetween(rng, 1000, 9999)}`;
-}
-
-function domain(rng: Rng, business: string): string {
-  return `https://${business.toLowerCase().replace(/[^a-z]+/g, "")}.com`;
-}
-
-function isoDate(rng: Rng): string {
-  const month = String(intBetween(rng, 1, 12)).padStart(2, "0");
-  const day = String(intBetween(rng, 1, 28)).padStart(2, "0");
-  return `2026-${month}-${day}`;
-}
-
-/** Plausible value for a contract field, chosen deterministically. */
-function sampleValue(field: ContractField, rng: Rng): string | number {
-  const name = field.name.toLowerCase();
-  if (field.options && field.options.length > 0) return pick(rng, field.options);
-  if (name.includes("address")) return pick(rng, FL_ADDRESSES);
-  if (name.includes("business") || name.includes("company") || name.includes("competitor")) {
-    return pick(rng, BUSINESSES);
-  }
-  if (name.includes("phone")) return phone(rng);
-  if (name.includes("email")) {
-    const business = pick(rng, BUSINESSES);
-    return `office@${business.toLowerCase().replace(/[^a-z]+/g, "")}.com`;
-  }
-  if (name.includes("website") || name.includes("url") || name.includes("link")) {
-    return domain(rng, pick(rng, BUSINESSES));
-  }
-  if (name.includes("owner") || name.includes("inspector") || name.includes("contractor")) {
-    return pick(rng, PEOPLE);
-  }
-  if (name.includes("date") || name.includes("issued")) return isoDate(rng);
-  if (name.includes("confidence") || name.includes("accuracy")) {
-    return round(0.82 + rng() * 0.17, 3);
-  }
-  if (name.includes("score") || name.includes("priority")) return intBetween(rng, 41, 98);
-  if (name.includes("age")) return intBetween(rng, 4, 27);
-  if (name.includes("count") || name.includes("households") || name.includes("velocity")) {
-    return intBetween(rng, 12, 4800);
-  }
-  if (name.includes("cents") || name.includes("amount")) return intBetween(rng, 1200, 480000);
-  if (field.type === "number") return intBetween(rng, 1, 240);
-  if (field.type === "boolean") return rng() > 0.75 ? "true" : "false";
-  return pick(rng, PHRASES);
-}
-
-function tableRows(
-  fields: ContractField[],
-  count: number,
-  rng: Rng,
-): Array<Record<string, string | number>> {
-  return Array.from({ length: count }, () => {
-    const row: Record<string, string | number> = {};
-    for (const field of fields) row[field.name] = sampleValue(field, rng);
-    return row;
-  });
-}
-
 /** Build a structured deliverable matching the gig's own output contract. */
-function buildOutput(source: Gig, worker: Agent, rowCount: number, rng: Rng): OrderOutput {
-  const contract = source.output_contract;
-  const fields = contract.fields;
-  const columns = fields.map((field) => field.name);
-
-  switch (contract.format) {
-    case "csv":
-    case "table":
-      return {
-        format: contract.format,
-        summary: `${contract.summary} ${rowCount} rows delivered by ${worker.name}.`,
-        columns,
-        rows: tableRows(fields, rowCount, rng),
-      };
-    case "markdown":
-      return {
-        format: "markdown",
-        summary: contract.summary,
-        markdown: [
-          `# ${source.title.replace(/^I will /, "")}`,
-          "",
-          `Delivered by **${worker.name}** (@${worker.handle}) — simulated run.`,
-          "",
-          "## What was done",
-          "",
-          ...fields.map((field) => `- **${field.name}** — ${field.description}`),
-          "",
-          "## Notes",
-          "",
-          `${contract.summary} Every item below was produced against the gig's published output contract.`,
-        ].join("\n"),
-        files: [
-          { path: "index.html", language: "html", bytes: 18422 },
-          { path: "styles.css", language: "css", bytes: 6140 },
-          { path: "schema.jsonld", language: "json", bytes: 2088 },
-          { path: "README.md", language: "markdown", bytes: 1204 },
-        ],
-      };
-    case "json": {
-      const payload: Record<string, string | number> = {};
-      for (const field of fields) payload[field.name] = sampleValue(field, rng);
-      return {
-        format: "json",
-        summary: contract.summary,
-        json: payload,
-      };
-    }
-    case "links":
-    default:
-      return {
-        format: "links",
-        summary: contract.summary,
-        links: fields.slice(0, 4).map((field, index) => ({
-          label: field.name,
-          href: `https://cdn.agentdistrict.example/${source.slug}/${index + 1}`,
-        })),
-      };
-  }
+function buildOutput(source: Gig, worker: Agent, rowCount: number, seed: string): OrderOutput {
+  return buildContractDeliverable({
+    contract: source.output_contract,
+    category: source.category,
+    title: source.title,
+    agentName: worker.name,
+    agentHandle: worker.handle,
+    slug: source.slug,
+    rng: rngFor(seed),
+    seed,
+    rowCount,
+  });
 }
 
 /** 10% District fee, 5% tool cost, the rest to the agent. Always sums exactly. */
@@ -299,7 +144,6 @@ type OrderInit = {
 
 function makeOrder(init: OrderInit): Order {
   const worker = agent(init.agentHandle);
-  const rng = rngFor(`order:${init.key}`);
   const source = init.gigSlug ? gig(init.gigSlug) : null;
   const finished = init.status === "delivered" || init.status === "approved";
   const startedAt = init.startedAt ?? null;
@@ -321,7 +165,9 @@ function makeOrder(init: OrderInit): Order {
     started_at: startedAt,
     delivered_at: deliveredAt,
     output:
-      finished && source ? buildOutput(source, worker, init.rows ?? 6, rng) : null,
+      finished && source
+        ? buildOutput(source, worker, init.rows ?? 6, `order:${init.key}`)
+        : null,
     cost_breakdown: init.status === "approved" ? costBreakdown(init.amount) : null,
     audit_log: auditLog(worker, init.createdAt, startedAt, deliveredAt, init.approvedAt ?? null),
     created_at: init.createdAt,
@@ -454,6 +300,48 @@ const AUSTIN_ACTIVE: Order[] = [
   }),
 ];
 
+/**
+ * Two runs that did not end well.
+ *
+ * `cancelled` and `failed` are first-class `order_status` values with their own
+ * `OrderStatusPill` and their own refund path, and with no seeded row neither
+ * could be seen anywhere in the District. Both are **settled** — the hold came
+ * back — so they are deliberately outside `AUSTIN_ACTIVE` and do not move
+ * `held_cents` or the $12.43 credits pill. The ledger carries a `refund` row
+ * for each, mirroring what `refundHold()` writes at runtime.
+ */
+const AUSTIN_CLOSED: Order[] = [
+  makeOrder({
+    key: "austin-unitfox-cancelled",
+    buyer: "austin",
+    agentHandle: "unitfox",
+    gigSlug: "bulk-format-and-unit-conversion",
+    tier: "standard",
+    brief: "Convert the 2024 pricing sheet from metric to imperial. Cancelled — the sheet changed.",
+    amount: 30,
+    status: "cancelled",
+    progress: 12,
+    eta: 90,
+    createdAt: daysAgo(3),
+    startedAt: at(-3 * 86400 + 20),
+  }),
+  makeOrder({
+    key: "austin-sitesprint-failed",
+    buyer: "austin",
+    agentHandle: "sitesprint",
+    gigSlug: "one-page-microsite-in-30-minutes",
+    tier: "basic",
+    brief:
+      "One-page site for the Fort Pierce showroom. The run failed on the third asset fetch and was refunded.",
+    amount: 86,
+    status: "failed",
+    progress: 64,
+    eta: 1800,
+    createdAt: daysAgo(2),
+    startedAt: at(-2 * 86400 + 15),
+  }),
+];
+
 /* -------------------------------------------------------------------------- */
 /* 2. Job awards                                                               */
 /* -------------------------------------------------------------------------- */
@@ -526,8 +414,25 @@ const HISTORY_BRIEFS = [
 
 const historyRng = rngFor("order-history-v1");
 
+/**
+ * Buyers, rotated **per agent** rather than per row.
+ *
+ * A Passport renders its four most recent reviews, and two rows that happened
+ * to land on the same buyer put the same name twice in a row under the same
+ * agent. Stepping by 3 through the 11 buyers (coprime, so no early repeat) from
+ * a per-agent starting offset makes consecutive reviewers distinct by
+ * construction.
+ */
+const buyerCursors = new Map<string, number>();
+
+function nextBuyerFor(agentHandle: string): string {
+  const cursor = buyerCursors.get(agentHandle) ?? offsetFor(agentHandle, BUYER_HANDLES.length);
+  buyerCursors.set(agentHandle, cursor + 1);
+  return BUYER_HANDLES[(cursor * 3) % BUYER_HANDLES.length];
+}
+
 const HISTORY: Order[] = gigs.map((source, index) => {
-  const buyer = BUYER_HANDLES[index % BUYER_HANDLES.length];
+  const buyer = nextBuyerFor(agentHandleFor(source));
   const tier = HISTORY_TIERS[index % 3];
   const pkg = source.packages.find((p) => p.tier === tier) ?? source.packages[0];
   const daysBack = 3 + ((index * 7) % 84);
@@ -552,7 +457,14 @@ const HISTORY: Order[] = gigs.map((source, index) => {
   });
 });
 
-/** Six extra repeat orders on the most-hired gigs, for a denser review corpus. */
+/**
+ * Seven extra repeat orders on the most-hired gigs, for a denser review corpus.
+ *
+ * Two entries for Scout's flagship gig, because a review is only written when
+ * the buyer does *not* own the agent — austin owns Scout, so his own approved
+ * Scout run is deliberately review-less and the Passport would otherwise show
+ * fewer reviews than the preview cap.
+ */
 const REPEAT_GIG_SLUGS = [
   "find-100-qualified-local-businesses",
   "property-analysis-ownership-permits-comps",
@@ -560,16 +472,17 @@ const REPEAT_GIG_SLUGS = [
   "reroof-opportunity-scoring",
   "territories-heatmaps-route-priorities",
   "offer-landing-copy-and-three-emails",
+  "find-100-qualified-local-businesses",
 ];
 
 const REPEATS: Order[] = REPEAT_GIG_SLUGS.map((slug, index) => {
   const source = gig(slug);
   const pkg = source.packages[(index + 1) % 3];
-  const buyer = BUYER_HANDLES[(index * 3 + 4) % BUYER_HANDLES.length];
+  const buyer = nextBuyerFor(agentHandleFor(source));
   const daysBack = 11 + index * 9;
   const base = -daysBack * 86400;
   return makeOrder({
-    key: `repeat-${slug}`,
+    key: `repeat-${index}-${slug}`,
     buyer,
     agentHandle: agentHandleFor(source),
     gigSlug: slug,
@@ -591,6 +504,15 @@ const REPEATS: Order[] = REPEAT_GIG_SLUGS.map((slug, index) => {
 /* Reviews                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Review copy pools.
+ *
+ * Reviews are the trust surface the whole product sells, so a Passport must
+ * never show the same sentence twice. Two things make that true: the pools are
+ * large (30 / 15 / 8), and `reviewBody` walks each pool **without replacement
+ * per agent**, starting from an offset derived from the agent's own id. Picking
+ * at random from ten strings gave a repeat on roughly every second Passport.
+ */
 const FIVE_STAR = [
   "Exactly what the output contract said it would be. No cleanup, no surprises.",
   "Faster than the estimate and every row checked out. Hiring again this week.",
@@ -602,6 +524,26 @@ const FIVE_STAR = [
   "The confidence column alone justifies the price.",
   "Clean, structured, and it imported into our CRM without a single error.",
   "Asked one clarifying question, then nailed it.",
+  "Handed it straight to the sales team. Not one complaint, which never happens.",
+  "The schema matched the contract exactly, so my import script needed no changes.",
+  "I gave it a vague brief and it came back with better questions than I had.",
+  "Every source is linked. I spot-checked eleven of them and all eleven held up.",
+  "Ran it twice on different territories. Identical quality both times.",
+  "Cheaper than the tool we were paying for monthly, and the output is better.",
+  "It told me what it could not find. That honesty is worth more than the data.",
+  "Finished while I was still writing the follow-up brief.",
+  "We have hired four agents for this. This is the one we kept.",
+  "The summary at the top saved my whole meeting.",
+  "Deduped against my existing list without me asking. Thoughtful.",
+  "No hallucinated rows. I checked. Twice.",
+  "Turned a two-week backlog into a Tuesday.",
+  "Formatting was pixel-identical to the sample. My spreadsheet loved it.",
+  "Caught an error in my own brief before it started. Saved me a rerun.",
+  "The audit log meant I could show my client exactly where each number came from.",
+  "Fast, quiet, correct. I have nothing clever to add.",
+  "Delivered on a Sunday night. I did not expect that at this price.",
+  "Second time this quarter. It remembers nothing and still gets it right every time.",
+  "Genuinely better than the freelancer we used last year, at a fortieth of the cost.",
 ];
 
 const FOUR_STAR = [
@@ -611,18 +553,49 @@ const FOUR_STAR = [
   "Great value at this tier. I will try the premium package next time.",
   "Accurate but formatted a little differently than I expected.",
   "Very good, though I had to re-run it once with a tighter brief.",
+  "No complaints about the data. The summary could be less generic.",
+  "Delivered early, but two of the phone numbers were disconnected lines.",
+  "Strong result. I would have liked a heads-up when it hit the ambiguous rows.",
+  "Does the job. The premium tier is probably where the real value is.",
+  "Fine work, and it flagged its own gaps — I just wanted fewer of them.",
+  "Better than doing it myself. Not yet better than my best contractor.",
+  "Content was right, ordering was odd. Two minutes to fix.",
+  "Reliable and quick. It could be a little more opinionated in the recommendations.",
+  "Everything I asked for and nothing I did not. Slightly plain, honestly.",
 ];
 
 const THREE_STAR = [
   "Fine. The basic package is thinner than I assumed — my fault for not reading.",
   "Usable, but I spent about twenty minutes cleaning it up afterwards.",
   "Came back correct but late. Communication during the run would help.",
+  "About half of what I needed. The other half I had to source myself.",
+  "Right answer, wrong shape. I would spell the format out next time.",
+  "It did not push back on a brief that clearly needed pushing back on.",
+  "Acceptable at the price. I would not use this tier for client work.",
+  "Worked, but the run stalled halfway and I had no idea what was happening.",
 ];
 
-function reviewBody(rating: number, rng: Rng): string {
-  if (rating >= 5) return pick(rng, FIVE_STAR);
-  if (rating === 4) return pick(rng, FOUR_STAR);
-  return pick(rng, THREE_STAR);
+/**
+ * Per-(agent, rating) cursor into the pools above. Two reviews of the same agent
+ * at the same rating never land on the same sentence until the pool is spent.
+ */
+const bodyCursors = new Map<string, number>();
+
+/** A stable 0..max-1 starting offset from an id, so agents do not all start at 0. */
+function offsetFor(value: string, max: number): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 100_003;
+  }
+  return hash % max;
+}
+
+function reviewBody(agentId: string, rating: number): string {
+  const pool = rating >= 5 ? FIVE_STAR : rating === 4 ? FOUR_STAR : THREE_STAR;
+  const key = `${agentId}:${rating}`;
+  const cursor = bodyCursors.get(key) ?? offsetFor(agentId, pool.length);
+  bodyCursors.set(key, cursor + 1);
+  return pool[cursor % pool.length];
 }
 
 const reviewRng = rngFor("reviews-v1");
@@ -637,7 +610,7 @@ function reviewFor(order: Order, key: string, ratingOverride?: number): Review {
     agent_id: order.agent_id,
     reviewer_id: order.buyer_id,
     rating,
-    body: reviewBody(rating, reviewRng),
+    body: reviewBody(order.agent_id, rating),
     created_at: approved?.at ?? order.created_at,
   };
 }
@@ -649,14 +622,25 @@ function reviewFor(order: Order, key: string, ratingOverride?: number): Review {
 export const orders: Order[] = [
   ...AUSTIN_ACTIVE,
   ...AUSTIN_COMPLETED,
+  ...AUSTIN_CLOSED,
   ...JOB_ORDERS,
   ...HISTORY,
   ...REPEATS,
 ].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
-/** Every approved order gets a review — 48 in total. */
+/**
+ * Every approved order gets a review — except one a buyer would be writing for
+ * their own agent. A creator cannot review their own Passport (the repository
+ * and the RLS policy both refuse it), so the seed must not contain a row that
+ * contradicts the rule: austin owns Scout, and his approved Scout run would
+ * otherwise show up as a self-review on the Passport.
+ */
 export const reviews: Review[] = orders
   .filter((order) => order.status === "approved")
+  .filter((order) => {
+    const owner = agents.find((row) => row.id === order.agent_id)?.owner_id;
+    return owner !== order.buyer_id;
+  })
   .map((order, index) => reviewFor(order, `${order.id}:${index}`));
 
 /** Austin's in-flight holds, used by the wallet seed. Sums to 1,237¢. */

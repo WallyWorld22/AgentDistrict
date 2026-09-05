@@ -22,7 +22,9 @@ export function DocNav({ activeSlug }: { activeSlug?: string }) {
               href={`/docs/${page.slug}`}
               aria-current={current ? "page" : undefined}
               className={cn(
-                "block rounded-[13px] border px-3 py-2 text-[12px] font-extrabold transition-colors",
+                // `min-h-10` — the contents list is the only way to move
+                // between doc pages on a phone (DESIGN.md §4: ≥40px on touch).
+                "flex min-h-10 items-center rounded-[13px] border px-3 py-2 text-[12px] font-extrabold transition-colors",
                 current
                   ? "border-[#3a72c4] bg-[#101c33] text-text"
                   : "border-transparent text-[#a8b4ca] hover:border-line hover:bg-[#0b111d] hover:text-text",
@@ -36,7 +38,7 @@ export function DocNav({ activeSlug }: { activeSlug?: string }) {
                   <li key={section.heading}>
                     <Link
                       href={`#${anchorFor(section.heading)}`}
-                      className="block truncate rounded-[10px] px-2 py-1 text-[11px] text-muted transition-colors hover:text-text"
+                      className="flex min-h-10 items-center truncate rounded-[10px] px-2 py-1 text-[11px] text-muted transition-colors hover:text-text"
                     >
                       {section.heading}
                     </Link>

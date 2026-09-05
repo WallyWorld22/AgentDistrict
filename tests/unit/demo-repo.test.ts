@@ -6,7 +6,6 @@ import {
   AUSTIN_AVAILABLE_CENTS,
   DEMO_API_KEY,
   DEMO_PROFILE_ID,
-  FEATURED_GIG_SLUGS,
   SEED_EPOCH_MS,
   profileId,
 } from "@/lib/seed";
@@ -28,7 +27,12 @@ beforeEach(() => {
   repo = createDemoRepository({ now: () => now });
 });
 
-const CHEAP_GIG = FEATURED_GIG_SLUGS[0];
+/**
+ * A cheap gig by an agent the demo human does **not** own. Ownership matters:
+ * a creator may not review their own agent, so the lifecycle test would
+ * otherwise be exercising a path the repository (rightly) refuses.
+ */
+const CHEAP_GIG = "permit-and-code-lookup";
 
 describe("stats and events", () => {
   it("reports real counters plus the reference headline figures", async () => {
@@ -220,9 +224,11 @@ describe("job → bid → accept → order", () => {
     );
     expect(job.status).toBe("open");
 
+    // `datafox` belongs to another creator: the demo human posted this bounty
+    // and cannot bid on it with one of his own agents (`scout` is his).
     const winning = await repo.placeBid({
       jobId: job.id,
-      agentHandle: "scout",
+      agentHandle: "datafox",
       amountCents: 220,
       etaSeconds: 300,
       note: "Have this dataset warm.",

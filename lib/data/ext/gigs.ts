@@ -9,6 +9,7 @@
  */
 
 import type { Repository } from "@/lib/data/repository";
+import { AGENT_CATEGORIES } from "@/lib/data/types";
 import type {
   AgentCategory,
   Cents,
@@ -85,6 +86,8 @@ export const GIG_PRICE_CEILINGS: Array<{ value: string; label: string }> = [
 export type GigBrowseQuery = {
   q?: string;
   category?: AgentCategory;
+  /** Only this agent's gigs — the semantic URL `hireHref()` falls back to. */
+  agentHandle?: Handle;
   sort?: GigSort;
   maxPriceCents?: Cents;
   /** 1-based. Page N returns N × `perPage` tiles ("Load more" accumulates). */
@@ -108,10 +111,10 @@ export type GigBrowseResult = {
 /**
  * One page of `/gigs`, plus the per-category counts the chips render.
  *
- * Two repository calls: one unfiltered-by-category read that powers the chip
- * counts, and one sorted+paginated read for the grid itself. Paging is
- * cumulative — page 3 returns 36 tiles — so "Load more" is a plain link and the
- * URL stays shareable.
+ * The counts go through `countGigs`, which is a `count: exact, head: true`
+ * query in Supabase mode — no rows cross the wire for the twelve chips. The
+ * grid itself is one sorted, paginated read. Paging is cumulative (page 3
+ * returns 36 tiles) so "Load more" is a plain link and the URL stays shareable.
  */
 export async function browseGigs(
   repo: Repository,
@@ -121,16 +124,23 @@ export async function browseGigs(
   const page = Math.max(1, Math.floor(query.page ?? 1));
   const window = perPage * page;
 
-  const [scope, rows] = await Promise.all([
+  const base = {
+    q: query.q,
+    agentHandle: query.agentHandle,
+    maxPriceCents: query.maxPriceCents,
+  };
+
+  const [totalAcrossCategories, categoryCounts, rows] = await Promise.all([
+    repo.countGigs(base),
+    Promise.all(
+      AGENT_CATEGORIES.map(async (category) => [
+        category,
+        await repo.countGigs({ ...base, category }),
+      ] as const),
+    ),
     repo.listGigs({
-      q: query.q,
-      maxPriceCents: query.maxPriceCents,
-      limit: 500,
-    }),
-    repo.listGigs({
-      q: query.q,
+      ...base,
       category: query.category,
-      maxPriceCents: query.maxPriceCents,
       sort: query.sort ?? "trending",
       // One extra row tells us whether another page exists.
       limit: window + 1,
@@ -138,18 +148,18 @@ export async function browseGigs(
   ]);
 
   const counts: Record<string, number> = {};
-  for (const gig of scope) {
-    counts[gig.category] = (counts[gig.category] ?? 0) + 1;
+  for (const [category, count] of categoryCounts) {
+    if (count > 0) counts[category] = count;
   }
 
   const hasMore = rows.length > window;
   const gigs = hasMore ? rows.slice(0, window) : rows;
-  const total = query.category ? (counts[query.category] ?? 0) : scope.length;
+  const total = query.category ? (counts[query.category] ?? 0) : totalAcrossCategories;
 
   return {
     gigs,
     counts,
-    totalAcrossCategories: scope.length,
+    totalAcrossCategories,
     total,
     page,
     perPage,
@@ -177,7 +187,9 @@ export function orderGigCurl(
   tier: PackageTier,
   brief: string,
 ): string {
-  const body = JSON.stringify({ gig: slug, tier, brief }, null, 2)
+  // The field names are the contract in `lib/openapi.ts` — `gig_slug`, not
+  // `gig`. A snippet that 400s is worse than no snippet.
+  const body = JSON.stringify({ gig_slug: slug, tier, brief }, null, 2)
     .split("\n")
     .join("\n        ");
   return [
@@ -188,17 +200,17 @@ export function orderGigCurl(
   ].join("\n");
 }
 
-/** The MCP `hire_agent` call an agent client would make for this gig. */
-export function hireAgentMcpSnippet(
-  handle: Handle,
-  slug: Slug,
-  tier: PackageTier,
-  brief: string,
-): string {
+/**
+ * The MCP `hire_agent` call an agent client would make for this gig.
+ *
+ * The argument names mirror the tool's own `inputSchema` exactly — `gig_slug`,
+ * `tier`, `brief`, and no `agent` key (the gig names its agent).
+ */
+export function hireAgentMcpSnippet(slug: Slug, tier: PackageTier, brief: string): string {
   return JSON.stringify(
     {
       tool: "hire_agent",
-      arguments: { agent: handle, gig: slug, tier, brief },
+      arguments: { gig_slug: slug, tier, brief },
     },
     null,
     2,
@@ -212,7 +224,10 @@ export const ORDER_FILTERS = [
   { value: "running", label: "Running" },
   { value: "delivered", label: "Delivered" },
   { value: "approved", label: "Approved" },
-  { value: "disputed", label: "Disputed" },
+  // The bucket has always held `disputed | cancelled | failed`; now that the
+  // seed exercises all three, "Disputed" was the wrong name for a chip that
+  // counts two refunded runs and no dispute. Every run in it got its hold back.
+  { value: "disputed", label: "Refunded" },
 ] as const;
 
 export type OrderFilterValue = (typeof ORDER_FILTERS)[number]["value"];

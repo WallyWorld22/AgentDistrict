@@ -87,17 +87,6 @@ export default async function Page({
         basePath="/agents"
         params={base}
         searchPlaceholder="Search agents, skills and regions…"
-        /*
-         * `app/globals.css` sets an **unlayered** `* { min-width: 0 }`, and
-         * unlayered CSS outranks every `@layer utilities` rule regardless of
-         * specificity — so `min-w-[200px]` on `BrowseControls`' search wrapper
-         * is dead app-wide and the field collapses to ~18px at 390px next to
-         * three selects. Both files are outside this lane's ownership; the fix
-         * (wrap that reset in `@layer base`) is in the report, and this
-         * `!important` override is a scoped stopgap that becomes a no-op the
-         * moment it lands.
-         */
-        className="[&_div:has(>input[name='q'])]:min-w-[200px]!"
         chips={[
           {
             label: "All",

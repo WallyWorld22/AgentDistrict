@@ -1,4 +1,4 @@
-import { getRepo } from "@/lib/data";
+import { getRepo, getRepoActingAs } from "@/lib/data";
 import { AuthRequiredError, ForbiddenError } from "@/lib/data/errors";
 import { API_KEY_PREFIX } from "@/lib/data/hash";
 import type { Repository } from "@/lib/data/repository";
@@ -26,6 +26,18 @@ export type AuthContext = {
   via: AuthVia;
   /** Present when the caller authenticated with an API key. */
   apiKey?: ApiKey;
+  /**
+   * The repository a handler should use for this caller.
+   *
+   * For a session or demo caller it is the ordinary `getRepo()`. For an API key
+   * in supabase mode it is a **service-role** repository bound to that key's
+   * profile: a machine caller has no Supabase JWT, so the ordinary client
+   * arrives as `anon` and RLS refuses every write (`POST /api/v1/orders`,
+   * `/jobs`, `/jobs/:id/bids` and the MCP `hire_agent` / `post_job` tools all
+   * 500'd on a live deployment). Falls back to `repo` when
+   * `SUPABASE_SERVICE_ROLE_KEY` is not set.
+   */
+  repo: Repository;
 };
 
 /** The signed-in profile, or `null`. Demo mode always returns `austin`. */
@@ -79,13 +91,46 @@ export async function authenticateRequest(
     if (!apiKey) return null;
     const profile = await repo.getProfile(apiKey.profile_id);
     if (!profile) return null;
-    return { profile, via: "api_key", apiKey };
+    return {
+      profile,
+      via: "api_key",
+      apiKey,
+      repo: getRepoActingAs(profile.id) ?? repo,
+    };
   }
 
   const profile = await repo.getCurrentProfile();
   if (!profile) return null;
-  return { profile, via: repo.mode === "demo" ? "demo" : "session" };
+  return { profile, via: repo.mode === "demo" ? "demo" : "session", repo };
 }
+
+/**
+ * Is this a state-changing request a browser could have been tricked into
+ * making from another site?
+ *
+ * Route Handlers get none of the origin checking Server Actions do, and
+ * `request.json()` accepts a body regardless of Content-Type — so a
+ * cross-origin `<form enctype="text/plain">` whose single field spells JSON is
+ * a CORS-*simple* request: no preflight, cookies attached, the write lands.
+ * An API key is unaffected (a browser cannot attach a bearer header
+ * cross-site), so this only guards the cookie credential.
+ */
+function isCrossSite(request: Request): boolean {
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite) return fetchSite !== "same-origin" && fetchSite !== "none";
+
+  // Older clients: fall back to comparing Origin/Referer with the host.
+  const source = request.headers.get("origin") ?? request.headers.get("referer");
+  if (!source) return false;
+  try {
+    const host = new URL(request.url).host;
+    return new URL(source).host !== host;
+  } catch {
+    return true;
+  }
+}
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
  * Same, but 401s when there is no caller and 403s when an API key lacks the
@@ -101,6 +146,15 @@ export async function requireAuth(
   if (!context) {
     throw new AuthRequiredError(
       "Provide a session cookie or an `Authorization: Bearer ad_live_…` API key",
+    );
+  }
+  if (
+    context.via !== "api_key" &&
+    !SAFE_METHODS.has(request.method.toUpperCase()) &&
+    isCrossSite(request)
+  ) {
+    throw new ForbiddenError(
+      "Cross-site writes are refused. Use an `Authorization: Bearer ad_live_…` API key.",
     );
   }
   if (options.scope && context.apiKey && !hasScope(context.apiKey, options.scope)) {

@@ -17,6 +17,8 @@ import { topUpAction } from "@/app/actions";
  * is one value submitted and one server action — `topUpAction`, which is
  * explicit that nothing is charged.
  */
+const DEFAULT_AMOUNT = "20.00";
+
 export function AddCreditsButton({
   availableCents,
   variant = "primary",
@@ -25,7 +27,7 @@ export function AddCreditsButton({
   variant?: "primary" | "outline";
 }) {
   const [open, setOpen] = React.useState(false);
-  const [amount, setAmount] = React.useState("20.00");
+  const [amount, setAmount] = React.useState(DEFAULT_AMOUNT);
 
   return (
     <>
@@ -46,6 +48,13 @@ export function AddCreditsButton({
           submitLabel="Add credits"
           fullWidth
           successToast="Credits added (demo — no real money moved)."
+          // Close on success and reset the amount: leaving the sheet open with
+          // "5.00" still in the field, under a toast that covers the helper
+          // text, is an invitation to top up twice.
+          onSuccess={React.useCallback(() => {
+            setOpen(false);
+            setAmount(DEFAULT_AMOUNT);
+          }, [])}
         >
           <div>
             <span className="mb-1.5 block text-[10px] font-extrabold tracking-[0.08em] text-[#8c9ab2] uppercase">

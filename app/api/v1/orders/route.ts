@@ -12,8 +12,12 @@ export const dynamic = "force-dynamic";
  * bid. Both hold the funds against the buyer's wallet and start a run.
  */
 export const POST = route(async (request: Request) => {
-  const repo = getRepo();
-  const { profile, via } = await requireAuth(request, { scope: "orders:write", repo });
+  // `repo` from the context, not `getRepo()`: an API-key caller is served by a
+  // service-role repository bound to that key's profile (see `lib/auth`).
+  const { profile, via, repo } = await requireAuth(request, {
+    scope: "orders:write",
+    repo: getRepo(),
+  });
   const body = await parseBody(CreateOrderSchema, request);
 
   // An API-key caller is *autonomous*: the wallet's `approval_threshold_cents`

@@ -10,6 +10,15 @@ export type CodeBlockProps = {
   label?: string;
   /** Hide the copy button (e.g. for the ASCII pipeline diagrams). */
   copyable?: boolean;
+  /**
+   * Wrap long lines instead of scrolling them (default).
+   *
+   * A 300px rail turned "http://…/agents/scout/agent-card.json" into
+   * "…/agents/scout/agent-car" with a scrollbar nobody sees. These strings are
+   * short; showing them in two lines beats hiding half of one. Set `false` for
+   * ASCII art whose alignment carries meaning.
+   */
+  wrap?: boolean;
   className?: string;
 };
 
@@ -18,6 +27,7 @@ export function CodeBlock({
   code,
   label,
   copyable = true,
+  wrap = true,
   className,
 }: CodeBlockProps) {
   const [copied, setCopied] = React.useState(false);
@@ -66,7 +76,12 @@ export function CodeBlock({
           ) : null}
         </div>
       ) : null}
-      <pre className="m-0 overflow-x-auto px-3.5 py-3.5 font-mono text-[11px] leading-relaxed text-[#a8dfff]">
+      <pre
+        className={cn(
+          "m-0 overflow-x-auto px-3.5 py-3.5 font-mono text-[11px] leading-relaxed text-[#a8dfff]",
+          wrap && "break-words whitespace-pre-wrap [overflow-wrap:anywhere]",
+        )}
+      >
         <code>{code}</code>
       </pre>
     </div>

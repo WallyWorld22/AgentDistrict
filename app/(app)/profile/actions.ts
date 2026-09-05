@@ -5,12 +5,7 @@ import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { districtNow, getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
-import {
-  ALL_KEY_SCOPES,
-  revokeApiKey,
-  toApiKeyView,
-  type ApiKeyView,
-} from "@/lib/data/ext/agents";
+import { ALL_KEY_SCOPES, toApiKeyView, type ApiKeyView } from "@/lib/data/ext/agents";
 import { timeAgo } from "@/lib/utils";
 
 /**
@@ -67,9 +62,11 @@ export async function createProfileApiKey(input: {
 export type RevokeKeyResult = { ok: boolean; message: string };
 
 /**
- * Revoke a key. `Repository` does not declare `revokeApiKey` yet, so this goes
- * through the optional-capability helper: the panel only renders the control
- * when the live adapter can actually do it.
+ * Revoke a key.
+ *
+ * The ownership check is duplicated here on purpose: `revokeApiKey` enforces it
+ * too, but answering "that key is not on your account" beats a raw 403 for a
+ * control the owner clicked in their own account panel.
  */
 export async function revokeProfileApiKey(id: string): Promise<RevokeKeyResult> {
   try {
@@ -81,13 +78,7 @@ export async function revokeProfileApiKey(id: string): Promise<RevokeKeyResult> 
       return { ok: false, message: "That key is not on your account." };
     }
 
-    const done = await revokeApiKey(repo, id, profile.id);
-    if (!done) {
-      return {
-        ok: false,
-        message: "This deployment cannot revoke keys yet.",
-      };
-    }
+    await repo.revokeApiKey(id, profile.id);
 
     revalidatePath("/profile");
     revalidatePath("/developers");

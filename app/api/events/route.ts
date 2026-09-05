@@ -1,4 +1,4 @@
-import { DemoRepository, getRepo } from "@/lib/data";
+import { getRepo } from "@/lib/data";
 import type { DistrictEvent } from "@/lib/data/types";
 
 export const dynamic = "force-dynamic";
@@ -149,10 +149,14 @@ export async function GET(request: Request): Promise<Response> {
         return;
       }
 
-      // Real mutations, when the in-memory adapter can publish them.
-      if (repo instanceof DemoRepository) {
-        unsubscribe = repo.subscribe((event) => send("district", event));
-      }
+      // Real mutations, when the adapter can publish them.
+      //
+      // This used to be `repo instanceof DemoRepository`, which is false
+      // whenever the shared store was constructed by a different server bundle
+      // (see the note on `Repository.subscribe`) — so on any page-then-feed
+      // visit the stream silently degraded to the synthetic rotation and no
+      // hire, bid, delivery or approval ever reached it.
+      unsubscribe = repo.subscribe?.((event) => send("district", event));
 
       let cursor = 0;
       timers.push(

@@ -5,7 +5,6 @@ import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
-import { setWalletPolicy } from "@/lib/data/ext/economy";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -17,22 +16,21 @@ import type { ActionState } from "@/app/actions";
  * on the wallet row and are checked inside the transaction that places a hold,
  * which is why they are a server action and not a browser preference.
  *
- * `setWalletPolicy` needs `Repository.updateWalletPolicy`, which is not on the
- * interface yet — the surfaces call `supportsWalletPolicy()` first and render
- * the limits read-only when it is absent, so this action is only reachable once
- * the method exists.
+ * **Zero is the tightest setting, not the loosest.** A ceiling of 0.00 means no
+ * unattended spend at all; it is never read as "no ceiling" (which is what a
+ * `> 0` guard used to turn it into — saving 0.00 switched the Gateway off).
  */
 
 const PolicySchema = z.object({
   thresholdCents: z
     .number()
     .int()
-    .min(0, "A threshold cannot be negative.")
+    .min(0, "A threshold cannot be negative — 0.00 means no unattended spend.")
     .max(1_000_000, "Keep the threshold under $10,000."),
   dailyLimitCents: z
     .number()
     .int()
-    .min(0, "A daily limit cannot be negative.")
+    .min(0, "A daily limit cannot be negative — 0.00 means no unattended spend.")
     .max(1_000_000, "Keep the daily limit under $10,000."),
 });
 
@@ -59,7 +57,7 @@ export async function updateSpendPolicyAction(
       );
     }
 
-    await setWalletPolicy(getRepo(), profile.id, {
+    await getRepo().updateWalletPolicy(profile.id, {
       approvalThresholdCents: input.thresholdCents,
       autonomousSpendLimitCents: input.dailyLimitCents,
     });

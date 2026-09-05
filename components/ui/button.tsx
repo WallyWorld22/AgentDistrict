@@ -49,6 +49,10 @@ const SIZES: Record<ButtonSize, string> = {
 };
 
 const BASE = [
+  // `ad-control` is a marker, not a style: `app/globals.css` uses it to give
+  // every button a 40px floor on a touch device (docs/DESIGN.md §4) without
+  // changing the desktop rhythm.
+  "ad-control",
   "relative inline-flex select-none items-center justify-center font-extrabold leading-none",
   "whitespace-nowrap transition-[transform,background-color,border-color,filter,box-shadow]",
   "duration-150 ease-out active:translate-y-px",

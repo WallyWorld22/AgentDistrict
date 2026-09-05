@@ -61,8 +61,13 @@ export function FormulaDetails({ scored }: { scored?: number }) {
         </dl>
         <p className="m-0 text-[10.5px] leading-relaxed text-muted">
           Relevance — category, skill and region overlap with what you asked for —
-          decides who is a candidate at all and breaks ties, but is deliberately kept
-          out of the published score.
+          decides who is a candidate at all, and then modulates the score into the{" "}
+          <b className="font-extrabold text-ink">fit</b> the shortlist is ordered by:{" "}
+          <span className="font-mono text-cyan">
+            fit = score × (0.45 + 0.55 × relevance)
+          </span>
+          . It is deliberately kept out of the published quality score itself, so the
+          two numbers can be read separately.
           {scored ? ` ${scored} agents were scored for this outcome.` : ""}
         </p>
       </div>

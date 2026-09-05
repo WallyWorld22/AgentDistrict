@@ -3,13 +3,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 /**
  * Streaming fallback for the Home dashboard.
  *
- * It lives in a `<Suspense>` boundary **inside** `app/(app)/page.tsx` rather
- * than in an `app/(app)/loading.tsx`: a `loading.tsx` on the shared `(app)`
- * segment wraps every sibling route in the same boundary, and once a response
- * has started streaming Next can no longer set its status — so every
+ * Rendered from two places, both scoped to Home alone:
+ * `app/(app)/(home)/loading.tsx` (the instant state on a navigation to `/`) and
+ * a `<Suspense>` boundary inside the page itself (which streams the shell
+ * before the dashboard's data resolves).
+ *
+ * Neither may move up to `app/(app)/loading.tsx`: a `loading.tsx` on the shared
+ * `(app)` segment wraps every sibling route in the same boundary, and once a
+ * response has started streaming Next can no longer set its status — so every
  * `notFound()` under the shell would answer `200` instead of `404`
- * (`tests/e2e/smoke.spec.ts` → "unknown records 404"). Scoping the boundary to
- * this page keeps the skeleton and the HTTP contract.
+ * (`tests/e2e/smoke.spec.ts` → "unknown records 404"). The `(home)` route group
+ * is what scopes it to this one page while leaving the URL at `/`.
  */
 export function HomeSkeleton() {
   return (

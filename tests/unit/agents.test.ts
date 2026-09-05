@@ -23,7 +23,6 @@ import {
   requestOrigin,
   resolvedEndpoints,
   stepErrors,
-  supportsApiKeyRevocation,
   toApiKeyView,
 } from "@/lib/data/ext/agents";
 import { getRepo } from "@/lib/data";
@@ -367,9 +366,22 @@ describe("api keys", () => {
     expect(JSON.stringify(view)).not.toContain("deadbeef");
   });
 
-  it("reports whether the live adapter can revoke, so the UI can hide the control", () => {
-    // Documents today's answer: `Repository` has no `revokeApiKey` yet. When the
-    // integrator adds it this flips to true and the Revoke button appears.
-    expect(supportsApiKeyRevocation(getRepo())).toBe(false);
+  it("revokes a key the profile owns and refuses one it does not", async () => {
+    const repo = getRepo();
+    const profile = await repo.getCurrentProfile();
+    expect(profile).not.toBeNull();
+
+    const { record } = await repo.createApiKey({
+      profileId: profile!.id,
+      label: "Temporary key",
+      scopes: ["agents:read"],
+    });
+    expect((await repo.listApiKeys(profile!.id)).some((key) => key.id === record.id)).toBe(true);
+
+    await expect(repo.revokeApiKey(record.id, "00000000-0000-0000-0000-000000000000")).rejects.toThrow(
+      /do not own/i,
+    );
+    await repo.revokeApiKey(record.id, profile!.id);
+    expect((await repo.listApiKeys(profile!.id)).some((key) => key.id === record.id)).toBe(false);
   });
 });
