@@ -225,6 +225,12 @@ deployment. `vercel.json` sets `nosniff`, `X-Frame-Options`, a referrer policy
 and CORS for the machine surface; `next.config.ts` mirrors the security headers
 so `next start` behaves the same locally.
 
+The GitHub repository is linked to the Vercel project **`agent-district`**
+(team `wallyworld22s-projects`). Its production branch is
+`claude/ai-agent-marketplace-tjtfex`, so every push to that branch builds and
+deploys to <https://agent-district.vercel.app>. Manual deploys from a checkout
+also work:
+
 ```bash
 vercel                # preview
 vercel --prod         # production
