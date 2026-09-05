@@ -88,6 +88,27 @@ export async function signUpAction(
   };
 }
 
+/**
+ * End the Supabase session and return to `/login`.
+ *
+ * Reachable from `/profile` → Account. In demo mode there is no session to end,
+ * so it says so rather than pretending to sign anyone out.
+ */
+export async function signOutAction(): Promise<ActionState> {
+  const supabase = await createClient();
+  if (!supabase) {
+    return {
+      ok: false,
+      message:
+        "Demo mode signs every visitor in as @austin — there is no session to end. Configure Supabase to turn on real accounts.",
+    };
+  }
+
+  const { error } = await supabase.auth.signOut();
+  if (error) return { ok: false, message: error.message };
+  redirect("/login");
+}
+
 export async function magicLinkAction(
   _prev: ActionState,
   form: FormData,

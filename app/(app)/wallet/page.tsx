@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { requireProfile } from "@/lib/auth";
-import { cn, formatCents, timeAgo } from "@/lib/utils";
+import { supportsWalletPolicy, walletSummary } from "@/lib/data/ext/economy";
+import { formatCents } from "@/lib/utils";
 import { StatTile } from "@/components/cards/stat-tile";
+import { buttonClasses } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Progress } from "@/components/ui/progress";
 import { SectionHead } from "@/components/ui/section-head";
-import { DataRow, Panel } from "@/components/feature/panel";
-import { TopUpForm } from "@/components/feature/top-up-form";
+import { DataRow, Inset, Panel } from "@/components/feature/panel";
+import { AddCreditsButton } from "@/components/wallet/add-credits";
+import { SpendPolicyForm } from "@/components/wallet/spend-policy";
+import { TransactionsTable } from "@/components/wallet/transactions-table";
 
 export const metadata: Metadata = {
   title: "Wallet",
@@ -16,15 +21,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-const KIND_TONE: Record<string, "green" | "yellow" | "blue" | "purple" | "red" | "default"> = {
-  topup: "green",
-  hold: "yellow",
-  release: "blue",
-  refund: "purple",
-  payout: "green",
-  fee: "red",
-};
 
 export default async function Page() {
   const repo = getRepo();
@@ -36,104 +32,134 @@ export default async function Page() {
     repo.listTransactions(profile.id, 30),
   ]);
 
-  const balance = wallet?.balance_cents ?? 0;
-  const held = wallet?.held_cents ?? 0;
-  const available = balance - held;
-  const spentToday = wallet?.spend_today_cents ?? 0;
-  const limit = wallet?.autonomous_spend_limit_cents ?? 0;
-  const threshold = wallet?.approval_threshold_cents ?? 0;
-  const usage = limit > 0 ? Math.min(100, (spentToday / limit) * 100) : 0;
+  const money = walletSummary(wallet);
+  const editable = supportsWalletPolicy(repo);
 
   return (
     <div className="grid gap-4">
       <SectionHead
         as="h1"
         title="District Wallet"
-        subtitle="Balance, holds, spend today, approval thresholds and transactions."
+        subtitle="Balance, holds, spend today, approval thresholds and every transaction behind them."
         icon={<Wallet className="size-4" aria-hidden="true" />}
-        action={<Pill variant="green">No real money moves</Pill>}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill variant="green">Demo only — no real money movement</Pill>
+            <AddCreditsButton availableCents={money.available} />
+          </div>
+        }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile value={formatCents(available)} label="Available" tone="green" icon="$" />
         <StatTile
-          value={formatCents(held)}
+          value={formatCents(money.available)}
+          label="Available"
+          hint="Balance minus what is held"
+          tone="green"
+          icon="$"
+        />
+        <StatTile
+          value={formatCents(money.held)}
           label="Held in flight"
-          hint="Released when you approve"
+          hint="Released when you approve a run"
           tone="yellow"
           icon="⏸"
         />
-        <StatTile value={formatCents(balance)} label="Balance" tone="blue" icon="◆" />
         <StatTile
-          value={formatCents(spentToday)}
+          value={formatCents(money.spentToday)}
           label="Spent today"
-          hint={limit > 0 ? `of ${formatCents(limit)} autonomous limit` : undefined}
+          hint={
+            money.dailyLimit > 0
+              ? `of ${formatCents(money.dailyLimit)} autonomous ceiling`
+              : undefined
+          }
           tone="purple"
           icon="↗"
         />
+        <StatTile
+          value={formatCents(money.threshold)}
+          label="Approval threshold"
+          hint="Per unattended order"
+          tone="blue"
+          icon="⚑"
+        />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Panel title="Transactions" subtitle="One money-out row per run, never two.">
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {transactions.map((tx) => (
-              <li
-                key={tx.id}
-                className="bg-inset-surface flex items-center gap-3 rounded-[14px] border border-[#1c2638] p-2.5"
-              >
-                <Pill variant={KIND_TONE[tx.kind] ?? "default"} size="sm">
-                  {tx.kind}
-                </Pill>
-                <span className="min-w-0 flex-1">
-                  <b className="block truncate text-[12px] font-bold text-ink">
-                    {tx.memo}
-                  </b>
-                  <small className="block text-[10.5px] text-muted">
-                    {timeAgo(tx.created_at, now)}
-                  </small>
-                </span>
-                <b
-                  className={cn(
-                    "shrink-0 text-[13px] font-extrabold tabular-nums",
-                    tx.amount_cents >= 0 ? "text-green" : "text-ink",
-                  )}
-                >
-                  {tx.amount_cents >= 0 ? "+" : ""}
-                  {formatCents(tx.amount_cents)}
-                </b>
-              </li>
-            ))}
-            {transactions.length === 0 ? (
-              <li className="text-[12px] text-muted">No transactions yet.</li>
-            ) : null}
-          </ul>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <Panel
+          title="Transactions"
+          subtitle="One money-out row per run, never two — a hold becomes a release."
+        >
+          <TransactionsTable transactions={transactions} now={now} />
         </Panel>
 
         <div className="grid content-start gap-4">
-          <Panel title="Add credits" subtitle="Demo top-up — nothing is charged.">
-            <TopUpForm />
+          <Panel title="Balance" subtitle="Where the money is right now.">
+            <dl className="m-0 grid gap-0">
+              <DataRow label="Balance" value={formatCents(money.balance)} />
+              <DataRow label="Held in flight" value={`−${formatCents(money.held)}`} />
+              <DataRow
+                label="Available"
+                value={<span className="text-green">{formatCents(money.available)}</span>}
+              />
+            </dl>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AddCreditsButton availableCents={money.available} variant="outline" />
+              <Link href="/command" className={buttonClasses("ghost", "sm")}>
+                See what is running
+              </Link>
+            </div>
           </Panel>
 
-          <Panel title="Spend policy" subtitle="Enforced on every hold.">
-            <dl className="m-0 grid gap-0">
-              <DataRow label="Approval threshold" value={formatCents(threshold)} />
-              <DataRow label="Daily autonomous limit" value={formatCents(limit)} />
-              <DataRow label="Spent today" value={formatCents(spentToday)} />
-            </dl>
-            {limit > 0 ? (
+          <Panel
+            title="Spend policy"
+            subtitle="Enforced server-side on every hold."
+            action={
+              editable ? undefined : (
+                <Pill size="sm" variant="blue">
+                  Managed
+                </Pill>
+              )
+            }
+          >
+            {editable ? (
+              <SpendPolicyForm
+                thresholdCents={money.threshold}
+                dailyLimitCents={money.dailyLimit}
+              />
+            ) : (
+              <dl className="m-0 grid gap-0">
+                <DataRow label="Approval threshold" value={formatCents(money.threshold)} />
+                <DataRow label="Daily autonomous limit" value={formatCents(money.dailyLimit)} />
+                <DataRow label="Spent today" value={formatCents(money.spentToday)} />
+                <DataRow
+                  label="Remaining today"
+                  value={formatCents(money.dailyRemaining)}
+                />
+              </dl>
+            )}
+
+            {money.dailyLimit > 0 ? (
               <Progress
-                value={usage}
+                value={money.dailyUsedPct}
                 size="sm"
-                tone={usage > 80 ? "red" : "green"}
+                tone={money.dailyUsedPct > 80 ? "red" : "green"}
                 className="mt-3"
                 label="Autonomous spend used today"
               />
             ) : null}
-            <p className="m-0 mt-3 text-[11px] leading-relaxed text-muted">
-              An order above {formatCents(threshold)} placed by an API key or an MCP
-              client needs a human to approve it. You are always the human — spending
-              through the site counts as approval.
-            </p>
+
+            <Inset className="mt-3">
+              <p className="m-0 text-[11px] leading-relaxed text-muted">
+                An order above {formatCents(money.threshold)} placed by an API key or an
+                MCP client is refused until a human approves it. Orders you place through
+                the site are approved by the act of placing them, so the ceiling never
+                blocks you here.
+              </p>
+            </Inset>
+            <Link href="/workplace" className={buttonClasses("ghost", "sm", "mt-3 w-full")}>
+              Open the Workplace Gateway
+            </Link>
           </Panel>
         </div>
       </div>

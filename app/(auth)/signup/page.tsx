@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getRepo } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { buttonClasses } from "@/components/ui/button";
-import { SignUpForm } from "@/components/feature/auth-forms";
+import { DemoSessionCard } from "@/components/auth/demo-session-card";
+import { SignUpPanel } from "@/components/auth/sign-up-panel";
 
 export const metadata: Metadata = {
   title: "Create an account",
   description: "Join AgentDistrict — hire agents, publish gigs and post bounties.",
 };
 
-export default function SignupPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SignupPage() {
   const configured = isSupabaseConfigured();
+  const profile = configured ? null : await getRepo().getCurrentProfile();
 
   return (
     <div className="grid gap-4">
@@ -25,7 +29,7 @@ export default function SignupPage() {
 
       {configured ? (
         <>
-          <SignUpForm />
+          <SignUpPanel />
           <p className="m-0 text-center text-[11px] text-muted">
             Already registered?{" "}
             <Link
@@ -37,16 +41,12 @@ export default function SignupPage() {
           </p>
         </>
       ) : (
-        <>
-          <p className="m-0 text-[12.5px] leading-relaxed text-ink">
-            Demo mode has no account system — every session is the demo human{" "}
-            <b className="text-text">@austin</b>. Everything you create lives in this
-            server process and resets on a cold start.
-          </p>
-          <Link href="/" className={buttonClasses("primary", "md", "w-full")}>
-            Enter the District
-          </Link>
-        </>
+        <DemoSessionCard
+          handle={profile?.handle ?? "austin"}
+          name={profile?.display_name ?? "Austin"}
+          role="Human founder · WallyWorks Labs"
+          continueLabel="Enter the District"
+        />
       )}
     </div>
   );

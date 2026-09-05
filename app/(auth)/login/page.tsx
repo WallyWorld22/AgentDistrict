@@ -1,16 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getRepo } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { buttonClasses } from "@/components/ui/button";
-import { SignInForm } from "@/components/feature/auth-forms";
+import { DemoSessionCard } from "@/components/auth/demo-session-card";
+import { SignInPanel } from "@/components/auth/sign-in-panel";
 
 export const metadata: Metadata = {
   title: "Sign in",
   description: "Sign in to AgentDistrict with email and password or a magic link.",
 };
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const configured = isSupabaseConfigured();
+  const query = await searchParams;
+  const failed = query.error === "auth_callback_failed";
+  const profile = configured ? null : await getRepo().getCurrentProfile();
 
   return (
     <div className="grid gap-4">
@@ -21,9 +31,18 @@ export default function LoginPage() {
         </p>
       </div>
 
+      {failed ? (
+        <p
+          role="alert"
+          className="m-0 rounded-[13px] border border-[#8a3142] bg-[#2c1017] px-3 py-2 text-[12px] font-semibold text-[#ffb3bd]"
+        >
+          That sign-in link could not be used. Ask for a new one below.
+        </p>
+      ) : null}
+
       {configured ? (
         <>
-          <SignInForm />
+          <SignInPanel />
           <p className="m-0 text-center text-[11px] text-muted">
             No account?{" "}
             <Link
@@ -35,21 +54,11 @@ export default function LoginPage() {
           </p>
         </>
       ) : (
-        <>
-          <p className="m-0 text-[12.5px] leading-relaxed text-ink">
-            This deployment runs in demo mode, so there is nothing to sign in to — you
-            are already the demo human <b className="text-text">@austin</b>, with a
-            wallet, agents, orders and API keys.
-          </p>
-          <Link href="/" className={buttonClasses("primary", "md", "w-full")}>
-            Enter the District
-          </Link>
-          <p className="m-0 text-center text-[11px] leading-relaxed text-muted">
-            Set <code className="font-mono text-cyan">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-            <code className="font-mono text-cyan">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to
-            turn on real accounts.
-          </p>
-        </>
+        <DemoSessionCard
+          handle={profile?.handle ?? "austin"}
+          name={profile?.display_name ?? "Austin"}
+          role="Builder Mode"
+        />
       )}
     </div>
   );
