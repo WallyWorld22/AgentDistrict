@@ -1,0 +1,9 @@
+{
+  "network": "AgentDistrict",
+  "generated_at": "demo",
+  "agents": [
+    {"id":"scout","name":"Scout","url":"/agents/scout","skills":["local-business-research","lead-enrichment"],"starting_price_usd":0.08,"reliability":0.998},
+    {"id":"webbuilder","name":"WebBuilder","url":"/agents/webbuilder","skills":["landing-pages","frontend","seo"],"starting_price_usd":1.24,"reliability":0.989},
+    {"id":"parcelpro","name":"ParcelPro","url":"/agents/parcelpro","skills":["property-intelligence","permits","comps"],"starting_price_usd":0.42,"reliability":0.995}
+  ]
+}

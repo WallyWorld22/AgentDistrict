@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   AgentDistrict design tokens (BUILD_SPEC §3).
+   Dark theme only. Values come from the legacy demo's styles.css and the
+   desktop-home.png / mobile-screens.png references.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* surfaces */
+  --color-bg: #070912;
+  --color-bg-2: #0b0f1a;
+  --color-card: #101624;
+  --color-card-2: #0c1220;
+  --color-line: #202a3e;
+
+  /* type */
+  --color-text: #f7f9ff;
+  --color-muted: #8e9ab2;
+
+  /* accents */
+  --color-blue: #48a8ff;
+  --color-cyan: #4ee7ff;
+  --color-purple: #8e5cff;
+  --color-pink: #df6cff;
+  --color-green: #46e39a;
+  --color-yellow: #ffd66b;
+  --color-red: #ff5b6f;
+
+  /* radii — card radius is 22px per spec */
+  --radius-card: 22px;
+  --radius-pill: 999px;
+
+  /* shadows */
+  --shadow-card: 0 10px 35px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.38);
+  --shadow-primary: 0 10px 28px rgba(53, 110, 255, 0.28);
+
+  /* fonts — --font-inter is injected by next/font/google in app/layout.tsx */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  /* shell metrics */
+  --spacing-sidebar: 220px;
+  --spacing-topbar: 64px;
+  --spacing-worldbar: 68px;
+  --spacing-bottomnav: 68px;
+}
+
+/* Legacy-compatible aliases so plain CSS can use the same tokens. */
+:root {
+  color-scheme: dark;
+
+  --bg: var(--color-bg);
+  --bg-2: var(--color-bg-2);
+  --card: var(--color-card);
+  --card-2: var(--color-card-2);
+  --line: var(--color-line);
+  --text: var(--color-text);
+  --muted: var(--color-muted);
+  --blue: var(--color-blue);
+  --cyan: var(--color-cyan);
+  --purple: var(--color-purple);
+  --pink: var(--color-pink);
+  --green: var(--color-green);
+  --yellow: var(--color-yellow);
+  --red: var(--color-red);
+  --radius: var(--radius-card);
+  --shadow: var(--shadow-float);
+
+  /* gradient recipes reused across the UI kit */
+  --grad-primary: linear-gradient(135deg, #297dff, #7559ff);
+  --grad-brand: linear-gradient(135deg, #4ee7ff, #3b82ff 48%, #9a5cff);
+  --grad-body: radial-gradient(
+    1000px 550px at 50% -8%,
+    #14204b 0%,
+    #080b14 42%,
+    #05070d 100%
+  );
+}
+
+* {
+  min-width: 0;
+}
+
+html {
+  background-color: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--grad-body) no-repeat fixed;
+  background-color: #05070d;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+/* Focus rings: visible, in-brand, never suppressed. */
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-blue) 35%, transparent);
+}
+
+/* Thin, dark scrollbars that match the surfaces. */
+@supports (scrollbar-color: auto) {
+  * {
+    scrollbar-color: #2a3550 transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Frosted surface used by the top bar, @World bar and mobile bottom nav. */
+@utility glass {
+  background: rgba(7, 11, 20, 0.78);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+/* Text filled with the brand gradient. */
+@utility text-gradient {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-grad-primary {
+  background-image: var(--grad-primary);
+}
+
+@utility bg-card-surface {
+  background-image: linear-gradient(180deg, #101725, #0b111d);
+}
+
+@keyframes ad-pulse {
+  70% {
+    box-shadow: 0 0 0 9px rgba(70, 227, 154, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(70, 227, 154, 0);
+  }
+}
+
+@keyframes ad-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ad-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ad-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@utility animate-pulse-dot {
+  animation: ad-pulse 1.8s infinite;
+}
+
+@utility animate-fade-in {
+  animation: ad-fade-in 0.24s ease both;
+}
+
+@utility animate-sheet-in {
+  animation: ad-sheet-in 0.22s ease both;
+}
+
+/* Respect reduced-motion everywhere, including the keyframes above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
