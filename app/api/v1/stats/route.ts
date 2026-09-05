@@ -1,19 +1,18 @@
+import { jsonRead, route } from "@/app/api/_lib/http";
+import { getRepo } from "@/lib/data";
+
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/v1/stats — network-wide counters.
- * STUB — the data executor wires this to `getRepo().getNetworkStats()`.
+ *
+ * `headline` is deliberately **not** returned here. It is a cosmetic
+ * District-wide baseline used by the home hero to reproduce
+ * `docs/reference/desktop-home.png`; this endpoint is consumed by agents making
+ * decisions, so it only ever answers with verifiable row counts.
  */
-export function GET() {
-  return Response.json(
-    {
-      agentsOnline: 0,
-      jobsPosted: 0,
-      gigsAvailable: 0,
-      liveChannels: 0,
-      guildsActive: 0,
-      _stub: true,
-    },
-    { headers: { "cache-control": "no-store" } },
-  );
-}
+export const GET = route(async () => {
+  const { headline: _headline, ...counters } = await getRepo().getNetworkStats();
+  void _headline;
+  return jsonRead(counters);
+});

@@ -1,23 +1,34 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isNavItemActive, type NavItem } from "@/lib/nav";
+import { isNavItemActive, type NavBadge, type NavLinkData } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { LiveDot } from "@/components/ui/live-dot";
 
-function NavBadge({ badge }: { badge: NonNullable<NavItem["badge"]> }) {
+function NavBadgePill({ badge, active }: { badge: NavBadge; active: boolean }) {
   if (badge.variant === "live") {
     return (
-      <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-[#1b7253] bg-[#0c251d] px-1.5 py-0.5 text-[9px] font-extrabold text-[#71f0b5]">
-        <LiveDot />
+      <span
+        className={cn(
+          "ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-[3px]",
+          "text-[9px] leading-none font-extrabold tracking-[0.04em]",
+          active
+            ? "border-white/35 bg-white/15 text-white"
+            : "border-[#1b7253] bg-[#0c251d] text-[#71f0b5]",
+        )}
+      >
+        <LiveDot color={active ? "bg-white" : "bg-green"} size="sm" />
         {badge.label}
       </span>
     );
   }
   if (badge.variant === "count") {
+    // Dark ink on the red fill: white on --color-red measures 3.01:1, under the
+    // WCAG AA 4.5:1 floor for normal text.
     return (
-      <span className="ml-auto grid size-5 shrink-0 place-items-center rounded-full bg-red text-[10px] font-extrabold text-white tabular-nums">
+      <span className="ml-auto grid size-[19px] shrink-0 place-items-center rounded-full bg-red text-[10px] leading-none font-extrabold text-[#2a0d15] tabular-nums">
         {badge.label}
       </span>
     );
@@ -29,54 +40,63 @@ function NavBadge({ badge }: { badge: NonNullable<NavItem["badge"]> }) {
   );
 }
 
-/** Sidebar row. Active state is derived from the pathname (BUILD_SPEC §3). */
-export function SidebarNavLink({ item }: { item: NavItem }) {
+export type SidebarNavLinkProps = {
+  item: NavLinkData;
+  /** Pre-rendered icon element — a lucide component cannot cross the RSC edge. */
+  icon: ReactNode;
+};
+
+/**
+ * Sidebar row. Active state is derived from the pathname (BUILD_SPEC §3) and
+ * matches docs/reference/desktop-home.png: a filled blue gradient pill.
+ *
+ * The icon arrives as an already-rendered element so the parent `Sidebar` can
+ * stay a Server Component; its colour is driven from here with a descendant
+ * selector rather than by cloning the element.
+ */
+export function SidebarNavLink({ item, icon }: SidebarNavLinkProps) {
   const pathname = usePathname();
   const active = isNavItemActive(pathname, item);
-  const Icon = item.icon;
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-9 items-center gap-2.5 rounded-[11px] px-2.5 text-[12.5px] font-bold transition-colors",
+        "group flex h-[34px] items-center gap-2.5 rounded-[11px] px-2.5 text-[12.5px] font-bold",
+        "transition-[background-color,color,box-shadow] duration-150 ease-out",
+        "[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors",
         active
-          ? "bg-gradient-to-b from-[#18233a] to-[#10182a] text-white ring-1 ring-[#293b5c] ring-inset"
-          : "text-[#8e9ab2] hover:bg-white/4 hover:text-text",
+          ? "bg-[image:var(--grad-active-nav)] text-white shadow-[0_6px_18px_rgba(37,86,214,.35)] [&_svg]:text-white"
+          : "text-[#9aa6bd] hover:bg-white/6 hover:text-text [&_svg]:text-[#8492ab] group-hover:[&_svg]:text-[#c7d2e6]",
       )}
     >
-      <Icon
-        className={cn("size-4 shrink-0", active ? "text-blue" : "text-[#7f8ca4]")}
-        aria-hidden="true"
-      />
+      {icon}
       <span className="truncate">{item.label}</span>
-      {item.badge ? <NavBadge badge={item.badge} /> : null}
+      {item.badge ? <NavBadgePill badge={item.badge} active={active} /> : null}
     </Link>
   );
 }
 
 /** Mobile bottom-nav tab. */
-export function BottomNavLink({ item }: { item: NavItem }) {
+export function BottomNavLink({ item, icon }: SidebarNavLinkProps) {
   const pathname = usePathname();
   const active = isNavItemActive(pathname, item);
-  const Icon = item.icon;
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex flex-col items-center justify-center gap-1 rounded-[15px] py-1.5 transition-colors",
+        "flex min-h-11 flex-col items-center justify-center gap-1 rounded-[15px] py-1.5",
+        "transition-[background-color,color] duration-150 ease-out",
+        "[&_svg]:size-[18px]",
         active
-          ? "bg-gradient-to-b from-[#18233a] to-[#10182a] text-white ring-1 ring-[#293b5c] ring-inset"
-          : "text-[#7f8ca4]",
+          ? "bg-gradient-to-b from-[#18233a] to-[#10182a] text-white ring-1 ring-[#293b5c] ring-inset [&_svg]:text-[#72baff]"
+          : "text-[#7f8ca4] active:bg-white/5",
       )}
     >
-      <Icon
-        className={cn("size-[18px]", active ? "text-blue" : undefined)}
-        aria-hidden="true"
-      />
+      {icon}
       <small className="text-[9px] leading-none font-extrabold">{item.short}</small>
     </Link>
   );

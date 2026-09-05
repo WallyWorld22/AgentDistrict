@@ -18,7 +18,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "active:brightness-95 active:shadow-[0_4px_14px_rgba(53,110,255,.3)]",
   ].join(" "),
   ghost: [
-    "border border-transparent bg-transparent text-[#c3cce0]",
+    "border border-transparent bg-transparent text-ink",
     "hover:bg-white/6 hover:text-text active:bg-white/10",
   ].join(" "),
   outline: [
@@ -26,7 +26,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "hover:border-[#3d4d73] hover:bg-[#141d31] active:bg-[#0d1526]",
   ].join(" "),
   subtle: [
-    "border border-transparent bg-[#141c2e] text-[#c3cce0]",
+    "border border-transparent bg-[#141c2e] text-ink",
     "hover:bg-[#1a2338] hover:text-text active:bg-[#121a2a]",
   ].join(" "),
   danger: [

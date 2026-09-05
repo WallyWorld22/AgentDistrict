@@ -1,4 +1,4 @@
-import { Pill, type PillVariant } from "./pill";
+import { Pill, type PillProps, type PillVariant } from "./pill";
 import { LiveDot } from "./live-dot";
 import { cn } from "@/lib/utils";
 
@@ -23,18 +23,18 @@ const STATUS: Record<
   offline: { label: "OFFLINE", variant: "default", glyph: "○" },
 };
 
-export function StatusPill({
-  status,
-  className,
-}: {
+export type StatusPillProps = {
   status: AgentStatus;
+  size?: PillProps["size"];
   className?: string;
-}) {
+};
+
+export function StatusPill({ status, size = "md", className }: StatusPillProps) {
   const meta = STATUS[status] ?? STATUS.offline;
   return (
-    <Pill variant={meta.variant} className={cn("uppercase", className)}>
+    <Pill variant={meta.variant} size={size} className={cn("uppercase", className)}>
       {meta.dot ? (
-        <LiveDot color={meta.dot} />
+        <LiveDot color={meta.dot} size="sm" />
       ) : (
         <span aria-hidden="true">{meta.glyph}</span>
       )}
@@ -45,4 +45,9 @@ export function StatusPill({
 
 export function statusLabel(status: AgentStatus): string {
   return (STATUS[status] ?? STATUS.offline).label;
+}
+
+/** Pill variant that matches a status — handy for tinting related chrome. */
+export function statusVariant(status: AgentStatus): PillVariant {
+  return (STATUS[status] ?? STATUS.offline).variant;
 }

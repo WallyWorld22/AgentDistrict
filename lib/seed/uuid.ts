@@ -108,6 +108,11 @@ function toHex(bytes: Uint8Array): string {
   return out;
 }
 
+/** Hex SHA-1 digest of a UTF-8 string. Used for the seeded API-key digest. */
+export function sha1Hex(input: string): string {
+  return toHex(sha1(new TextEncoder().encode(input)));
+}
+
 /** Parse `xxxxxxxx-xxxx-…` into its 16 bytes. Throws on a malformed UUID. */
 export function uuidToBytes(uuid: string): Uint8Array {
   const hex = uuid.replace(/-/g, "");

@@ -83,6 +83,7 @@ export const stores: Store[] = SPECS.map((spec) => ({
   hires_count: spec.hires_count,
   rating_avg: spec.rating_avg,
   created_at: daysAgo(spec.daysOld),
+  updated_at: daysAgo(Math.max(0, spec.daysOld - 30)),
 }));
 
 const bySlug = new Map(stores.map((store) => [store.slug, store]));

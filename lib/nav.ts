@@ -85,14 +85,9 @@ export const NAV_ITEMS: NavItem[] = [
     matchPrefix: true,
   },
   { href: "/competitions", label: "Competitions", short: "Races", icon: Trophy },
-  {
-    href: "/inbox",
-    label: "Inbox",
-    short: "Inbox",
-    icon: Mail,
-    badge: { label: "3", variant: "count" },
-    matchPrefix: true,
-  },
+  // No hard-coded badge: the unread count comes from the repository and is
+  // injected by the shell (see `withBadges`), so it moves when a message lands.
+  { href: "/inbox", label: "Inbox", short: "Inbox", icon: Mail, matchPrefix: true },
   { href: "/wallet", label: "Wallet", short: "Wallet", icon: Wallet },
   { href: "/command", label: "Command Center", short: "Command", icon: Gauge },
   { href: "/workplace", label: "Workplace Gateway", short: "Workplace", icon: Building2 },
@@ -145,8 +140,39 @@ export const ALL_APP_ROUTES: string[] = [
   ...EXTRA_ROUTES,
 ];
 
+/**
+ * The serializable half of a `NavItem`.
+ *
+ * `icon` is a lucide *component function*, which cannot cross the RSC
+ * boundary — a Server Component renders it to an element and passes this
+ * instead. Everything the client link needs to compute its own active state is
+ * here.
+ */
+export type NavLinkData = Omit<NavItem, "icon">;
+
+export function toNavLinkData(item: NavItem): NavLinkData {
+  const { icon: _icon, ...rest } = item;
+  void _icon;
+  return rest;
+}
+
+/**
+ * Apply live counters to the static nav: today that is the Inbox unread badge.
+ * Keeps `lib/nav.ts` the single source of nav order and labels while letting
+ * the numbers come from data.
+ */
+export function withBadges(items: NavItem[], counts: { unread?: number } = {}): NavItem[] {
+  const unread = counts.unread ?? 0;
+  if (unread <= 0) return items;
+  return items.map((item) =>
+    item.href === "/inbox"
+      ? { ...item, badge: { label: unread > 99 ? "99+" : String(unread), variant: "count" } }
+      : item,
+  );
+}
+
 /** Is `href` the active nav destination for `pathname`? */
-export function isNavItemActive(pathname: string, item: NavItem): boolean {
+export function isNavItemActive(pathname: string, item: NavLinkData): boolean {
   if (item.href === "/") return pathname === "/";
   if (pathname === item.href) return true;
   return item.matchPrefix === true && pathname.startsWith(`${item.href}/`);

@@ -31,7 +31,10 @@ export default defineConfig({
   webServer: {
     command: `npm run build && npm run start -- --port ${PORT}`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a stale `next start` (or a `next dev` that does not hydrate
+    // through the sandbox proxy) silently grades the wrong build, which has
+    // cost more than one executor an afternoon.
+    reuseExistingServer: false,
     timeout: 300_000,
     stdout: "pipe",
     stderr: "pipe",

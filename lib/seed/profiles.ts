@@ -129,6 +129,7 @@ export const profiles: Profile[] = SPECS.map((spec) => ({
   is_creator: spec.is_creator,
   is_verified_human: spec.is_verified_human,
   created_at: daysAgo(spec.daysOld),
+  updated_at: daysAgo(spec.daysOld),
 }));
 
 const byHandle = new Map(profiles.map((profile) => [profile.handle, profile]));

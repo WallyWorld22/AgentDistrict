@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,12 +28,21 @@ const SIZES = {
   lg: "max-w-[860px]",
 } as const;
 
+/** Stable arguments for the hydration flag below — must not be recreated. */
+const NEVER_CHANGES = () => () => {};
+const TRUE = () => true;
+const FALSE = () => false;
+
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**
- * Bottom sheet / dialog. Deliberately not portalled: it renders a fixed
- * overlay in place, which composes correctly with the fixed app shell.
+ * Bottom sheet / dialog, portalled to `document.body`.
+ *
+ * The portal is not cosmetic: `z-index` only orders siblings inside the same
+ * stacking context, and the top bar is a `sticky z-30` element. Rendered in
+ * place, a sheet opened from the top bar was trapped underneath the mobile
+ * bottom nav (`z-50`) and its buttons could not be clicked at all.
  *
  * Accessibility: `role="dialog"` + `aria-modal`, labelled by the title,
  * described by the description, focus moved into the panel on open, Tab
@@ -54,6 +64,11 @@ export function Sheet({
   const panelRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
   const descId = React.useId();
+
+  // The portal target only exists in the browser. `useSyncExternalStore` gives
+  // `false` for the server snapshot and `true` once hydrated, so this is a
+  // hydration-safe "am I on the client" flag with no effect-driven re-render.
+  const mounted = React.useSyncExternalStore(NEVER_CHANGES, TRUE, FALSE);
 
   // Keep the latest onClose without re-running the effect on every render.
   const onCloseRef = React.useRef(onClose);
@@ -114,9 +129,9 @@ export function Sheet({
     };
   }, [open, dismissible]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
       data-side={side}
       className={cn(
@@ -160,7 +175,9 @@ export function Sheet({
                 onClick={onClose}
                 aria-label="Close"
                 className={cn(
-                  "grid size-8 shrink-0 place-items-center rounded-[11px] border border-[#26334c]",
+                  // 40px: comfortably above the WCAG 2.2 target-size floor on
+                  // touch, where this is the primary way out of the sheet.
+                  "grid size-10 shrink-0 place-items-center rounded-[11px] border border-[#26334c]",
                   "bg-[#111827] text-[#a8b4ca] transition-colors hover:border-[#3d4d73] hover:text-text",
                 )}
               >
@@ -176,6 +193,7 @@ export function Sheet({
           <div className="border-t border-[#1d273a] p-3.5">{footer}</div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -308,6 +308,7 @@ export type Profile = {
   is_creator: boolean;
   is_verified_human: boolean;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `stores` — a creator's storefront. */
@@ -321,6 +322,7 @@ export type Store = {
   hires_count: number;
   rating_avg: number;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `agents` — the District Passport record. */
@@ -353,6 +355,7 @@ export type Agent = {
   mcp_tools: string[];
   is_free: boolean;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `gigs` — a packaged, machine-callable capability. */
@@ -374,6 +377,7 @@ export type Gig = {
   rating_count: number;
   status: GigStatus;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `jobs` — a reverse-market bounty agents bid on. */
@@ -390,6 +394,7 @@ export type Job = {
   status: JobStatus;
   awarded_bid_id: UUID | null;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `bids` — an agent's (or guild's) offer on a job. */
@@ -426,6 +431,7 @@ export type Order = {
   cost_breakdown: CostBreakdown | null;
   audit_log: OrderAuditEntry[];
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `reviews` — a buyer's verdict on a completed order. */
@@ -455,6 +461,7 @@ export type Guild = {
   status: GuildStatus;
   owner_id: UUID | null;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `guild_members` — join row, ordered by `position`. */
@@ -479,6 +486,7 @@ export type MarketItem = {
   tags: string[];
   icon_emoji: string;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `rooms` — a Lounge room. */
@@ -527,6 +535,7 @@ export type Channel = {
   followers: number;
   owner_id: UUID | null;
   created_at: ISODateString;
+  updated_at: ISODateString;
 };
 
 /** `channel_hosts` — join row. */
@@ -649,6 +658,23 @@ export type NetworkStats = {
   gigsAvailable: number;
   liveChannels: number;
   guildsActive: number;
+  /**
+   * District-wide headline counters for the home hero
+   * (`docs/reference/desktop-home.png`: 12,482 / 3,921 / 24,118 / 842).
+   *
+   * These are the *real* counters above plus a fixed District baseline, so they
+   * still move when rows are added but read like a populated marketplace. Use
+   * the raw counters anywhere the number must be verifiable.
+   */
+  headline: HeadlineStats;
+};
+
+/** The four numbers under the AGENTDISTRICT wordmark on the home page. */
+export type HeadlineStats = {
+  agentsOnline: number;
+  jobsPosted: number;
+  gigsAvailable: number;
+  liveOnTv: number;
 };
 
 /** `getTrendingAgents()` — `trendDelta` is the `+312` badge on the home page. */
@@ -827,6 +853,12 @@ export type OrderGigInput = {
   tier: PackageTier;
   brief: string;
   buyerId: UUID;
+  /**
+   * The buyer explicitly approved this spend in the UI, so the Workplace
+   * Gateway `approval_threshold_cents` check is satisfied. Machine callers
+   * (API key, MCP) never set it — that is the point of the threshold.
+   */
+  approved?: boolean;
 };
 
 export type CreateJobInput = {
@@ -852,6 +884,8 @@ export type AcceptBidInput = {
   jobId: UUID;
   bidId: UUID;
   buyerId: UUID;
+  /** See `OrderGigInput.approved` — the buyer confirmed this spend in the UI. */
+  approved?: boolean;
 };
 
 export type CreateReviewInput = {
@@ -928,11 +962,11 @@ export type DistrictDataset = {
   agents: Agent[];
   rooms: Room[];
   presence: Presence[];
+  guilds: Guild[];
+  guildMembers: GuildMember[];
   gigs: Gig[];
   jobs: Job[];
   bids: Bid[];
-  guilds: Guild[];
-  guildMembers: GuildMember[];
   marketItems: MarketItem[];
   channels: Channel[];
   channelHosts: ChannelHost[];
@@ -943,8 +977,8 @@ export type DistrictDataset = {
   threads: Thread[];
   messages: Message[];
   wallets: Wallet[];
-  walletTransactions: WalletTransaction[];
   orders: Order[];
+  walletTransactions: WalletTransaction[];
   reviews: Review[];
   events: DistrictEvent[];
   apiKeys: ApiKey[];

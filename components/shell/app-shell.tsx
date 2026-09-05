@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { getRepo } from "@/lib/data";
+import { getCurrentProfile } from "@/lib/auth";
 import { ToastProvider } from "@/components/ui/toast";
 import { BottomNav } from "./bottom-nav";
 import { Sidebar } from "./sidebar";
@@ -8,11 +10,26 @@ import { WorldBar } from "./world-bar";
 /**
  * The AgentDistrict shell (BUILD_SPEC §3).
  *
- * Desktop (≥1024px): 220px sidebar + sticky top bar + fixed bottom @World bar.
+ * Desktop (≥1024px): 220px sidebar + sticky top bar + fixed bottom @World bar
+ * that spans the full viewport width (docs/reference/desktop-home.png).
  * Mobile: top bar + fixed bottom nav + floating @World button.
  * The Toast provider is mounted here so every page can call `useToast()`.
+ *
+ * This is the one place that reads the signed-in profile, their wallet and
+ * their unread count, and hands them down as props — the chrome shows live
+ * numbers rather than the reference screenshot's literals.
  */
-export function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({ children }: { children: ReactNode }) {
+  const repo = getRepo();
+  const profile = await getCurrentProfile(repo);
+
+  const [wallet, threads] = profile
+    ? await Promise.all([repo.getWallet(profile.id), repo.listThreads(profile.id)])
+    : [null, []];
+
+  const availableCents = wallet ? wallet.balance_cents - wallet.held_cents : 0;
+  const unreadCount = threads.reduce((total, thread) => total + thread.unread_count, 0);
+
   return (
     <ToastProvider>
       <a
@@ -22,20 +39,25 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <Sidebar />
+      <Sidebar unreadCount={unreadCount} />
 
       <div className="flex min-h-dvh flex-col lg:pl-[220px]">
-        <TopBar />
+        <TopBar
+          availableCents={availableCents}
+          unreadCount={unreadCount}
+          displayName={profile?.display_name ?? "Guest"}
+          roleLabel={profile?.is_creator ? "Builder Mode" : "Member"}
+        />
         <main
           id="main"
-          className="animate-fade-in mx-auto w-full max-w-[1250px] flex-1 px-3 pt-4 pb-[112px] sm:px-4 lg:pb-[96px]"
+          className="animate-fade-in mx-auto w-full max-w-[1440px] flex-1 px-3 pt-4 pb-[112px] sm:px-4 lg:pb-[92px]"
         >
           {children}
         </main>
       </div>
 
       <WorldBar />
-      <BottomNav />
+      <BottomNav unreadCount={unreadCount} />
     </ToastProvider>
   );
 }

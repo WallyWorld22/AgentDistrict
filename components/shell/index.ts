@@ -5,3 +5,5 @@ export { Sidebar } from "./sidebar";
 export { TopBar } from "./top-bar";
 export { WorldBar } from "./world-bar";
 export { WorldOrb } from "./world-orb";
+export { SearchForm } from "./search-form";
+export { MoreSheet } from "./more-sheet";

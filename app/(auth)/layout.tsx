@@ -27,7 +27,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       <p className="m-0 text-center text-[11px] text-muted">
-        <Link href="/" className="font-extrabold text-blue hover:text-cyan">
+        <Link
+          href="/"
+          className="inline-block py-2 font-extrabold text-blue hover:text-cyan"
+        >
           ← Back to the District
         </Link>
       </p>
