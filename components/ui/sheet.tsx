@@ -12,13 +12,32 @@ export type SheetProps = {
   children: React.ReactNode;
   /** "bottom" is the mobile sheet; "center" behaves like a dialog. */
   side?: "bottom" | "center";
+  /** Max width of the panel. */
+  size?: "sm" | "md" | "lg";
+  /** Sticky action row pinned under the scrollable body. */
+  footer?: React.ReactNode;
+  /** Set false to require an explicit action (no backdrop / Escape close). */
+  dismissible?: boolean;
   className?: string;
 };
 
+const SIZES = {
+  sm: "max-w-[420px]",
+  md: "max-w-[650px]",
+  lg: "max-w-[860px]",
+} as const;
+
+const FOCUSABLE =
+  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 /**
- * Bottom sheet / dialog. Uses the native <dialog>-free approach so it works
- * inside the fixed shell: a portal-less fixed overlay with focus trapping,
- * Escape-to-close and scroll locking.
+ * Bottom sheet / dialog. Deliberately not portalled: it renders a fixed
+ * overlay in place, which composes correctly with the fixed app shell.
+ *
+ * Accessibility: `role="dialog"` + `aria-modal`, labelled by the title,
+ * described by the description, focus moved into the panel on open, Tab
+ * cycles inside it, Escape closes, body scroll is locked, and focus returns
+ * to the trigger on close.
  */
 export function Sheet({
   open,
@@ -27,11 +46,20 @@ export function Sheet({
   description,
   children,
   side = "bottom",
+  size = "md",
+  footer,
+  dismissible = true,
   className,
 }: SheetProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
   const descId = React.useId();
+
+  // Keep the latest onClose without re-running the effect on every render.
+  const onCloseRef = React.useRef(onClose);
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -41,32 +69,42 @@ export function Sheet({
     document.body.style.overflow = "hidden";
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && dismissible) {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
 
       const panel = panelRef.current;
       if (!panel) return;
-      const focusables = panel.querySelectorAll<HTMLElement>(
-        'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])',
-      );
-      if (focusables.length === 0) return;
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === panel)) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && active === last) {
         event.preventDefault();
         first.focus();
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
-    const raf = requestAnimationFrame(() => panelRef.current?.focus());
+    const raf = requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const target = panel.querySelector<HTMLElement>(FOCUSABLE);
+      (target ?? panel).focus();
+    });
 
     return () => {
       cancelAnimationFrame(raf);
@@ -74,18 +112,19 @@ export function Sheet({
       document.body.style.overflow = overflow;
       previous?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open, dismissible]);
 
   if (!open) return null;
 
   return (
     <div
+      data-side={side}
       className={cn(
-        "fixed inset-0 z-100 flex bg-[#03050a]/80 p-3 backdrop-blur-[2px]",
+        "animate-fade-in fixed inset-0 z-100 flex bg-[#03050a]/80 p-3 backdrop-blur-[2px]",
         side === "bottom" ? "items-end justify-center" : "items-center justify-center",
       )}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (dismissible && event.target === event.currentTarget) onClose();
       }}
     >
       <div
@@ -94,10 +133,12 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
+        aria-label={title ? undefined : "Dialog"}
         tabIndex={-1}
         className={cn(
-          "animate-sheet-in flex max-h-[88dvh] w-full max-w-[650px] flex-col",
+          "animate-sheet-in flex max-h-[88dvh] w-full flex-col",
           "rounded-[28px] border border-[#2c3b58] bg-[#0a101b] shadow-[0_30px_100px_#000] outline-none",
+          SIZES[size],
           className,
         )}
       >
@@ -113,17 +154,27 @@ export function Sheet({
                 </p>
               ) : null}
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="grid size-8 shrink-0 place-items-center rounded-[11px] border border-[#26334c] bg-[#111827] text-[#a8b4ca] hover:text-text"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
+            {dismissible ? (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className={cn(
+                  "grid size-8 shrink-0 place-items-center rounded-[11px] border border-[#26334c]",
+                  "bg-[#111827] text-[#a8b4ca] transition-colors hover:border-[#3d4d73] hover:text-text",
+                )}
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         ) : null}
+
         <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+
+        {footer ? (
+          <div className="border-t border-[#1d273a] p-3.5">{footer}</div>
+        ) : null}
       </div>
     </div>
   );
