@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { requestOrigin } from "@/lib/site";
 import "./globals.css";
 
@@ -89,7 +90,29 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/*
+         * Vercel Web Analytics (@vercel/analytics 2.0.1) — **on Vercel only**.
+         *
+         * The component injects `/_vercel/insights/script.js`, a path only
+         * Vercel's edge serves. Everywhere else that tag is a 404, and with
+         * `X-Content-Type-Options: nosniff` (next.config.ts / vercel.json) the
+         * 404 body comes back as `text/plain`, so Chromium logs *two* console
+         * errors on every page load: the 404 itself and "Refused to execute
+         * script … MIME type ('text/plain') is not executable". Measured in a
+         * production preview, not assumed — and the smoke suite asserts zero
+         * console errors on every route, so unconditional rendering would have
+         * failed ~40 tests for a beacon that could never have reported anything.
+         *
+         * `VERCEL` is a system environment variable Vercel sets at build and at
+         * runtime; it is read on the server, so nothing about it ships to the
+         * browser and the zero-env demo (BUILD_SPEC §1) is unaffected. No CSP
+         * allowance is needed: the app sends no CSP, and the script is
+         * same-origin.
+         */}
+        {process.env.VERCEL ? <Analytics /> : null}
+      </body>
     </html>
   );
 }

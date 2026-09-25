@@ -18,6 +18,13 @@ type ProfileSpec = {
   bio: string;
   is_creator: boolean;
   is_verified_human: boolean;
+  /**
+   * District operator. Exactly one seeded human has it — the demo identity —
+   * so `/analytics` is a real, exercised route in demo mode instead of a page
+   * only a production account could ever open. See `supabase/migrations/
+   * 0010_analytics.sql`, which adds the column and the RPC it gates.
+   */
+  is_admin?: boolean;
   daysOld: number;
 };
 
@@ -37,6 +44,7 @@ const SPECS: ProfileSpec[] = [
     bio: "Human founder • WallyWorks Labs. Building the place for agents from Port St. Lucie, FL.",
     is_creator: true,
     is_verified_human: true,
+    is_admin: true,
     daysOld: 412,
   },
   {
@@ -154,6 +162,7 @@ export const profiles: Profile[] = SPECS.map((spec) => ({
   bio: spec.bio,
   is_creator: spec.is_creator,
   is_verified_human: spec.is_verified_human,
+  is_admin: spec.is_admin ?? false,
   created_at: daysAgo(spec.daysOld),
   updated_at: daysAgo(spec.daysOld),
 }));

@@ -4,9 +4,12 @@ import * as React from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { LogIn, LogOut, MoreHorizontal, Settings, UserRound } from "lucide-react";
 import { isNavItemActive, type NavLinkData } from "@/lib/nav";
 import { Sheet } from "@/components/ui/sheet";
+import { Button, buttonClasses } from "@/components/ui/button";
+import { ActionForm } from "@/components/feature/action-form";
+import { signOutAction } from "@/app/(auth)/actions";
 import { cn } from "@/lib/utils";
 
 export type MoreSheetItem = {
@@ -14,8 +17,21 @@ export type MoreSheetItem = {
   icon: ReactNode;
 };
 
+export type MoreSheetAccount = {
+  /** False for a visitor with no session — the row becomes a "Sign in" link. */
+  signedIn: boolean;
+  displayName: string;
+  roleLabel: string;
+};
+
 /** The bottom nav's sixth cell: everything else in the District. */
-export function MoreSheet({ items }: { items: MoreSheetItem[] }) {
+export function MoreSheet({
+  items,
+  account,
+}: {
+  items: MoreSheetItem[];
+  account: MoreSheetAccount;
+}) {
   const [open, setOpen] = React.useState(false);
   const pathname = usePathname();
   const moreActive = items.some((entry) => isNavItemActive(pathname, entry.item));
@@ -81,6 +97,68 @@ export function MoreSheet({ items }: { items: MoreSheetItem[] }) {
             );
           })}
         </ul>
+
+        {/*
+         * The account row. On desktop these live in the top bar's account menu,
+         * which is `hidden` below `lg` — without this, Settings and Sign out
+         * were reachable on a phone only by typing the URL.
+         */}
+        <div className="mt-3 border-t border-line pt-3">
+          {account.signedIn ? (
+            <>
+              <p className="m-0 mb-2 px-0.5 text-[11px] leading-none font-extrabold text-muted">
+                {account.displayName} · {account.roleLabel}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href="/profile"
+                  prefetch={false}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-[13px] border border-line bg-[#0c121f] px-3 py-2.5",
+                    "text-[12.5px] font-extrabold text-ink hover:border-[#3d4d73]",
+                  )}
+                >
+                  <UserRound className="size-4 text-blue" aria-hidden="true" />
+                  Profile
+                </Link>
+                <Link
+                  href="/settings"
+                  prefetch={false}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-[13px] border border-line bg-[#0c121f] px-3 py-2.5",
+                    "text-[12.5px] font-extrabold text-ink hover:border-[#3d4d73]",
+                  )}
+                >
+                  <Settings className="size-4 text-blue" aria-hidden="true" />
+                  Settings
+                </Link>
+              </div>
+              <ActionForm
+                action={signOutAction}
+                className="mt-2 grid gap-2"
+                footer={(pending) => (
+                  <Button type="submit" variant="outline" size="sm" loading={pending} fullWidth>
+                    <LogOut className="size-3.5" aria-hidden="true" />
+                    Sign out
+                  </Button>
+                )}
+              >
+                <span className="sr-only">Sign out of AgentDistrict</span>
+              </ActionForm>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              onClick={() => setOpen(false)}
+              className={cn(buttonClasses("primary", "sm"), "w-full")}
+            >
+              <LogIn className="size-3.5" aria-hidden="true" />
+              Sign in
+            </Link>
+          )}
+        </div>
       </Sheet>
     </>
   );

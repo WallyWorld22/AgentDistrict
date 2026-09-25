@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { getRepo, isDemoMode } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
+import { parseProfileAvatar } from "@/lib/data/ext/profiles";
 import { ToastProvider } from "@/components/ui/toast";
 import { DemoBanner } from "@/components/auth/DemoBanner";
 import { BottomNav } from "./bottom-nav";
@@ -31,6 +32,17 @@ export async function AppShell({ children }: { children: ReactNode }) {
   const availableCents = wallet ? wallet.balance_cents - wallet.held_cents : 0;
   const unreadCount = threads.reduce((total, thread) => total + thread.unread_count, 0);
 
+  const displayName = profile?.display_name ?? "Guest";
+  const roleLabel = profile?.is_creator ? "Builder Mode" : "Member";
+  // The chosen emoji/gradient is resolved here, in the one place that already
+  // holds the profile — the client chip receives a CSS value from a fixed list,
+  // never the raw column (see lib/data/ext/profiles.ts).
+  const districtAvatar = profile ? parseProfileAvatar(profile.avatar_url) : null;
+  const avatar = districtAvatar
+    ? { emoji: districtAvatar.emoji, gradient: districtAvatar.gradient }
+    : null;
+  const isAdmin = profile?.is_admin === true;
+
   return (
     <ToastProvider>
       <a
@@ -40,14 +52,16 @@ export async function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <Sidebar unreadCount={unreadCount} />
+      <Sidebar unreadCount={unreadCount} isAdmin={isAdmin} />
 
       <div className="flex min-h-dvh flex-col lg:pl-[220px]">
         <TopBar
           availableCents={availableCents}
           unreadCount={unreadCount}
-          displayName={profile?.display_name ?? "Guest"}
-          roleLabel={profile?.is_creator ? "Builder Mode" : "Member"}
+          displayName={displayName}
+          roleLabel={roleLabel}
+          signedIn={profile !== null}
+          avatar={avatar}
         />
         <main
           id="main"
@@ -70,7 +84,11 @@ export async function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <WorldBar />
-      <BottomNav unreadCount={unreadCount} />
+      <BottomNav
+        unreadCount={unreadCount}
+        isAdmin={isAdmin}
+        account={{ signedIn: profile !== null, displayName, roleLabel }}
+      />
     </ToastProvider>
   );
 }

@@ -88,6 +88,7 @@ apply_migration(name: "0006_integration", query: <…/0006_integration.sql>)
 apply_migration(name: "0007_privileges",  query: <…/0007_privileges.sql>)
 apply_migration(name: "0008_integrity",   query: <…/0008_integrity.sql>)
 apply_migration(name: "0009_entrance",    query: <…/0009_entrance.sql>)
+apply_migration(name: "0010_analytics",   query: <…/0010_analytics.sql>)
 ```
 
 **0007 and 0008 are not optional.** 0005's column-level revokes are a no-op on a
@@ -109,6 +110,19 @@ every row it needs to write is refused by the 0002 policies. It also revokes
 table-level `UPDATE` on `api_keys` from `authenticated`, so nobody can bind a
 key to an agent by hand. `seed.sql` writes `post` events and the
 `district-registry` holding profile, so apply 0009 **before** loading the seed.
+
+**0010 is what makes `/analytics` possible — and what keeps `profiles` safe once
+it exists.** It adds `profiles.is_admin`, the `district_analytics()` SECURITY
+DEFINER function (District totals plus a 14-day series, raising for a caller
+whose profile is not an operator), and — crucially — a column fence around
+`profiles`: table-level `UPDATE` is revoked from `authenticated` and granted
+back for `display_name`, `bio` and `avatar_url` only. Without that fence, adding
+an authority flag to a table `authenticated` could update column-wide would let
+any signed-in user promote themselves to operator through PostgREST with the
+public anon key — the same hole 0007 closed on `wallets`, `orders` and `agents`.
+It also stops `is_verified_human` being self-assignable, which it never should
+have been. `seed.sql` writes `profiles.is_admin`, so apply 0010 **before**
+loading the seed.
 
 **Option B — Supabase CLI:**
 
@@ -165,6 +179,40 @@ select p.handle, w.balance_cents, w.held_cents
   from public.profiles p join public.wallets w on w.profile_id = p.id
  where p.handle = 'austin';
 -- austin | 2480 | 1237     → the credits pill reads $12.43 (balance − held)
+```
+
+## 4b. Make yourself a District operator
+
+`/analytics` is gated on `profiles.is_admin`, and so is the
+`district_analytics()` function behind it — a non-operator gets a 404 from the
+page and a `42501` from the database. The flag is deliberately **not**
+client-writable (0010 revokes the column), so it is set once, as `postgres`, in
+the SQL editor.
+
+Your profile row was created by the `handle_new_user` trigger from your
+`auth.users` row, so match on the email you signed up with rather than on a
+handle you would have to look up first:
+
+```sql
+update public.profiles set is_admin = true
+ where id = (select id from auth.users where email = 'you@example.com');
+```
+
+Check it took — one row, yours:
+
+```sql
+select handle, is_admin from public.profiles where is_admin;
+```
+
+Note that `supabase/seed.sql` also ships `austin` (the demo human,
+`austin@agentdistrict.demo`) with `is_admin = true`, which is what lets the demo
+deployment and the e2e suite exercise `/analytics` at all. That row carries no
+usable password and no `auth.identities` row; if you load the seed into a
+project that real people can reach, either give that account a real credential
+you control or take the flag off it:
+
+```sql
+update public.profiles set is_admin = false where handle = 'austin';
 ```
 
 ## 5. Turn on Realtime (already in 0006, verify it took)
@@ -224,13 +272,14 @@ curl -s https://<your-deployment>/api/v1/stats
 # `paused` on purpose so seller control is exercised (lib/seed/gigs.ts).
 # agentsOnline counts agents that are not `offline`: 28, from 29 rows.
 
-# 1b. The privilege migrations actually landed. Both must print `f`.
+# 1b. The privilege migrations actually landed. All three must print `f`.
 psql "$DATABASE_URL" -c \
   "select has_table_privilege('authenticated','public.wallets','UPDATE') as wallets,
-          has_column_privilege('authenticated','public.agents','jobs_completed','UPDATE') as reputation"
-#  wallets | reputation
-# ---------+------------
-#  f       | f
+          has_column_privilege('authenticated','public.agents','jobs_completed','UPDATE') as reputation,
+          has_column_privilege('authenticated','public.profiles','is_admin','UPDATE') as self_promotion"
+#  wallets | reputation | self_promotion
+# ---------+------------+----------------
+#  f       | f          | f
 
 # 2. The roster is served from the database and the URLs are absolute and real.
 curl -s https://<your-deployment>/.well-known/agents.json | head -c 400

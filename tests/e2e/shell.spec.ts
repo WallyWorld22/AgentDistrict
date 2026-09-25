@@ -1,5 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { MOBILE_NAV, NAV_ITEMS } from "../../lib/nav";
+import { MOBILE_NAV, NAV_ITEMS, withAdminRows } from "../../lib/nav";
+
+/**
+ * Demo mode signs every visitor in as `@austin`, who is seeded `is_admin`
+ * (lib/seed/profiles.ts), so the shell under test always carries the operators'
+ * Analytics row. That is deliberate: a row that never renders in the suite is a
+ * row nothing checks. `withAdminRows` is the same pure transform the shell
+ * applies, so this stays right if the row ever moves.
+ */
+const NAV_ROWS = withAdminRows(NAV_ITEMS, { isAdmin: true });
 
 /**
  * Shell contract (BUILD_SPEC §3 + docs/reference/desktop-home.png).
@@ -32,12 +41,15 @@ test.describe("desktop shell (1440x900)", () => {
     const sidebar = page.getByRole("complementary", { name: "District navigation" });
     await expect(sidebar).toBeVisible();
 
-    // 18 items: the 17 reference rows plus District Feed.
+    // 18 items: the 17 reference rows plus District Feed. Analytics is not one
+    // of them — it is appended for operators only (see NAV_ROWS above), which
+    // is why the sidebar shows 19 here and 18 for everybody else.
     expect(NAV_ITEMS).toHaveLength(18);
+    expect(NAV_ROWS).toHaveLength(19);
     const links = sidebar.getByRole("navigation", { name: "Primary" }).getByRole("link");
-    await expect(links).toHaveCount(NAV_ITEMS.length);
+    await expect(links).toHaveCount(NAV_ROWS.length);
 
-    for (const item of NAV_ITEMS) {
+    for (const item of NAV_ROWS) {
       // Badged rows ("The Lounge LIVE", "Inbox 3") make the accessible name
       // longer than the label, so match on href and assert the visible text.
       const link = sidebar.locator(`nav a[href="${item.href}"]`);
@@ -75,7 +87,8 @@ test.describe("desktop shell (1440x900)", () => {
     );
     await expect(header.getByLabel("Add credits")).toBeVisible();
     await expect(header.getByLabel("Notifications — 3 unread")).toContainText("3");
-    await expect(header.getByRole("link", { name: /Austin/ })).toContainText(
+    // The account chip is a menu button now, not a link to /profile.
+    await expect(header.getByRole("button", { name: /Austin/ })).toContainText(
       "Builder Mode",
     );
 
@@ -133,6 +146,80 @@ test.describe("desktop shell (1440x900)", () => {
     await expect(
       sidebar().getByRole("link", { name: "Home", exact: true }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  test("the account chip opens a keyboard-navigable menu", async ({ page }) => {
+    await page.goto("/");
+
+    const trigger = page.getByRole("button", { name: /Austin/ });
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    await trigger.click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    // Profile, Settings, Sign out — and focus starts on the first of them.
+    await expect(menu.getByRole("menuitem", { name: "Profile" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+    await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Profile" })).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitem", { name: "Settings" })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
+
+    // Escape closes and hands focus back to the trigger.
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
+  test("signing out in demo mode says why it cannot", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /Austin/ }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+    // Demo mode has no session to end; the action answers with the reason and
+    // the menu renders it rather than swallowing it. Scoped to the menu: Next's
+    // own route announcer is an empty `role="alert"` on every page.
+    await expect(page.getByRole("menu").getByRole("alert")).toContainText(
+      "Demo mode signs every visitor in",
+    );
+  });
+
+  test("Settings opens from the account menu", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /Austin/ }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Settings");
+    // Not a sidebar destination: lib/nav.ts is untouched by /settings.
+    await expect(
+      page
+        .getByRole("complementary", { name: "District navigation" })
+        .locator('nav a[href="/settings"]'),
+    ).toHaveCount(0);
+  });
+
+  test("the operators' Analytics row is in the sidebar for an admin", async ({ page }) => {
+    await page.goto("/");
+
+    const row = page
+      .getByRole("complementary", { name: "District navigation" })
+      .locator('nav a[href="/analytics"]');
+    await expect(row).toHaveCount(1);
+    await row.click();
+
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("District Analytics");
   });
 
   test("skip link focuses the main landmark", async ({ page }) => {
@@ -206,6 +293,14 @@ test.describe("mobile shell (390x844)", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Wallet" })).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Docs" })).toBeVisible();
+
+    // The account row: the top bar's menu is hidden below `lg`, so Settings and
+    // Sign out have to live here too.
+    await expect(dialog.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+    await expect(dialog.getByRole("button", { name: "Sign out" })).toBeVisible();
 
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).toBeHidden();

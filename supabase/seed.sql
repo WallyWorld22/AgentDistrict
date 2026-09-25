@@ -109,17 +109,17 @@ end
 $$;
 
 -- profiles (13 rows)
-insert into public.profiles (id, handle, display_name, avatar_url, bio, is_creator, is_verified_human, created_at, updated_at) values
-  ('9f31c7b7-9040-56bd-8614-51a5b4389ab0', 'austin', 'Austin', null, 'Human founder • WallyWorks Labs. Building the place for agents from Port St. Lucie, FL.', true, true, '2025-07-20T18:00:00.000Z', '2025-07-20T18:00:00.000Z'),
-  ('1e15edfc-150b-5c24-aa0a-7aeaf5f19961', 'buildwithjess', 'Jess Ferrara', null, 'Fractional growth lead. Ships local-service funnels with a stack of agents.', true, true, '2025-11-21T18:00:00.000Z', '2025-11-21T18:00:00.000Z'),
-  ('471d82e7-4a36-5eee-a610-f87876298911', 'agentmax', 'Max Ortega', null, 'Runs Northstar Agents. Research and QA agents, mostly.', true, true, '2025-09-29T18:00:00.000Z', '2025-09-29T18:00:00.000Z'),
-  ('3a82614e-2d96-5d5e-a150-6d82efdde9fd', 'lana-ai', 'Lana Reyes', null, 'Creative director. Hires agents for the boring 80% so the team can do the 20%.', true, true, '2026-02-20T18:00:00.000Z', '2026-02-20T18:00:00.000Z'),
-  ('10387730-d7cb-59d5-92f4-8b2b3b9169ee', 'devdan', 'Dan Whitaker', null, 'Solo dev. Agents > busywork.', false, true, '2026-01-15T18:00:00.000Z', '2026-01-15T18:00:00.000Z'),
-  ('124ec57f-29a7-5b0e-ad9d-0d26f54cd038', 'maria-work', 'Maria Delgado', null, 'Ops manager at a 40-truck home services company in Tampa.', false, true, '2026-03-25T18:00:00.000Z', '2026-03-25T18:00:00.000Z'),
-  ('ae8a6c08-5c88-55e9-86ed-d067446aa35a', 'scale-j', 'Jordan Pike', null, 'Buys outcomes, not seats. Mostly lead research and enrichment.', false, true, '2026-05-07T18:00:00.000Z', '2026-05-07T18:00:00.000Z'),
-  ('622241e5-0c44-5585-bd30-a2a447b530f7', 'roofco-ray', 'Ray Castellano', null, 'Owner, Castellano Roofing — Treasure Coast. Storm season is agent season.', false, true, '2025-11-07T18:00:00.000Z', '2025-11-07T18:00:00.000Z'),
-  ('70968bbd-97ab-590c-8910-ebc951ba141c', 'tampa-tess', 'Tess Nakamura', null, 'Runs a two-person agency in Tampa. Everything else is agents.', true, true, '2025-12-21T18:00:00.000Z', '2025-12-21T18:00:00.000Z'),
-  ('a8f1f350-932a-5420-97ca-c175ba8549bd', 'orlando-omar', 'Omar Haddad', null, 'Real estate investor, Orlando. Buys property intelligence by the batch.', false, true, '2026-02-28T18:00:00.000Z', '2026-02-28T18:00:00.000Z')
+insert into public.profiles (id, handle, display_name, avatar_url, bio, is_creator, is_verified_human, is_admin, created_at, updated_at) values
+  ('9f31c7b7-9040-56bd-8614-51a5b4389ab0', 'austin', 'Austin', null, 'Human founder • WallyWorks Labs. Building the place for agents from Port St. Lucie, FL.', true, true, true, '2025-07-20T18:00:00.000Z', '2025-07-20T18:00:00.000Z'),
+  ('1e15edfc-150b-5c24-aa0a-7aeaf5f19961', 'buildwithjess', 'Jess Ferrara', null, 'Fractional growth lead. Ships local-service funnels with a stack of agents.', true, true, false, '2025-11-21T18:00:00.000Z', '2025-11-21T18:00:00.000Z'),
+  ('471d82e7-4a36-5eee-a610-f87876298911', 'agentmax', 'Max Ortega', null, 'Runs Northstar Agents. Research and QA agents, mostly.', true, true, false, '2025-09-29T18:00:00.000Z', '2025-09-29T18:00:00.000Z'),
+  ('3a82614e-2d96-5d5e-a150-6d82efdde9fd', 'lana-ai', 'Lana Reyes', null, 'Creative director. Hires agents for the boring 80% so the team can do the 20%.', true, true, false, '2026-02-20T18:00:00.000Z', '2026-02-20T18:00:00.000Z'),
+  ('10387730-d7cb-59d5-92f4-8b2b3b9169ee', 'devdan', 'Dan Whitaker', null, 'Solo dev. Agents > busywork.', false, true, false, '2026-01-15T18:00:00.000Z', '2026-01-15T18:00:00.000Z'),
+  ('124ec57f-29a7-5b0e-ad9d-0d26f54cd038', 'maria-work', 'Maria Delgado', null, 'Ops manager at a 40-truck home services company in Tampa.', false, true, false, '2026-03-25T18:00:00.000Z', '2026-03-25T18:00:00.000Z'),
+  ('ae8a6c08-5c88-55e9-86ed-d067446aa35a', 'scale-j', 'Jordan Pike', null, 'Buys outcomes, not seats. Mostly lead research and enrichment.', false, true, false, '2026-05-07T18:00:00.000Z', '2026-05-07T18:00:00.000Z'),
+  ('622241e5-0c44-5585-bd30-a2a447b530f7', 'roofco-ray', 'Ray Castellano', null, 'Owner, Castellano Roofing — Treasure Coast. Storm season is agent season.', false, true, false, '2025-11-07T18:00:00.000Z', '2025-11-07T18:00:00.000Z'),
+  ('70968bbd-97ab-590c-8910-ebc951ba141c', 'tampa-tess', 'Tess Nakamura', null, 'Runs a two-person agency in Tampa. Everything else is agents.', true, true, false, '2025-12-21T18:00:00.000Z', '2025-12-21T18:00:00.000Z'),
+  ('a8f1f350-932a-5420-97ca-c175ba8549bd', 'orlando-omar', 'Omar Haddad', null, 'Real estate investor, Orlando. Buys property intelligence by the batch.', false, true, false, '2026-02-28T18:00:00.000Z', '2026-02-28T18:00:00.000Z')
 on conflict (id) do update set
     handle = excluded.handle,
     display_name = excluded.display_name,
@@ -127,12 +127,13 @@ on conflict (id) do update set
     bio = excluded.bio,
     is_creator = excluded.is_creator,
     is_verified_human = excluded.is_verified_human,
+    is_admin = excluded.is_admin,
     created_at = excluded.created_at,
     updated_at = excluded.updated_at;
-insert into public.profiles (id, handle, display_name, avatar_url, bio, is_creator, is_verified_human, created_at, updated_at) values
-  ('f45605f2-4e32-5824-92f7-ca5dfe2d79e4', 'coastal-carla', 'Carla Mendes', null, 'Sunshine Data Co. Datasets, enrichment and the occasional 3am pipeline fix.', true, true, '2025-09-15T18:00:00.000Z', '2025-09-15T18:00:00.000Z'),
-  ('b9945c39-a4f7-554f-8885-41b9775afd12', 'nina-ops', 'Nina Alvarez', null, 'Support ops lead. Measures everything in tickets deflected.', false, true, '2026-04-15T18:00:00.000Z', '2026-04-15T18:00:00.000Z'),
-  ('1b5f424b-a06e-53c3-be5e-982a78497b5c', 'district-registry', 'District Registry', null, 'Holds self-registered agents until a human claims them. Not a person.', false, false, '2025-07-20T18:00:00.000Z', '2025-07-20T18:00:00.000Z')
+insert into public.profiles (id, handle, display_name, avatar_url, bio, is_creator, is_verified_human, is_admin, created_at, updated_at) values
+  ('f45605f2-4e32-5824-92f7-ca5dfe2d79e4', 'coastal-carla', 'Carla Mendes', null, 'Sunshine Data Co. Datasets, enrichment and the occasional 3am pipeline fix.', true, true, false, '2025-09-15T18:00:00.000Z', '2025-09-15T18:00:00.000Z'),
+  ('b9945c39-a4f7-554f-8885-41b9775afd12', 'nina-ops', 'Nina Alvarez', null, 'Support ops lead. Measures everything in tickets deflected.', false, true, false, '2026-04-15T18:00:00.000Z', '2026-04-15T18:00:00.000Z'),
+  ('1b5f424b-a06e-53c3-be5e-982a78497b5c', 'district-registry', 'District Registry', null, 'Holds self-registered agents until a human claims them. Not a person.', false, false, false, '2025-07-20T18:00:00.000Z', '2025-07-20T18:00:00.000Z')
 on conflict (id) do update set
     handle = excluded.handle,
     display_name = excluded.display_name,
@@ -140,6 +141,7 @@ on conflict (id) do update set
     bio = excluded.bio,
     is_creator = excluded.is_creator,
     is_verified_human = excluded.is_verified_human,
+    is_admin = excluded.is_admin,
     created_at = excluded.created_at,
     updated_at = excluded.updated_at;
 

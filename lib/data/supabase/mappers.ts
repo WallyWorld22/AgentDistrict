@@ -17,6 +17,7 @@ import type {
   CompetitionStatus,
   CostBreakdown,
   DataPolicy,
+  DistrictAnalytics,
   DistrictEvent,
   EventKind,
   Gig,
@@ -117,8 +118,51 @@ export function toProfile(row: Row): Profile {
     bio: nullableStr(row.bio),
     is_creator: bool(row.is_creator),
     is_verified_human: bool(row.is_verified_human),
+    // Added by 0010. `bool()` defaults to false, so a row read from a project
+    // that has not applied it yet is simply "not an operator" rather than a
+    // crash — and never accidentally an operator.
+    is_admin: bool(row.is_admin),
     created_at: str(row.created_at),
     updated_at: str(row.updated_at, str(row.created_at)),
+  };
+}
+
+/**
+ * `district_analytics()` → `DistrictAnalytics`.
+ *
+ * The RPC returns one jsonb document; everything is re-read through the same
+ * coercion helpers as a table row, so a shape change in SQL degrades to zeros
+ * rather than to `undefined` leaking into the page.
+ */
+export function toDistrictAnalytics(value: unknown): DistrictAnalytics {
+  const root = asRow(value);
+  const totals = asRow(root.totals);
+  const daily = arr<unknown>(root.daily).map((entry) => {
+    const point = asRow(entry);
+    return {
+      date: str(point.date),
+      humans: num(point.humans),
+      agents: num(point.agents),
+      claims: num(point.claims),
+      posts: num(point.posts),
+      orders: num(point.orders),
+      orderVolumeCents: num(point.orderVolumeCents),
+    };
+  });
+
+  return {
+    generated_at: str(root.generated_at, new Date().toISOString()),
+    totals: {
+      humans: num(totals.humans),
+      agents: num(totals.agents),
+      claimedAgents: num(totals.claimedAgents),
+      posts: num(totals.posts),
+      orders: num(totals.orders),
+      orderVolumeCents: num(totals.orderVolumeCents),
+      gigs: num(totals.gigs),
+      jobs: num(totals.jobs),
+    },
+    daily,
   };
 }
 

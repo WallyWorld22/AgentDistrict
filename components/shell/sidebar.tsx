@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { NAV_ITEMS, toNavLinkData, withBadges } from "@/lib/nav";
+import { NAV_ITEMS, toNavLinkData, withAdminRows, withBadges } from "@/lib/nav";
 import { Brand } from "./brand";
 import { SidebarNavLink } from "./nav-link";
 import { WorldOrb } from "./world-orb";
@@ -7,6 +7,14 @@ import { WorldOrb } from "./world-orb";
 export type SidebarProps = {
   /** Unread inbox messages — drives the red count badge. */
   unreadCount?: number;
+  /**
+   * `profiles.is_admin` for the signed-in viewer — adds the Analytics row.
+   *
+   * Threaded from `AppShell` rather than read here: the sidebar is a Server
+   * Component but it is not the place that resolves identity, and one profile
+   * read per request is already one more than the shell needs.
+   */
+  isAdmin?: boolean;
 };
 
 /**
@@ -21,8 +29,8 @@ export type SidebarProps = {
  * The fixed @World bar overlays the bottom of the viewport, so the column
  * reserves `--spacing-worldbar` of padding for it.
  */
-export function Sidebar({ unreadCount = 0 }: SidebarProps) {
-  const items = withBadges(NAV_ITEMS, { unread: unreadCount });
+export function Sidebar({ unreadCount = 0, isAdmin = false }: SidebarProps) {
+  const items = withAdminRows(withBadges(NAV_ITEMS, { unread: unreadCount }), { isAdmin });
 
   return (
     <aside

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Bell, ChevronDown, Plus, Users } from "lucide-react";
+import { Bell, Plus, Users } from "lucide-react";
 import { formatCents } from "@/lib/utils";
-import { initialsFrom } from "@/components/ui/avatar";
+import { AccountMenu, type AccountAvatar } from "./account-menu";
 import { Brand } from "./brand";
 import { SearchForm } from "./search-form";
 
@@ -12,20 +12,26 @@ export type TopBarProps = {
   displayName: string;
   /** "Builder Mode" for a creator, "Member" otherwise. */
   roleLabel: string;
+  /** False for a visitor with no session — the account chip becomes "Sign in". */
+  signedIn: boolean;
+  /** The District avatar chosen on `/settings`, or `null` for initials. */
+  avatar: AccountAvatar | null;
 };
 
 /**
- * Top bar (BUILD_SPEC §3): search, credits, notifications, profile.
+ * Top bar (BUILD_SPEC §3): search, credits, notifications, account menu.
  *
  * A **Server Component** — the credits pill, bell badge and identity all come
  * from the repository through `AppShell`, so the numbers move when the demo
- * store does. Only the search box is a client island.
+ * store does. The search box and the account menu are the client islands.
  */
 export function TopBar({
   availableCents,
   unreadCount,
   displayName,
   roleLabel,
+  signedIn,
+  avatar,
 }: TopBarProps) {
   const credits = formatCents(availableCents);
   const badge = unreadCount > 99 ? "99+" : String(unreadCount);
@@ -82,27 +88,12 @@ export function TopBar({
           ) : null}
         </Link>
 
-        <Link
-          href="/profile"
-          className="flex shrink-0 items-center gap-2 rounded-[12px] py-1 pr-1 pl-0.5 transition-colors hover:bg-white/5"
-        >
-          <span
-            className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-[#f0b45c] to-[#a4642a] text-[12px] font-extrabold text-[#2a1608] ring-2 ring-[#2b3550]"
-            aria-hidden="true"
-          >
-            {initialsFrom(displayName)}
-          </span>
-          <span className="hidden flex-col leading-none md:flex">
-            <b className="text-[12.5px] font-extrabold">{displayName}</b>
-            <small className="mt-1 text-[10.5px] font-semibold text-[#5aa8ff]">
-              {roleLabel}
-            </small>
-          </span>
-          <ChevronDown
-            className="hidden size-3.5 text-[#66728a] md:block"
-            aria-hidden="true"
-          />
-        </Link>
+        <AccountMenu
+          signedIn={signedIn}
+          displayName={displayName}
+          roleLabel={roleLabel}
+          avatar={avatar}
+        />
       </div>
     </header>
   );

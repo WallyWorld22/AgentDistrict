@@ -316,6 +316,15 @@ export type Profile = {
   bio: string | null;
   is_creator: boolean;
   is_verified_human: boolean;
+  /**
+   * District operator (0010). Gates `/analytics` and the `district_analytics()`
+   * RPC, and nothing else. It is **not** client-writable: 0010 revokes
+   * table-level UPDATE on `profiles` from `authenticated` and grants back only
+   * the three columns `updateProfile()` writes, so a signed-in user cannot
+   * promote themselves (nor flip their own `is_verified_human` badge, which the
+   * same revoke closes).
+   */
+  is_admin: boolean;
   created_at: ISODateString;
   updated_at: ISODateString;
 };
@@ -720,6 +729,55 @@ export type NetworkStats = {
   guildsActive: number;
 };
 
+/* ----------------------------------------------------------------- analytics */
+
+/** One UTC day of the District's 14-day series. */
+export type AnalyticsPoint = {
+  /** `YYYY-MM-DD`, UTC. */
+  date: string;
+  /** Humans who created a profile that day. */
+  humans: number;
+  /** Agent Passports registered that day. */
+  agents: number;
+  /** Registered agents a human claimed that day. */
+  claims: number;
+  /** Public feed posts written that day (`events.kind = 'post'`). */
+  posts: number;
+  /** Orders placed that day. */
+  orders: number;
+  /** Sum of those orders' `amount_cents`. */
+  orderVolumeCents: Cents;
+};
+
+export type AnalyticsTotals = {
+  humans: number;
+  agents: number;
+  claimedAgents: number;
+  posts: number;
+  orders: number;
+  orderVolumeCents: Cents;
+  gigs: number;
+  jobs: number;
+};
+
+/**
+ * `getDistrictAnalytics()` — the operators' dashboard (BUILD_SPEC §4 `/analytics`).
+ *
+ * Admin-only in both adapters: Supabase runs the SECURITY DEFINER
+ * `district_analytics()` RPC, which raises for a caller whose profile is not
+ * `is_admin`; the demo adapter throws `ForbiddenError` on the same condition.
+ * `daily` is always 14 entries, oldest first, with zero-filled gaps so a
+ * sparkline never has to interpolate.
+ */
+export type DistrictAnalytics = {
+  generated_at: ISODateString;
+  totals: AnalyticsTotals;
+  daily: AnalyticsPoint[];
+};
+
+/** How many days of daily series `getDistrictAnalytics()` returns. */
+export const ANALYTICS_DAYS = 14;
+
 /** `getTrendingAgents()` — agents in the District's curated trending order. */
 export type TrendingAgent = Agent;
 
@@ -1014,6 +1072,24 @@ export type WalletPolicyPatch = {
   autonomousSpendLimitCents?: Cents;
   /** The Command Center kill switch — see `Wallet.autonomous_paused`. */
   autonomousPaused?: boolean;
+};
+
+/**
+ * The three profile columns a human may edit about themselves (`/settings`).
+ *
+ * Deliberately narrow: `handle` is an identity other rows point at, and
+ * `is_creator` / `is_verified_human` / `is_admin` are the District's to say, not
+ * the account holder's. 0010 enforces exactly this list at the column-privilege
+ * level, so the Supabase adapter cannot widen it by accident.
+ */
+export type UpdateProfileInput = {
+  display_name?: string;
+  bio?: string | null;
+  /**
+   * Either an https URL or a District avatar token
+   * (`district:<emoji>:<gradient-id>` — see `lib/data/ext/profiles.ts`).
+   */
+  avatar_url?: string | null;
 };
 
 export type PostLoungeMessageInput = {

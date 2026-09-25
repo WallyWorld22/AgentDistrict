@@ -26,6 +26,7 @@ import {
   hashClaimToken,
 } from "../hash";
 import { districtNow } from "../clock";
+import { countInto, emptySeries } from "../analytics";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import type {
@@ -53,6 +54,7 @@ import type {
   CreateReviewInput,
   CreateThreadInput,
   CreatedApiKey,
+  DistrictAnalytics,
   DistrictDataset,
   DistrictEvent,
   EventFilter,
@@ -98,6 +100,7 @@ import type {
   UUID,
   UpdateAgentInput,
   UpdatePresenceInput,
+  UpdateProfileInput,
   Wallet,
   WalletPolicyPatch,
   WalletTransaction,
@@ -410,6 +413,55 @@ export class DemoRepository implements Repository {
       guildsActive: this.db.guilds.filter((guild) => guild.status === "available").length,
     };
     return real;
+  }
+
+  /**
+   * The operators' dashboard, computed in memory from the same store every
+   * other demo read sees (BUILD_SPEC §4 `/analytics`).
+   *
+   * Admin is `profiles.is_admin`, exactly as in Postgres — the seed gives the
+   * demo human that flag and nobody else, so demo mode exercises both branches
+   * (`/analytics` renders for `@austin`, and `notFound()` for anyone else the
+   * page is ever asked to render for).
+   *
+   * Claims are the in-memory `agentClaims` map, which — like every demo
+   * mutation — starts empty and resets on cold start. A freshly booted demo
+   * therefore reports zero claims honestly rather than inventing a history.
+   */
+  async getDistrictAnalytics(): Promise<DistrictAnalytics> {
+    const viewer = await this.getCurrentProfile();
+    if (!viewer?.is_admin) {
+      throw new ForbiddenError("The District analytics are for operators only");
+    }
+
+    const nowMs = this.now();
+    const series = emptySeries(nowMs);
+    const claims = [...this.agentClaims.values()];
+
+    for (const profile of this.db.profiles) countInto(series, profile.created_at, "humans");
+    for (const agent of this.db.agents) countInto(series, agent.created_at, "agents");
+    for (const claim of claims) countInto(series, claim.claimed_at, "claims");
+    for (const event of this.db.events) {
+      if (event.kind === "post") countInto(series, event.created_at, "posts");
+    }
+    for (const order of this.db.orders) {
+      countInto(series, order.created_at, "orders", order.amount_cents);
+    }
+
+    return {
+      generated_at: this.nowIso(),
+      totals: {
+        humans: this.db.profiles.length,
+        agents: this.db.agents.length,
+        claimedAgents: claims.filter((claim) => claim.claimed_at !== null).length,
+        posts: this.db.events.filter((event) => event.kind === "post").length,
+        orders: this.db.orders.length,
+        orderVolumeCents: this.db.orders.reduce((sum, order) => sum + order.amount_cents, 0),
+        gigs: this.db.gigs.length,
+        jobs: this.db.jobs.length,
+      },
+      daily: [...series.values()],
+    };
   }
 
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
@@ -2021,6 +2073,29 @@ export class DemoRepository implements Repository {
   /** Demo mode is always signed in as the demo human, `austin`. */
   async getCurrentProfile(): Promise<Profile | null> {
     return this.getProfileByHandle(DEMO_PROFILE_HANDLE);
+  }
+
+  async updateProfile(profileId: UUID, patch: UpdateProfileInput): Promise<Profile> {
+    const profile = this.profileById(profileId);
+    if (!profile) throw new NotFoundError("Profile");
+
+    if (patch.display_name !== undefined) {
+      const name = patch.display_name.trim();
+      if (name.length < 2) throw new ValidationError("Your display name needs two characters.");
+      if (name.length > 60) throw new ValidationError("Display names are 60 characters or fewer.");
+      profile.display_name = name;
+    }
+    if (patch.bio !== undefined) {
+      const bio = patch.bio === null ? null : patch.bio.trim();
+      if (bio && bio.length > 400) throw new ValidationError("Bios are 400 characters or fewer.");
+      profile.bio = bio && bio.length > 0 ? bio : null;
+    }
+    if (patch.avatar_url !== undefined) {
+      const avatar = patch.avatar_url === null ? null : patch.avatar_url.trim();
+      profile.avatar_url = avatar && avatar.length > 0 ? avatar : null;
+    }
+    profile.updated_at = this.nowIso();
+    return profile;
   }
 
   /* -------------------------------------------------------------- api keys */

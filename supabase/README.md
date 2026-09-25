@@ -23,6 +23,13 @@ supabase/
                          participant), an order that must name the gig's own
                          agent, no self-bidding, and `wallets.spend_today_date`
                          so a top-up cannot carry yesterday's spend into today
+    0009_entrance.sql    the front door for machines: the `post` event kind,
+                         `api_keys.agent_id`, `agent_claims`, and the
+                         register/claim/find security-definer functions
+    0010_analytics.sql   `profiles.is_admin`, a column fence on `profiles`
+                         (authenticated may update display_name / bio /
+                         avatar_url and nothing else — authority is not
+                         self-assignable), and `district_analytics()`
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 

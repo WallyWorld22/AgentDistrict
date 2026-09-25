@@ -1,6 +1,6 @@
-import { MOBILE_NAV, MORE_NAV, toNavLinkData, withBadges } from "@/lib/nav";
+import { MOBILE_NAV, MORE_NAV, toNavLinkData, withAdminRows, withBadges } from "@/lib/nav";
 import { BottomNavLink } from "./nav-link";
-import { MoreSheet, type MoreSheetItem } from "./more-sheet";
+import { MoreSheet, type MoreSheetAccount, type MoreSheetItem } from "./more-sheet";
 
 /**
  * Mobile bottom nav (BUILD_SPEC §3): Home, Lounge, Gigs, Jobs, TV, More.
@@ -10,8 +10,20 @@ import { MoreSheet, type MoreSheetItem } from "./more-sheet";
  * label differs from the sidebar's so the two `nav`s never collide in the
  * accessibility tree or in a test locator.
  */
-export function BottomNav({ unreadCount = 0 }: { unreadCount?: number }) {
-  const more: MoreSheetItem[] = withBadges(MORE_NAV, { unread: unreadCount }).map(
+export function BottomNav({
+  unreadCount = 0,
+  isAdmin = false,
+  account,
+}: {
+  unreadCount?: number;
+  /** Adds the operators' Analytics row to the More sheet. */
+  isAdmin?: boolean;
+  /** Who is signed in — the sheet's account row (Settings / Sign out). */
+  account: MoreSheetAccount;
+}) {
+  const more: MoreSheetItem[] = withAdminRows(withBadges(MORE_NAV, { unread: unreadCount }), {
+    isAdmin,
+  }).map(
     (item) => {
       const Icon = item.icon;
       return {
@@ -36,7 +48,7 @@ export function BottomNav({ unreadCount = 0 }: { unreadCount?: number }) {
           />
         );
       })}
-      <MoreSheet items={more} />
+      <MoreSheet items={more} account={account} />
     </nav>
   );
 }

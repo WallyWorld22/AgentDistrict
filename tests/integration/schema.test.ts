@@ -3,6 +3,8 @@ import path from "node:path";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_PROFILE_ID, profileId, seedCounts } from "@/lib/seed";
+import { analyticsDates } from "@/lib/data/analytics";
+import { ANALYTICS_DAYS, type DistrictAnalytics } from "@/lib/data/types";
 
 /**
  * Schema validation against a REAL Postgres.
@@ -1058,6 +1060,179 @@ suite("supabase schema against a real Postgres", () => {
       ["WallyWorks Labs", 50],
     );
     expect(stores.rows.map((row) => row.kind)).toContain("store");
+  });
+
+  /* ------------------------------------------------- 0010: the analytics RPC */
+
+  it("adds profiles.is_admin and seeds exactly one operator", async () => {
+    const column = await client.query<{ data_type: string; column_default: string | null }>(
+      `select data_type, column_default
+         from information_schema.columns
+        where table_schema = 'public' and table_name = 'profiles' and column_name = 'is_admin'`,
+    );
+    expect(column.rows).toHaveLength(1);
+    expect(column.rows[0].data_type).toBe("boolean");
+    expect(column.rows[0].column_default).toContain("false");
+
+    const admins = await client.query<{ handle: string }>(
+      "select handle from public.profiles where is_admin order by handle",
+    );
+    expect(admins.rows.map((row) => row.handle)).toEqual(["austin"]);
+  });
+
+  /**
+   * The reason 0010 has a privilege section at all: adding an authority flag to
+   * a table `authenticated` could UPDATE table-wide would have let anyone
+   * promote themselves through PostgREST with the public anon key.
+   */
+  it("lets a person edit their own name but not their own authority", async () => {
+    const { rows } = await client.query<Record<string, boolean>>(
+      `select has_column_privilege('authenticated','public.profiles','display_name','UPDATE') as display_name,
+              has_column_privilege('authenticated','public.profiles','bio','UPDATE')          as bio,
+              has_column_privilege('authenticated','public.profiles','avatar_url','UPDATE')   as avatar_url,
+              has_column_privilege('authenticated','public.profiles','is_admin','UPDATE')     as is_admin,
+              has_column_privilege('authenticated','public.profiles','is_verified_human','UPDATE') as verified,
+              has_column_privilege('authenticated','public.profiles','handle','UPDATE')       as handle`,
+    );
+    expect(rows[0]).toEqual({
+      display_name: true,
+      bio: true,
+      avatar_url: true,
+      is_admin: false,
+      verified: false,
+      handle: false,
+    });
+  });
+
+  it("refuses a self-promotion as a real session, and allows the profile edit", async () => {
+    await asAuthenticated(DEMO_PROFILE_ID, async () => {
+      const edited = await client.query<{ display_name: string }>(
+        `update public.profiles set display_name = 'Austin C.', avatar_url = 'district:🛰️:violet'
+          where id = $1 returning display_name`,
+        [DEMO_PROFILE_ID],
+      );
+      expect(edited.rows).toHaveLength(1);
+
+      // A column privilege failure is an error, not a silent zero-row update —
+      // which is exactly the difference between "not yours" and "not allowed".
+      await client.query("savepoint promote");
+      await expect(
+        client.query("update public.profiles set is_admin = true where id = $1", [
+          DEMO_PROFILE_ID,
+        ]),
+      ).rejects.toThrow(/permission denied/i);
+      await client.query("rollback to savepoint promote");
+    });
+  });
+
+  /**
+   * The UPDATE fence alone is not enough, and this is the case that proves it.
+   *
+   * `profiles_delete_self` + `profiles_insert_self` (0002) let a person drop
+   * their own row and write it back — correct on their own. But Supabase's
+   * default `grant all on tables to authenticated` makes that INSERT
+   * *column-wide*, so DELETE-then-INSERT is a two-call route around the UPDATE
+   * revoke and straight to `is_admin = true`. 0010 fences INSERT for the same
+   * reason it fences UPDATE.
+   */
+  it("cannot round-trip a self-promotion through delete + insert", async () => {
+    const attacker = "11111111-2222-4333-8444-555555555555";
+    await client.query("begin");
+    try {
+      // A realistic fresh signup: handle_new_user mints the profile and wallet.
+      await client.query(
+        `insert into auth.users (id, email, raw_user_meta_data)
+         values ($1, 'escalation-probe@example.com', '{"handle":"escalation-probe"}'::jsonb)`,
+        [attacker],
+      );
+      await client.query("set local role authenticated");
+      await client.query("select set_config('request.jwt.claim.sub', $1, true)", [attacker]);
+
+      // Deleting your own profile is legitimate — account deletion. Writing one
+      // back is too. Declaring yourself an operator while you do it is not.
+      await client.query("delete from public.profiles where id = $1", [attacker]);
+      await expect(
+        client.query(
+          `insert into public.profiles (id, handle, display_name, is_admin)
+           values ($1, 'escalation-probe', 'Probe', true)`,
+          [attacker],
+        ),
+      ).rejects.toThrow(/permission denied/i);
+    } finally {
+      await client.query("rollback");
+    }
+
+    const { rows } = await client.query<Record<string, boolean>>(
+      `select has_column_privilege('authenticated','public.profiles','display_name','INSERT') as display_name,
+              has_column_privilege('authenticated','public.profiles','avatar_url','INSERT')   as avatar_url,
+              has_column_privilege('authenticated','public.profiles','is_admin','INSERT')     as is_admin,
+              has_column_privilege('authenticated','public.profiles','is_verified_human','INSERT') as verified,
+              has_column_privilege('authenticated','public.profiles','is_creator','INSERT')   as creator`,
+    );
+    expect(rows[0]).toEqual({
+      display_name: true,
+      avatar_url: true,
+      is_admin: false,
+      verified: false,
+      creator: false,
+    });
+  });
+
+  it("answers district_analytics() for an operator with the seeded totals", async () => {
+    const analytics = await asAuthenticated(DEMO_PROFILE_ID, async () => {
+      const { rows } = await client.query<{ analytics: DistrictAnalytics }>(
+        "select public.district_analytics() as analytics",
+      );
+      return rows[0].analytics;
+    });
+
+    expect(analytics.totals).toMatchObject({
+      humans: seedCounts.profiles,
+      agents: seedCounts.agents,
+      claimedAgents: 0,
+      orders: seedCounts.orders,
+      gigs: seedCounts.gigs,
+      jobs: seedCounts.jobs,
+    });
+
+    const volume = await client.query<{ sum: string }>(
+      "select coalesce(sum(amount_cents), 0)::text as sum from public.orders",
+    );
+    expect(analytics.totals.orderVolumeCents).toBe(Number(volume.rows[0].sum));
+
+    // 14 UTC days, oldest first, no gaps — the sparklines never interpolate.
+    expect(analytics.daily).toHaveLength(ANALYTICS_DAYS);
+    const dates = analytics.daily.map((point) => point.date);
+    expect([...dates].sort()).toEqual(dates);
+    expect(dates.at(-1)).toBe(new Date().toISOString().slice(0, 10));
+    for (const point of analytics.daily) {
+      expect(Object.keys(point).sort()).toEqual(
+        ["agents", "claims", "date", "humans", "orderVolumeCents", "orders", "posts"].sort(),
+      );
+    }
+
+    // The TypeScript scaffold and the SQL one have to agree on the days, or the
+    // demo adapter and Postgres would draw two different fortnights.
+    expect(dates).toEqual(analyticsDates(Date.now()));
+  });
+
+  it("raises for a signed-in non-operator and for anon", async () => {
+    const someoneElse = await client.query<{ id: string }>(
+      "select id from public.profiles where not is_admin limit 1",
+    );
+
+    await asAuthenticated(someoneElse.rows[0].id, async () => {
+      await expect(client.query("select public.district_analytics()")).rejects.toThrow(
+        /District operators/,
+      );
+    });
+
+    // No session at all, and no execute privilege either.
+    await asAnon(async () => {
+      await expect(client.query("select public.district_analytics()")).rejects.toThrow(
+        /permission denied/i,
+      );
+    });
   });
 
   it("toggles a channel follow and keeps channels.followers in step", async () => {

@@ -44,6 +44,7 @@ import {
   toChatMessage,
   toCompetition,
   toCompetitionEntry,
+  toDistrictAnalytics,
   toEvent,
   toGig,
   toGuild,
@@ -89,6 +90,7 @@ import type {
   CreateReviewInput,
   CreateThreadInput,
   CreatedApiKey,
+  DistrictAnalytics,
   DistrictEvent,
   EventFilter,
   Gig,
@@ -133,6 +135,7 @@ import type {
   UUID,
   UpdateAgentInput,
   UpdatePresenceInput,
+  UpdateProfileInput,
   Wallet,
   WalletPolicyPatch,
   WalletTransaction,
@@ -381,6 +384,24 @@ export class SupabaseRepository implements Repository {
     if (error) throw new UpstreamError(error.message);
     const real = toNetworkCounts(data);
     return real;
+  }
+
+  /**
+   * One SECURITY DEFINER call (0010), because the honest version of this query
+   * is eight aggregates over tables the browser cannot read: `orders` and
+   * `agent_claims` are private under RLS, so a client-side roll-up would report
+   * the operator's *own* rows and call it the District.
+   *
+   * The function raises for a non-admin caller, which surfaces here as an
+   * `UpstreamError`. `/analytics` never gets that far — it checks
+   * `profile.is_admin` and answers `notFound()` — so this path only runs for
+   * operators.
+   */
+  async getDistrictAnalytics(): Promise<DistrictAnalytics> {
+    const client = await this.client();
+    const { data, error } = await client.rpc("district_analytics");
+    if (error) throw new UpstreamError(error.message);
+    return toDistrictAnalytics(data);
   }
 
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
@@ -2498,6 +2519,36 @@ export class SupabaseRepository implements Repository {
       client.from("profiles").select("*").eq("handle", handle).maybeSingle(),
       toProfile,
     );
+  }
+
+  /**
+   * Three columns, straight through PostgREST — no RPC needed.
+   *
+   * `profiles_update_self` (0002) scopes the row to `auth.uid()` and 0010's
+   * column grant scopes the fields, so a widened patch object here cannot
+   * become a widened write: Postgres refuses the statement. The `.eq("id", …)`
+   * is belt and braces for the service-role path, where RLS is bypassed.
+   */
+  async updateProfile(profileId: UUID, patch: UpdateProfileInput): Promise<Profile> {
+    const update: Record<string, unknown> = { updated_at: this.nowIso() };
+    if (patch.display_name !== undefined) update.display_name = patch.display_name.trim();
+    if (patch.bio !== undefined) {
+      const bio = patch.bio === null ? null : patch.bio.trim();
+      update.bio = bio && bio.length > 0 ? bio : null;
+    }
+    if (patch.avatar_url !== undefined) {
+      const avatar = patch.avatar_url === null ? null : patch.avatar_url.trim();
+      update.avatar_url = avatar && avatar.length > 0 ? avatar : null;
+    }
+
+    const client = await this.client();
+    const updated = await this.one(
+      client.from("profiles").update(update).eq("id", profileId).select("*").maybeSingle(),
+      toProfile,
+    );
+    // Zero rows is what RLS answers with when the row is not yours.
+    if (!updated) throw new ForbiddenError("You can only edit your own profile");
+    return updated;
   }
 
   async getCurrentProfile(): Promise<Profile | null> {

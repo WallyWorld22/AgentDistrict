@@ -21,6 +21,7 @@ import type {
   CreateReviewInput,
   CreateThreadInput,
   CreatedApiKey,
+  DistrictAnalytics,
   DistrictEvent,
   EventFilter,
   Gig,
@@ -61,6 +62,7 @@ import type {
   UUID,
   UpdateAgentInput,
   UpdatePresenceInput,
+  UpdateProfileInput,
   PostLoungeMessageInput,
   SendMessageInput,
   Thread,
@@ -98,6 +100,19 @@ export interface Repository {
   getNetworkStats(): Promise<NetworkStats>;
   listEvents(filter?: EventFilter): Promise<DistrictEvent[]>;
   publishEvent(input: PublishEventInput): Promise<DistrictEvent>;
+
+  /**
+   * The operators' dashboard behind `/analytics` — totals plus a 14-day daily
+   * series (BUILD_SPEC §4).
+   *
+   * **Admin only, enforced in the data layer, not by the page.** Supabase calls
+   * the SECURITY DEFINER `district_analytics()` function from 0010, which
+   * raises for a caller whose profile is not `is_admin`; the demo adapter
+   * throws `ForbiddenError` on the same condition. `/analytics` checks
+   * `profile.is_admin` first and answers `notFound()`, so a non-admin never
+   * learns the route exists — this throw is the floor under that, not the UX.
+   */
+  getDistrictAnalytics(): Promise<DistrictAnalytics>;
 
   /* ----------------------------------------------------------------- search */
 
@@ -253,6 +268,15 @@ export interface Repository {
 
   getProfile(id: UUID): Promise<Profile | null>;
   getProfileByHandle(handle: Handle): Promise<Profile | null>;
+  /**
+   * Edit your own profile (`/settings` → Account).
+   *
+   * Only the three columns in `UpdateProfileInput` move. In supabase mode the
+   * RLS policy `profiles_update_self` (0002) restricts the row and 0010's
+   * column grant restricts the fields, so this is the *whole* surface a signed-
+   * in human has on `profiles`.
+   */
+  updateProfile(profileId: UUID, patch: UpdateProfileInput): Promise<Profile>;
   /** Demo mode: always the demo human `austin`. Supabase: the session user. */
   getCurrentProfile(): Promise<Profile | null>;
 

@@ -6,6 +6,7 @@ import {
   Gem,
   Home,
   IdCard,
+  LineChart,
   Mail,
   MonitorPlay,
   Newspaper,
@@ -125,6 +126,38 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/docs", label: "Docs", short: "Docs", icon: BookOpen, matchPrefix: true },
 ];
 
+/**
+ * The operators' row — appended to the nav only for `profiles.is_admin`.
+ *
+ * It is **not** in `NAV_ITEMS` on purpose: that array is the District's public
+ * shape (the smoke suite walks it, the shell asserts its length) and a row most
+ * accounts must never see does not belong in it. `withAdminRows` is the seam,
+ * the same shape as `withBadges` — a pure transform the server-rendered shell
+ * applies once it knows who is asking.
+ */
+export const ANALYTICS_NAV_ITEM: NavItem = {
+  href: "/analytics",
+  label: "Analytics",
+  short: "Analytics",
+  icon: LineChart,
+};
+
+/**
+ * Insert the operator rows for an admin; return `items` untouched otherwise.
+ *
+ * Analytics sits directly after the Command Center: both are "watch the thing
+ * you run" surfaces, and appending it under Docs would have put the District's
+ * numbers below its documentation.
+ */
+export function withAdminRows(items: NavItem[], viewer: { isAdmin?: boolean } = {}): NavItem[] {
+  if (!viewer.isAdmin) return items;
+  if (items.some((item) => item.href === ANALYTICS_NAV_ITEM.href)) return items;
+
+  const after = items.findIndex((item) => item.href === "/command");
+  if (after < 0) return [...items, ANALYTICS_NAV_ITEM];
+  return [...items.slice(0, after + 1), ANALYTICS_NAV_ITEM, ...items.slice(after + 1)];
+}
+
 /** Hrefs that appear in the mobile bottom nav, in order. "More" opens a sheet. */
 export const MOBILE_NAV_HREFS = ["/", "/lounge", "/gigs", "/jobs", "/tv"] as const;
 
@@ -151,6 +184,12 @@ export const EXTRA_ROUTES = [
   "/world",
   "/onboarding/agent",
   "/profile",
+  // Reached from the account menu, not the sidebar.
+  "/settings",
+  // Operators only. It is in the smoke walk because demo mode signs everyone
+  // in as @austin, who **is** seeded `is_admin` — so the suite exercises the
+  // real page rather than only its 404. A non-admin gets `notFound()`.
+  "/analytics",
 ] as const;
 
 /** Auth routes, rendered outside the app shell. */

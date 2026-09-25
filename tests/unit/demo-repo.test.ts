@@ -1,7 +1,14 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from "vitest";
 import { createDemoRepository, type DemoRepository } from "@/lib/data/demo";
-import { ConflictError, ForbiddenError, InsufficientFundsError } from "@/lib/data/errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  InsufficientFundsError,
+  NotFoundError,
+} from "@/lib/data/errors";
+import { analyticsDates } from "@/lib/data/analytics";
+import { ANALYTICS_DAYS } from "@/lib/data/types";
 import {
   AUSTIN_AVAILABLE_CENTS,
   DEMO_API_KEY,
@@ -535,5 +542,98 @@ describe("creator flows", () => {
       DEMO_PROFILE_ID,
     );
     expect(updated.tagline).toBe("Regression sweeps, fast");
+  });
+});
+
+describe("profiles", () => {
+  it("edits the three columns /settings owns and leaves the rest alone", async () => {
+    const before = await repo.getProfile(DEMO_PROFILE_ID);
+    expect(before).not.toBeNull();
+
+    const updated = await repo.updateProfile(DEMO_PROFILE_ID, {
+      display_name: "  Austin C.  ",
+      bio: "  Building the place for agents.  ",
+      avatar_url: "district:🛰️:violet",
+    });
+
+    expect(updated.display_name).toBe("Austin C.");
+    expect(updated.bio).toBe("Building the place for agents.");
+    expect(updated.avatar_url).toBe("district:🛰️:violet");
+    // Identity and authority are untouched — they are not in the patch type.
+    expect(updated.handle).toBe(before!.handle);
+    expect(updated.is_admin).toBe(true);
+    expect(updated.is_verified_human).toBe(before!.is_verified_human);
+  });
+
+  it("empties a bio rather than storing whitespace, and refuses a stub name", async () => {
+    const cleared = await repo.updateProfile(DEMO_PROFILE_ID, { bio: "   " });
+    expect(cleared.bio).toBeNull();
+
+    await expect(repo.updateProfile(DEMO_PROFILE_ID, { display_name: "A" })).rejects.toThrow();
+    await expect(
+      repo.updateProfile("00000000-0000-0000-0000-000000000000", { bio: "x" }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("analytics", () => {
+  it("answers with lifetime totals and a zero-filled 14-day series", async () => {
+    const analytics = await repo.getDistrictAnalytics();
+
+    expect(analytics.totals).toEqual({
+      humans: seed.profiles.length,
+      agents: seed.agents.length,
+      // Demo claims live beside the dataset and start empty — honest, not zeroed
+      // by accident.
+      claimedAgents: 0,
+      posts: seed.events.filter((event) => event.kind === "post").length,
+      orders: seed.orders.length,
+      orderVolumeCents: seed.orders.reduce((sum, order) => sum + order.amount_cents, 0),
+      gigs: seed.gigs.length,
+      jobs: seed.jobs.length,
+    });
+
+    expect(analytics.daily).toHaveLength(ANALYTICS_DAYS);
+    expect(analytics.daily.map((point) => point.date)).toEqual(analyticsDates(SEED_EPOCH_MS));
+    // Oldest first, every day present, never a hole for a sparkline to guess at.
+    for (const point of analytics.daily) {
+      expect(Object.keys(point).sort()).toEqual(
+        ["agents", "claims", "date", "humans", "orderVolumeCents", "orders", "posts"].sort(),
+      );
+    }
+  });
+
+  it("counts a run placed today into today's bucket", async () => {
+    const before = await repo.getDistrictAnalytics();
+    const today = analyticsDates(now).at(-1)!;
+    const bucket = (a: Awaited<ReturnType<typeof repo.getDistrictAnalytics>>) =>
+      a.daily.find((point) => point.date === today)!;
+
+    const order = await repo.orderGig({
+      gigSlug: CHEAP_GIG,
+      tier: "basic",
+      brief: "A run placed during the test, so the series has to move.",
+      buyerId: DEMO_PROFILE_ID,
+      approved: true,
+    });
+
+    const after = await repo.getDistrictAnalytics();
+    expect(after.totals.orders).toBe(before.totals.orders + 1);
+    expect(bucket(after).orders).toBe(bucket(before).orders + 1);
+    expect(bucket(after).orderVolumeCents).toBe(
+      bucket(before).orderVolumeCents + order.amount_cents,
+    );
+  });
+
+  it("refuses a caller whose profile is not an operator", async () => {
+    // Demo mode always signs in as @austin, so the condition to vary is the
+    // flag, not the session — the same one the SQL function checks. Reads are
+    // deep-copied out of the demo store, so the dataset is edited at the seam
+    // the adapter provides for it rather than through a returned row.
+    const dataset = structuredClone(seed);
+    for (const profile of dataset.profiles) profile.is_admin = false;
+    const demoted = createDemoRepository({ now: () => now, dataset });
+
+    await expect(demoted.getDistrictAnalytics()).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
