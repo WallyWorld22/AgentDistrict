@@ -19,6 +19,22 @@ function handle(prefix: string): string {
   return `e2e-${prefix}-${Date.now().toString(36)}-${counter}`;
 }
 
+/**
+ * Registration is rate limited to 5 per minute **per caller**, and every request
+ * from this suite arrives from the same loopback address — so without a distinct
+ * forwarded caller per test the suite spends its own budget and starts 429ing
+ * itself. Each test declares who it is calling as.
+ *
+ * The label is salted with the run's start time because the limiter's window is
+ * a minute and the server outlives a single `playwright test`: re-running the
+ * suite (or `-g` on one test) inside that window would otherwise inherit the
+ * previous run's spent budget. The limiter treats the value as an opaque key.
+ */
+const RUN = Date.now().toString(36);
+function from(label: string): Record<string, string> {
+  return { "x-forwarded-for": `e2e-${label}-${RUN}` };
+}
+
 function registration(agentHandle: string) {
   return {
     handle: agentHandle,
@@ -41,6 +57,7 @@ test.describe("an outside agent joins the District", () => {
     /* ---------------------------------------------------- Step 1: register */
 
     const created = await page.request.post("/api/v1/agents/register", {
+      headers: from("join"),
       data: registration(agentHandle),
     });
     expect(created.status()).toBe(201);
@@ -96,7 +113,7 @@ test.describe("an outside agent joins the District", () => {
 
     await page.getByRole("button", { name: /Claim TideReader/ }).click();
 
-    // ActionForm pushes to the Passport on success…
+    // The action redirects server-side (see the note in claim/actions.ts)…
     await page.waitForURL(`**/agents/${agentHandle}`, { timeout: 20_000 });
     // …where the badge and the ownership panel are the visible proof.
     await expect(page.getByRole("heading", { level: 1 })).toContainText("TideReader");
@@ -116,6 +133,7 @@ test.describe("an outside agent joins the District", () => {
   test("a claim link works exactly once", async ({ page }) => {
     const agentHandle = handle("once");
     const created = await page.request.post("/api/v1/agents/register", {
+      headers: from("once"),
       data: registration(agentHandle),
     });
     const { claim_url: claimUrl } = await created.json();
@@ -129,7 +147,10 @@ test.describe("an outside agent joins the District", () => {
     // and no way to claim it again.
     await page.goto(claimPath, { waitUntil: "load" });
     await expect(page.getByRole("heading", { level: 1 })).toContainText("already claimed");
-    await expect(page.getByText("Claimed", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Already claimed", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Austin claimed this agent")).toBeVisible();
     await expect(page.getByRole("button", { name: /Claim TideReader/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "View the Passport" })).toBeVisible();
   });
@@ -142,9 +163,12 @@ test.describe("an outside agent joins the District", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "This claim link is not valid",
     );
-    // A page that prints the token it was reached with has written a bearer
-    // secret into a screenshot and a support ticket.
-    expect(await page.content()).not.toContain(token);
+    // A page that *prints* the token it was reached with has written a bearer
+    // secret into a screenshot and a support ticket, so nothing the reader can
+    // see may contain it. (The router's own flight payload necessarily carries
+    // the path segment, which is the URL they already have in the address bar —
+    // the rule is about rendered copy, not about the request.)
+    expect(await page.locator("body").innerText()).not.toContain(token);
 
     // A malformed token is a 404, not a lookup.
     const malformed = await page.request.get("/claim/not-a-real-token", {
@@ -176,6 +200,7 @@ test.describe("the entrance refuses what it should", () => {
 
   test("a self-registered key cannot spend a wallet", async ({ page }) => {
     const created = await page.request.post("/api/v1/agents/register", {
+      headers: from("spend"),
       data: registration(handle("spend")),
     });
     const { api_key: key } = await created.json();
@@ -194,12 +219,14 @@ test.describe("the entrance refuses what it should", () => {
 
   test("a taken handle is a 409 and a malformed one is a 400", async ({ page }) => {
     const taken = await page.request.post("/api/v1/agents/register", {
+      headers: from("handles"),
       data: registration("scout"),
     });
     expect(taken.status()).toBe(409);
     expect((await taken.json()).error.code).toBe("conflict");
 
     const malformed = await page.request.post("/api/v1/agents/register", {
+      headers: from("handles"),
       data: registration("Not A Handle"),
     });
     expect(malformed.status()).toBe(400);
@@ -209,7 +236,7 @@ test.describe("the entrance refuses what it should", () => {
   test("registration is rate limited, with a Retry-After", async ({ page }) => {
     // A distinct forwarded address so this cannot spend the budget the other
     // tests in this file are relying on.
-    const headers = { "x-forwarded-for": "203.0.113.42" };
+    const headers = from("rate-limit");
     for (let i = 0; i < 5; i += 1) {
       const ok = await page.request.post("/api/v1/agents/register", {
         headers,

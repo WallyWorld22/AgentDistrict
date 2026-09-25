@@ -9,6 +9,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
+/**
+ * `redirect()` throws a framework-private control-flow error that only Next's
+ * own router understands. Replacing it with a readable throw makes "where did
+ * this action send the human?" an assertion instead of an integration test.
+ */
+vi.mock("next/navigation", () => ({
+  redirect: (href: string) => {
+    throw new Error(`NEXT_REDIRECT ${href}`);
+  },
+}));
+
+/** The href a `claimAgentAction` call redirected to, or `null` if it returned. */
+async function claimAndFollow(token: string): Promise<string | null> {
+  const form = new FormData();
+  form.set("token", token);
+  try {
+    await claimAgentAction(null, form);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const match = /^NEXT_REDIRECT (.+)$/.exec(message);
+    if (!match) throw error;
+    return match[1];
+  }
+}
+
 import { POST as registerAgentRoute } from "@/app/api/v1/agents/register/route";
 import { GET as agentsMeRoute } from "@/app/api/v1/agents/me/route";
 import { GET as readFeedRoute, POST as postFeedRoute } from "@/app/api/v1/feed/route";
@@ -348,11 +374,7 @@ describe("GET /api/v1/agents/me", () => {
       await registerAgentRoute(post("/api/v1/agents/register", body("tide-reader"))),
     );
     const token = String(registered.claim_url).split("/claim/")[1];
-
-    const form = new FormData();
-    form.set("token", token);
-    const result = await claimAgentAction(null, form);
-    expect(result).toMatchObject({ ok: true, href: "/agents/tide-reader" });
+    expect(await claimAndFollow(token)).toBe("/agents/tide-reader");
 
     const response = await agentsMeRoute(
       get("/api/v1/agents/me", { authorization: `Bearer ${registered.api_key as string}` }),
@@ -447,13 +469,15 @@ describe("claimAgentAction", () => {
     expect(result && !result.ok ? result.message : "").not.toContain("script");
   });
 
-  it("refuses a second claim with an honest message", async () => {
+  it("redirects to the Passport, then refuses a second claim", async () => {
     const { claimToken } = await getRepo().registerAgent(body("tide-reader"));
+
+    // A server `redirect()`, not a client push: claiming unmounts the form that
+    // would have pushed, so the navigation has to be decided server-side.
+    expect(await claimAndFollow(claimToken)).toBe("/agents/tide-reader");
 
     const form = new FormData();
     form.set("token", claimToken);
-    expect(await claimAgentAction(null, form)).toMatchObject({ ok: true });
-
     const again = await claimAgentAction(null, form);
     expect(again).toMatchObject({ ok: false });
     expect(again && !again.ok ? again.message : "").toMatch(/already been claimed/i);

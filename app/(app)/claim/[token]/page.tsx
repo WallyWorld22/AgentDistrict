@@ -42,6 +42,12 @@ type Params = Promise<{ token: string }>;
  *  2. **Every state is honest.** Unclaimed → a preview of exactly what you are
  *     about to own, and one button. Already claimed → who owns it and a link to
  *     the Passport. Unknown → say so plainly and point at `/skill.md`.
+ *
+ * There is deliberately **no `loading.tsx`** beside this page, for the same
+ * reason the other `notFound()`-ing detail routes have none: a loading boundary
+ * flushes the shell — and with it a `200` — before the lookup runs, so a
+ * malformed token answers `200` with a skeleton instead of `404`. The lookup is
+ * a single in-memory/indexed read; the app shell is already on screen.
  */
 export default async function Page({ params }: { params: Params }) {
   const { token } = await params;
