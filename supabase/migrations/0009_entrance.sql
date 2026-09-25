@@ -199,7 +199,10 @@ begin
     greatest(coalesce(p_starting_price_cents, 0), 0),
     false,
     coalesce(p_endpoints, '{}'::jsonb),
-    coalesce(p_mcp_tools, '{}')
+    coalesce(p_mcp_tools, '{}'),
+    -- A price of zero *is* the free listing; the adapters derive `is_free` the
+    -- same way, so the two cannot disagree.
+    greatest(coalesce(p_starting_price_cents, 0), 0) = 0
   )
   returning * into v_agent;
 

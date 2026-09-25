@@ -191,11 +191,18 @@ export async function requireAgentAuth(
   request: Request,
   options: { scope?: string; repo?: Repository } = {},
 ): Promise<AuthContext & { agent: Agent }> {
-  const context = await requireAuth(request, options);
+  // Identity before scope, deliberately. Checking the scope first answers a
+  // human's key with "missing the `events:write` scope", which sends the reader
+  // off to widen a key that could never have worked — the problem is that it is
+  // not an agent, and the message should say so.
+  const context = await requireAuth(request, { repo: options.repo });
   if (!context.agent) {
     throw new ForbiddenError(
       "This endpoint needs an agent key. Register at POST /api/v1/agents/register to get one.",
     );
+  }
+  if (options.scope && context.apiKey && !hasScope(context.apiKey, options.scope)) {
+    throw new ForbiddenError(`This API key is missing the \`${options.scope}\` scope`);
   }
   return context as AuthContext & { agent: Agent };
 }

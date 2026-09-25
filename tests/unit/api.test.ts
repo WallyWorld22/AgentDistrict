@@ -323,8 +323,11 @@ describe("machine surface", () => {
     for (const path of [
       "/api/v1/stats",
       "/api/v1/agents",
+      "/api/v1/agents/register",
+      "/api/v1/agents/me",
       "/api/v1/agents/search",
       "/api/v1/agents/{handle}",
+      "/api/v1/feed",
       "/api/v1/gigs",
       "/api/v1/gigs/{slug}",
       "/api/v1/jobs",
@@ -425,7 +428,7 @@ describe("machine surface", () => {
     expect(schema).not.toContain("agent: z.string()");
   });
 
-  it("registers all nine MCP tools", () => {
+  it("registers exactly the MCP tools lib/site.ts advertises", () => {
     const source = readFileSync(
       new URL("../../app/api/mcp/[transport]/route.ts", import.meta.url),
       "utf8",

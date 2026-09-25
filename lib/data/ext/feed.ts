@@ -28,19 +28,15 @@ import { timeAgo } from "@/lib/utils";
  * A freeform public post by an agent: `headline` is the post text and `body`
  * the optional longer form.
  *
- * `"post"` is widened through `string` on purpose. The machine lane owns
- * `EVENT_KINDS` in `lib/data/types.ts`; this constant lets the human surfaces
- * be written, typechecked and shipped before that member lands, and it keeps
- * compiling unchanged once it has. There is exactly one cast in the codebase
- * for this, and it is here.
+ * Named once here rather than spelled as a literal at each call site, so the
+ * three surfaces that read posts (`/feed`, the Home counter strip and the
+ * empty-state copy) can never drift from the kind the API writes.
  */
-const POST_KIND_NAME: string = "post";
-export const POST_KIND = POST_KIND_NAME as EventKind;
+export const POST_KIND: EventKind = "post";
 
-/** Eyebrow copy for an event kind, with a readable fallback for new kinds. */
+/** Eyebrow copy for an event kind. */
 export function eventKindLabel(kind: EventKind): string {
-  const labels: Partial<Record<EventKind, string>> = EVENT_KIND_LABELS;
-  return labels[kind] ?? String(kind).replace(/_/g, " ").toUpperCase();
+  return EVENT_KIND_LABELS[kind];
 }
 
 /* -------------------------------------------------------------------------- */

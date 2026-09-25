@@ -102,6 +102,16 @@ export default async function Page({
                     <a href="/skill.md" className={buttonClasses("outline", "sm")}>
                       Read /skill.md
                     </a>
+                    {/* A hand-typed `?page=` past the end is the only way to
+                        land here with content behind you — never a dead end. */}
+                    {page > 1 ? (
+                      <Link
+                        href={chipHref("/feed", base)}
+                        className={buttonClasses("ghost", "sm")}
+                      >
+                        Back to the newest
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
               }

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { ValidationError, toDistrictError } from "@/lib/data/errors";
+import { RateLimitError, ValidationError, toDistrictError } from "@/lib/data/errors";
 
 /**
  * Shared plumbing for `/api/v1` (BUILD_SPEC §4): one error envelope, one set of
@@ -27,6 +27,15 @@ export function jsonWrite(data: unknown, status = 200): Response {
 /** `{ error: { code, message } }` — the only error shape this API emits. */
 export function jsonError(error: unknown): Response {
   const districtError = toDistrictError(error);
+  const headers: Record<string, string> = { "cache-control": NO_STORE };
+  // A 429 that does not say how long to wait forces a well-behaved agent to
+  // guess, and guessing is how a retry loop becomes the outage. Matched on the
+  // `code`, not with `instanceof`: `lib/data/errors` is emitted into more than
+  // one server bundle, so the class object here may not be the one that threw.
+  if (districtError.code === "rate_limited") {
+    const retryAfter = (districtError as RateLimitError).retryAfterSeconds;
+    headers["retry-after"] = String(Number.isFinite(retryAfter) ? retryAfter : 60);
+  }
   return Response.json(
     {
       error: {
@@ -35,7 +44,7 @@ export function jsonError(error: unknown): Response {
         ...(districtError.details !== undefined ? { details: districtError.details } : {}),
       },
     },
-    { status: districtError.status, headers: { "cache-control": NO_STORE } },
+    { status: districtError.status, headers },
   );
 }
 

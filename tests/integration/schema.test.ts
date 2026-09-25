@@ -205,6 +205,8 @@ suite("supabase schema against a real Postgres", () => {
     for (const table of Object.keys(MINIMUM_ROWS)) expect(tables).toContain(table);
     // Added by 0006 — the Follow button's shared state.
     expect(tables).toContain("channel_followers");
+    // Added by 0009 — the one-shot claim links for self-registered agents.
+    expect(tables).toContain("agent_claims");
   });
 
   it("loads the seed with at least the BUILD_SPEC §2 row counts", async () => {
@@ -831,6 +833,193 @@ suite("supabase schema against a real Postgres", () => {
         [other.rows[0].id],
       );
       expect(acting.rows[0].uid).toBeNull();
+    } finally {
+      await client.query("rollback");
+    }
+  });
+
+  /* ----------------------------------------------- 0009: the entrance */
+
+  it("adds the entrance schema: post events, agent-bound keys, private claims", async () => {
+    // 1. `event_kind` gained 'post' — the feed an outside agent writes to.
+    const kinds = await client.query<{ enumlabel: string }>(
+      `select e.enumlabel
+         from pg_enum e join pg_type t on t.oid = e.enumtypid
+        where t.typname = 'event_kind'`,
+    );
+    expect(kinds.rows.map((row) => row.enumlabel)).toContain("post");
+    // …and the seed ships posts, so `/api/v1/feed` is never an empty wall.
+    const posts = await client.query<{ count: string }>(
+      "select count(*)::text as count from public.events where kind = 'post'",
+    );
+    expect(Number(posts.rows[0].count)).toBeGreaterThan(0);
+
+    // 2. `api_keys.agent_id` exists, is a real FK, and is not client-writable:
+    //    binding a key to an agent is `register_agent`'s job alone.
+    const column = await client.query<{ data_type: string }>(
+      `select data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'api_keys' and column_name = 'agent_id'`,
+    );
+    expect(column.rows).toHaveLength(1);
+    expect(column.rows[0].data_type).toBe("uuid");
+
+    const fk = await client.query<{ count: string }>(
+      `select count(*)::text as count
+         from information_schema.table_constraints tc
+         join information_schema.key_column_usage k on k.constraint_name = tc.constraint_name
+        where tc.table_schema = 'public' and tc.table_name = 'api_keys'
+          and tc.constraint_type = 'FOREIGN KEY' and k.column_name = 'agent_id'`,
+    );
+    expect(Number(fk.rows[0].count)).toBe(1);
+
+    const writable = await client.query<{ allowed: boolean }>(
+      `select has_column_privilege('authenticated', 'public.api_keys', 'agent_id', 'UPDATE')
+              as allowed`,
+    );
+    expect(writable.rows[0].allowed).toBe(false);
+
+    // 3. `agent_claims` is protected and private.
+    const rls = await client.query<{ relrowsecurity: boolean }>(
+      `select c.relrowsecurity from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relname = 'agent_claims'`,
+    );
+    expect(rls.rows[0].relrowsecurity).toBe(true);
+
+    const unique = await client.query<{ indexdef: string }>(
+      `select indexdef from pg_indexes
+        where schemaname = 'public' and tablename = 'agent_claims'
+          and indexdef ilike '%unique%token_hash%'`,
+    );
+    expect(unique.rows.length).toBeGreaterThan(0);
+  });
+
+  it("registers an agent through register_agent() and claims it once", async () => {
+    const keyHash = `sha256$${"a".repeat(64)}`;
+    const tokenHash = "b".repeat(64);
+
+    await client.query("begin");
+    try {
+      // Registration is the one write path with **no credential at all**, so
+      // it runs as `anon` here — exactly as a curl from the open internet does.
+      await client.query("set local role anon");
+      const registered = await client.query<{
+        id: string;
+        handle: string;
+        owner_id: string;
+        verified: boolean;
+        status: string;
+      }>(
+        `select id, handle, owner_id, verified, status::text as status
+           from public.register_agent(
+             'tide-reader', 'TideReader', 'Coastal permit research.', '',
+             '🌊', 'linear-gradient(135deg,#297dff,#7559ff)',
+             'research', array['permit data']::text[], array['FL']::text[],
+             'research-pit', 'per_run', 300, '{}'::jsonb, '{}'::text[],
+             $1, 'ad_live_tide', $2::text[], $3, 'district-registry'
+           )`,
+        [
+          keyHash,
+          ["agents:read", "gigs:read", "jobs:read", "events:read", "events:write", "bids:write", "stats:read"],
+          tokenHash,
+        ],
+      );
+      expect(registered.rows).toHaveLength(1);
+      const agent = registered.rows[0];
+      expect(agent.verified).toBe(false);
+      expect(agent.status).toBe("available");
+
+      const registry = await client.query<{ id: string }>(
+        "select id from public.profiles where handle = 'district-registry'",
+      );
+      expect(agent.owner_id).toBe(registry.rows[0].id);
+
+      // Presence, the key bound to the agent, the claim row and the feed event
+      // all landed in the same transaction.
+      await client.query("set local role postgres");
+      const presence = await client.query<{ count: string }>(
+        "select count(*)::text as count from public.presence where agent_id = $1",
+        [agent.id],
+      );
+      expect(Number(presence.rows[0].count)).toBe(1);
+
+      const key = await client.query<{ agent_id: string; profile_id: string; scopes: string[] }>(
+        "select agent_id, profile_id, scopes from public.api_keys where key_hash = $1",
+        [keyHash],
+      );
+      expect(key.rows[0].agent_id).toBe(agent.id);
+      expect(key.rows[0].profile_id).toBe(registry.rows[0].id);
+      expect(key.rows[0].scopes).not.toContain("orders:write");
+
+      const discovered = await client.query<{ count: string }>(
+        "select count(*)::text as count from public.events where kind = 'discovered' and actor_id = $1",
+        [agent.id],
+      );
+      expect(Number(discovered.rows[0].count)).toBe(1);
+
+      // `anon` must not be able to read the claim row it just created: the
+      // digest is the only thing standing between a leak and a stolen agent.
+      await client.query("set local role anon");
+      const leaked = await client.query<{ count: string }>(
+        "select count(*)::text as count from public.agent_claims",
+      );
+      expect(Number(leaked.rows[0].count)).toBe(0);
+
+      // Claiming needs a session, and may only claim for the caller.
+      await client.query("set local role authenticated");
+      await client.query("select set_config('request.jwt.claim.sub', $1, true)", [
+        DEMO_PROFILE_ID,
+      ]);
+
+      await client.query("savepoint third_party");
+      await expect(
+        client.query("select public.claim_agent($1, $2)", [tokenHash, profileId("devdan")]),
+      ).rejects.toThrow(/only be claimed/);
+      await client.query("rollback to savepoint third_party");
+
+      const claimed = await client.query<{ owner_id: string; verified: boolean }>(
+        "select owner_id, verified from public.claim_agent($1, $2)",
+        [tokenHash, DEMO_PROFILE_ID],
+      );
+      expect(claimed.rows[0].owner_id).toBe(DEMO_PROFILE_ID);
+      expect(claimed.rows[0].verified).toBe(true);
+
+      // One-shot.
+      await client.query("savepoint twice");
+      await expect(
+        client.query("select public.claim_agent($1, $2)", [tokenHash, DEMO_PROFILE_ID]),
+      ).rejects.toThrow(/already been claimed/);
+      await client.query("rollback to savepoint twice");
+
+      // The key followed its owner, so the agent can still bid as itself.
+      await client.query("set local role postgres");
+      const moved = await client.query<{ profile_id: string }>(
+        "select profile_id from public.api_keys where key_hash = $1",
+        [keyHash],
+      );
+      expect(moved.rows[0].profile_id).toBe(DEMO_PROFILE_ID);
+    } finally {
+      await client.query("rollback");
+    }
+  });
+
+  it("refuses a self-registered key that asks to spend money", async () => {
+    await client.query("begin");
+    try {
+      await client.query("set local role anon");
+      await expect(
+        client.query(
+          `select public.register_agent(
+             'greedy-agent', 'Greedy', 'Wants to spend your wallet.', '',
+             '🤖', 'linear-gradient(135deg,#297dff,#7559ff)',
+             'research', array['spending']::text[], array['US']::text[],
+             'research-pit', 'per_run', 0, '{}'::jsonb, '{}'::text[],
+             $1, 'ad_live_greed', array['agents:read','orders:write']::text[], $2,
+             'district-registry'
+           )`,
+          [`sha256$${"c".repeat(64)}`, "d".repeat(64)],
+        ),
+      ).rejects.toThrow(/cannot carry that scope/);
     } finally {
       await client.query("rollback");
     }

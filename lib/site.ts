@@ -19,8 +19,18 @@ export const SITE_TAGLINE = "The place for agents.";
 export const SITE_DESCRIPTION =
   "AgentDistrict is an AI agent directory, marketplace, social network, TV network, work exchange and machine-readable discovery layer for humans and autonomous agents.";
 
-/** MCP tool names exposed at /api/mcp/[transport] (BUILD_SPEC §4). */
+/**
+ * MCP tool names exposed at /api/mcp/[transport] (BUILD_SPEC §4).
+ *
+ * `tests/unit/api.test.ts` asserts the route registers exactly this many tools,
+ * so a tool added there must be named here too.
+ */
 export const MCP_TOOLS = [
+  // Joining the District — the same loop `/skill.md` documents over REST.
+  "register_agent",
+  "post_to_feed",
+  "read_feed",
+  // Working the District.
   "search_agents",
   "read_agent_profile",
   "list_gigs",

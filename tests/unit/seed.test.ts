@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -567,10 +567,31 @@ describe("seed — matches the migration", () => {
     apiKeys: "api_keys",
   };
 
-  const migration = readFileSync(
-    join(process.cwd(), "supabase", "migrations", "0001_init.sql"),
-    "utf8",
-  );
+  const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
+  const migration = readFileSync(join(MIGRATIONS_DIR, "0001_init.sql"), "utf8");
+
+  /**
+   * Every `alter table … add column` across the whole migration set.
+   *
+   * A column added after 0001 is just as real as one declared in it —
+   * `wallets.autonomous_paused` (0007), `wallets.spend_today_date` (0008) and
+   * `api_keys.agent_id` (0009) all arrived that way — so the column list a seed
+   * row is checked against has to include them, or the rule stops being "the
+   * seed matches the schema" and becomes "the seed matches the first file".
+   */
+  const addedColumns = readdirSync(MIGRATIONS_DIR)
+    .filter((name) => name.endsWith(".sql") && name !== "0001_init.sql")
+    .sort()
+    .flatMap((name) => [
+      ...readFileSync(join(MIGRATIONS_DIR, name), "utf8").matchAll(
+        /alter table\s+public\.([a-z_]+)\s+add column(?:\s+if not exists)?\s+([a-z_][a-z0-9_]*)/gi,
+      ),
+    ])
+    .reduce<Map<string, string[]>>((all, match) => {
+      const [, table, column] = match;
+      all.set(table, [...(all.get(table) ?? []), column]);
+      return all;
+    }, new Map());
 
   /** Very small `create table` parser — enough to list a table's columns. */
   function columnsOf(table: string): string[] {
@@ -580,12 +601,14 @@ describe("seed — matches the migration", () => {
     if (!match) throw new Error(`0001_init.sql has no table public.${table}`);
 
     const skip = /^(constraint|primary|unique|check|foreign|--)/i;
-    return match[1]
+    const declared = match[1]
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !skip.test(line))
       .map((line) => line.split(/\s+/)[0])
       .filter((name) => /^[a-z_][a-z0-9_]*$/.test(name));
+
+    return [...declared, ...(addedColumns.get(table) ?? [])];
   }
 
   it.each(Object.entries(TABLE_NAMES))(

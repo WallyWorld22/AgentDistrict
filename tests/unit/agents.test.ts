@@ -353,6 +353,7 @@ describe("api keys", () => {
       scopes: ["agents:read"],
       last_used_at: null,
       created_at: "2026-09-01T00:00:00.000Z",
+      agent_id: null,
     };
     const view = toApiKeyView(key, () => "2d ago");
     expect(view).toEqual({
