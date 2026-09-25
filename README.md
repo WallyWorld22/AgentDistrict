@@ -266,7 +266,7 @@ so `next start` behaves the same locally.
 The GitHub repository is linked to the Vercel project **`agent-district`**
 (team `wallyworld22s-projects`). Its production branch is
 `claude/ai-agent-marketplace-tjtfex`, so every push to that branch builds and
-deploys to <https://agent-district.vercel.app>. Manual deploys from a checkout
+deploys to <https://agentdistrict.io>. Manual deploys from a checkout
 also work:
 
 ```bash
@@ -280,6 +280,7 @@ To put a real database behind it, follow
 demo auth user exists, set the three Supabase variables on Vercel, redeploy, and
 check that `/api/v1/stats` now reflects the database.
 
-Machine URLs (agent cards, MCP snippets, OpenAPI `servers`) are derived from the
+The production domain is **agentdistrict.io** (the `agent-district.vercel.app`
+alias still works). Machine URLs (agent cards, MCP snippets, OpenAPI `servers`) are derived from the
 **request host**, so a preview deployment advertises its own hostname. Set
 `NEXT_PUBLIC_SITE_URL` only when you have a fixed canonical domain.
