@@ -8,6 +8,20 @@ import { expect, test } from "@playwright/test";
  * that loop against a real production build: curl-equivalent requests for the
  * machine half, a real browser for the human half.
  *
+ * ## What this file may and may not do to the shared demo store
+ *
+ * Every spec talks to the same `next start`, and `smoke.spec.ts` pins the home
+ * hero's four counters (12,482 / 3,921 / 24,118 / 842):
+ *
+ * - **Registering is free of consequence.** A self-registered agent is `offline`
+ *   until a human claims it, so it never reaches `agentsOnline`. That is a
+ *   product rule, not a test convenience — an open endpoint whose output
+ *   inflated the District's headline would be a spam amplifier.
+ * - **Claiming is not**, so the one test that claims parks its agent back
+ *   offline through the Passport's own presence control before it finishes.
+ * - **Nothing here spends.** Registered keys carry no `orders:write`, which is
+ *   exactly what one of the tests below proves.
+ *
  * Handles are unique per test run. The suite is `fullyParallel` and the demo
  * store is process-wide, so two tests registering `tide-reader` would race on a
  * 409 — and a handle is the one thing registration will not let you reuse.
@@ -51,7 +65,7 @@ function registration(agentHandle: string) {
 }
 
 test.describe("an outside agent joins the District", () => {
-  test("registers, posts to the feed, and is claimed by its human", async ({ page }) => {
+  test("registers, posts to the feed, is claimed once, and goes live", async ({ page }) => {
     const agentHandle = handle("join");
 
     /* ---------------------------------------------------- Step 1: register */
@@ -64,8 +78,10 @@ test.describe("an outside agent joins the District", () => {
 
     const body = await created.json();
     expect(body.agent.handle).toBe(agentHandle);
-    // Parked on the registry, unverified, until a human claims it.
+    // Parked on the registry, unverified and offline, until a human claims it —
+    // so a registration loop cannot inflate the District's headline counters.
     expect(body.agent.verified).toBe(false);
+    expect(body.agent.status).toBe("offline");
     expect(body.api_key).toMatch(/^ad_live_/);
     expect(body.claim_url).toMatch(/\/claim\/[0-9a-f]{32}$/);
     expect(body.skill_url).toMatch(/\/skill\.md$/);
@@ -128,23 +144,11 @@ test.describe("an outside agent joins the District", () => {
     expect(claimed.claimed).toBe(true);
     expect(claimed.owner.handle).toBe("austin");
     expect(claimed.agent.verified).toBe(true);
-  });
+    // Claiming is also what puts an agent live: it registered offline.
+    expect(claimed.agent.status).toBe("available");
 
-  test("a claim link works exactly once", async ({ page }) => {
-    const agentHandle = handle("once");
-    const created = await page.request.post("/api/v1/agents/register", {
-      headers: from("once"),
-      data: registration(agentHandle),
-    });
-    const { claim_url: claimUrl } = await created.json();
-    const claimPath = new URL(claimUrl).pathname;
+    /* ---------------------------------------- the link cannot be reused */
 
-    await page.goto(claimPath, { waitUntil: "load" });
-    await page.getByRole("button", { name: /Claim TideReader/ }).click();
-    await page.waitForURL(`**/agents/${agentHandle}`, { timeout: 20_000 });
-
-    // Second visit: honest about what happened, with a link to the Passport
-    // and no way to claim it again.
     await page.goto(claimPath, { waitUntil: "load" });
     await expect(page.getByRole("heading", { level: 1 })).toContainText("already claimed");
     await expect(
@@ -153,6 +157,18 @@ test.describe("an outside agent joins the District", () => {
     await expect(page.getByText("Austin claimed this agent")).toBeVisible();
     await expect(page.getByRole("button", { name: /Claim TideReader/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "View the Passport" })).toBeVisible();
+
+    /* ------------------------------------------------------------- cleanup */
+
+    // Park it back offline through the Passport's own control. Two reasons,
+    // both real: it proves ownership actually transferred (only an owner sees
+    // that control), and `smoke.spec.ts` pins the home hero's "12,482 Agents
+    // Online", which is the live count plus a fixed baseline — a claimed agent
+    // left available would make that read 12,483 for the rest of the run.
+    await page.goto(`/agents/${agentHandle}`, { waitUntil: "load" });
+    await page.getByLabel("Presence").selectOption("offline");
+    await page.getByRole("button", { name: "Update presence" }).click();
+    await expect(page.getByText("OFFLINE").first()).toBeVisible();
   });
 
   test("an unknown claim link says so without echoing the token", async ({ page }) => {

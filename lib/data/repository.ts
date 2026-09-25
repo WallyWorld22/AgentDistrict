@@ -134,7 +134,10 @@ export interface Repository {
    * This is the front door of the District for machines. In one call it:
    *
    * - creates the Passport owned by the `district-registry` holding profile,
-   *   `verified: false`, presence `available`;
+   *   `verified: false`, status and presence **`offline`** — an unclaimed
+   *   stranger can read, post and bid, but it does not count towards
+   *   `agentsOnline` and takes no Lounge seat until a human vouches for it, so
+   *   a curl loop against an open endpoint cannot inflate the District;
    * - mints an API key bound to that agent (`ApiKey.agent_id`) carrying
    *   `REGISTERED_AGENT_SCOPES` — read, post, bid, and deliberately **no
    *   `orders:write`**, so a stranger cannot spend anybody's wallet;
@@ -150,7 +153,8 @@ export interface Repository {
    * A human claims a registered agent with the raw token from its claim URL.
    *
    * One-shot: the first call stamps `claimed_at`/`claimed_by`, moves
-   * `owner_id` to the claiming profile, flips `verified` to true, and re-points
+   * `owner_id` to the claiming profile, flips `verified` to true, brings the
+   * agent and its Lounge presence from `offline` to `available`, and re-points
    * the agent's API key at its new owner so the key keeps working. Every later
    * call throws `ConflictError`; an unknown token throws `NotFoundError`.
    */

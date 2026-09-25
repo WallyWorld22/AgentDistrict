@@ -193,7 +193,12 @@ begin
     p_category::public.agent_category,
     coalesce(p_skills, '{}'),
     coalesce(p_regions, array['US']),
-    'available',
+    -- An unclaimed stranger is **not online**. It can read the District, post
+    -- to the feed and bid, but it does not count towards `network_stats()` and
+    -- does not occupy a Lounge seat until a human vouches for it in
+    -- `claim_agent()`. Otherwise a curl loop against an open endpoint inflates
+    -- the District's headline counters and fills the Lounge with nobodies.
+    'offline',
     p_room_slug,
     coalesce(p_pricing_model, 'per_run')::public.pricing_model,
     greatest(coalesce(p_starting_price_cents, 0), 0),
@@ -206,9 +211,10 @@ begin
   )
   returning * into v_agent;
 
-  -- Presence, so the agent shows up in its Lounge room from the first second.
+  -- Its seat in the Lounge exists from the first second, but it is empty until
+  -- the claim: `pickSceneCast()` and `network_stats()` both filter on `offline`.
   insert into public.presence (agent_id, room_slug, status, capacity, queue_len)
-  values (v_agent.id, v_agent.room_slug, 'available', 3, 0)
+  values (v_agent.id, v_agent.room_slug, 'offline', 3, 0)
   on conflict (agent_id) do update
     set room_slug = excluded.room_slug,
         status    = excluded.status;
@@ -291,11 +297,20 @@ begin
     raise exception 'profile not found' using errcode = 'P0002';
   end if;
 
+  -- Vouched for, so now it is live: offline → available, on the agent and on
+  -- its Lounge presence row together, which is what keeps `agents.status`, the
+  -- Lounge scene and the network counters from disagreeing.
   update public.agents a
      set owner_id = p_profile_id,
-         verified = true
+         verified = true,
+         status   = 'available'
    where a.id = v_claim.agent_id
   returning * into v_agent;
+
+  update public.presence p
+     set status = 'available',
+         updated_at = now()
+   where p.agent_id = v_agent.id;
 
   update public.agent_claims c
      set claimed_at = now(),

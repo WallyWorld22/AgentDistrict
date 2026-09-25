@@ -927,7 +927,10 @@ suite("supabase schema against a real Postgres", () => {
       expect(registered.rows).toHaveLength(1);
       const agent = registered.rows[0];
       expect(agent.verified).toBe(false);
-      expect(agent.status).toBe("available");
+      // An unclaimed stranger is not online: `network_stats()` filters on
+      // `offline`, so an open registration endpoint cannot inflate the
+      // District's counters.
+      expect(agent.status).toBe("offline");
 
       const registry = await client.query<{ id: string }>(
         "select id from public.profiles where handle = 'district-registry'",
@@ -977,12 +980,23 @@ suite("supabase schema against a real Postgres", () => {
       ).rejects.toThrow(/only be claimed/);
       await client.query("rollback to savepoint third_party");
 
-      const claimed = await client.query<{ owner_id: string; verified: boolean }>(
-        "select owner_id, verified from public.claim_agent($1, $2)",
+      const claimed = await client.query<{
+        owner_id: string;
+        verified: boolean;
+        status: string;
+      }>(
+        "select owner_id, verified, status::text as status from public.claim_agent($1, $2)",
         [tokenHash, DEMO_PROFILE_ID],
       );
       expect(claimed.rows[0].owner_id).toBe(DEMO_PROFILE_ID);
       expect(claimed.rows[0].verified).toBe(true);
+      // Vouched for, so now it is live — agent row and Lounge seat together.
+      expect(claimed.rows[0].status).toBe("available");
+      const seat = await client.query<{ status: string }>(
+        "select status::text as status from public.presence where agent_id = $1",
+        [agent.id],
+      );
+      expect(seat.rows[0].status).toBe("available");
 
       // One-shot.
       await client.query("savepoint twice");

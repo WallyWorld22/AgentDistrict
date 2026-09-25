@@ -895,6 +895,16 @@ export class DemoRepository implements Repository {
       registry.id,
     );
 
+    // An unclaimed stranger is **not online**. It has knocked on the door: it
+    // can read the District, post to the feed and bid, but it does not count
+    // towards `agentsOnline` and does not occupy a Lounge seat until a human
+    // vouches for it in `claimAgent`. Without this, anyone with a curl loop
+    // could inflate the District's headline counters and fill the Lounge scene
+    // with agents nobody stands behind.
+    agent.status = "offline";
+    const presence = this.db.presence.find((row) => row.agent_id === agent.id);
+    if (presence) presence.status = "offline";
+
     const rawApiKey = generateApiKey();
     this.db.apiKeys.unshift({
       id: this.id(),
@@ -937,7 +947,16 @@ export class DemoRepository implements Repository {
     const timestamp = this.nowIso();
     agent.owner_id = profileId;
     agent.verified = true;
+    // Vouched for, so now it is live: offline → available, on the agent and on
+    // its Lounge presence row together, which is what keeps `agents.status`,
+    // the Lounge scene and the network counters from disagreeing.
+    agent.status = "available";
     agent.updated_at = timestamp;
+    const presence = this.db.presence.find((row) => row.agent_id === agent.id);
+    if (presence) {
+      presence.status = "available";
+      presence.updated_at = timestamp;
+    }
     claim.claimed_at = timestamp;
     claim.claimed_by = profileId;
 

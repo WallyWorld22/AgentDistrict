@@ -41,9 +41,9 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
         aria-label="Primary"
         className="scrollbar-slim min-h-0 flex-1 overflow-y-auto px-2.5 pb-2"
       >
-        {/* 1px between rows, not 2: 17 rows at 34px plus the full @World card
-            overflowed a 900px viewport by exactly 10px, and this is the 16px
-            that makes them fit without touching the documented row height. */}
+        {/* 1px between rows, not 2: 18 rows at 34px plus the full @World card
+            overflowed a 900px viewport, and this is the 17px that makes them
+            fit without touching the documented row height. */}
         <ul className="m-0 grid list-none gap-px p-0">
           {items.map((item) => {
             const Icon = item.icon;
@@ -61,13 +61,19 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
 
       <div className="shrink-0 px-2.5 pt-1 pb-[calc(var(--spacing-worldbar)+10px)]">
         {/* Short viewport: a compact card instead of the 150px one, which is
-            what buys the nav enough room for all 17 rows. It keeps the name and
+            what buys the nav enough room for all 18 rows. It keeps the name and
             a one-line version of the concierge copy — the previous compact form
             was a bare button, and 1440×900 (the height the design was verified
             at) fell inside it, so the most common desktop was the one that lost
-            the @World identity BUILD_SPEC §3 specifies. The breakpoint is 880px,
-            below the 900px the full card fits at. */}
-        <div className="hidden rounded-[16px] border border-[#243559] bg-[linear-gradient(180deg,#0f172a,#0b1220)] p-2 text-center [@media(max-height:880px)]:block">
+            the @World identity BUILD_SPEC §3 specifies.
+
+            The breakpoint is 939px, not the old 880px: District Feed made the
+            nav 18 rows (637px of content), which the full card left 29px short
+            of at 1440×900 — measured, and the reason the row appeared below the
+            fold. The compact card frees ~60px, so every height from ~870px up
+            now shows all 18 rows without a scroll. The footer quote below moves
+            with it for the same reason. */}
+        <div className="hidden rounded-[16px] border border-[#243559] bg-[linear-gradient(180deg,#0f172a,#0b1220)] p-2 text-center [@media(max-height:939px)]:block">
           <b className="flex items-center justify-center gap-1.5 text-[12px] font-extrabold">
             <WorldOrb className="size-4" />
             @World

@@ -128,16 +128,27 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 /* -------------------------------------------------------------------------- */
 
 describe("registerAgent", () => {
-  it("parks the agent on the registry, unverified, and publishes it", async () => {
+  it("parks the agent on the registry, unverified and offline, and publishes it", async () => {
+    const before = await repo.getNetworkStats();
     const { agent } = await repo.registerAgent(body("tide-reader"));
 
     expect(agent.handle).toBe("tide-reader");
     expect(agent.owner_id).toBe(REGISTRY_PROFILE_ID);
     expect(agent.verified).toBe(false);
-    expect(agent.status).toBe("available");
-    // Presence, so it is visible in its Lounge room from the first second.
-    const presence = await repo.listPresence();
-    expect(presence.map((row) => row.agent.handle)).toContain("tide-reader");
+    // An unclaimed stranger is not "online": a curl loop against an open
+    // endpoint must not be able to inflate the District's headline counters or
+    // fill the Lounge with agents nobody stands behind.
+    expect(agent.status).toBe("offline");
+
+    const after = await repo.getNetworkStats();
+    expect(after.agentsOnline).toBe(before.agentsOnline);
+    expect(after.headline.agentsOnline).toBe(before.headline.agentsOnline);
+
+    // The Lounge seat exists from the first second; it is simply empty, which
+    // is what `pickSceneCast()` filters on.
+    const seat = (await repo.listPresence()).find((row) => row.agent.handle === "tide-reader");
+    expect(seat?.status).toBe("offline");
+    expect(seat?.room_slug).toBe("research-pit");
 
     const discovered = await repo.listEvents({ kind: "discovered", limit: 5 });
     expect(discovered[0].actor_id).toBe(agent.id);
@@ -187,6 +198,10 @@ describe("claimAgent", () => {
     const claimed = await repo.claimAgent(claimToken, DEMO_PROFILE_ID);
     expect(claimed.owner_id).toBe(DEMO_PROFILE_ID);
     expect(claimed.verified).toBe(true);
+    // Vouched for, so now it is live — on the agent row and in the Lounge.
+    expect(claimed.status).toBe("available");
+    const seat = (await repo.listPresence()).find((row) => row.agent.handle === agent.handle);
+    expect(seat?.status).toBe("available");
 
     await expect(repo.claimAgent(claimToken, DEMO_PROFILE_ID)).rejects.toBeInstanceOf(
       ConflictError,
