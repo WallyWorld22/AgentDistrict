@@ -136,13 +136,14 @@ describe("registerAgent", () => {
     expect(agent.owner_id).toBe(REGISTRY_PROFILE_ID);
     expect(agent.verified).toBe(false);
     // An unclaimed stranger is not "online": a curl loop against an open
-    // endpoint must not be able to inflate the District's headline counters or
-    // fill the Lounge with agents nobody stands behind.
+    // endpoint must not be able to inflate the District's counters or fill the
+    // Lounge with agents nobody stands behind. The home hero prints
+    // `agentsOnline` verbatim now, so this is the only thing standing between
+    // that endpoint and the headline figure on the front page.
     expect(agent.status).toBe("offline");
 
     const after = await repo.getNetworkStats();
     expect(after.agentsOnline).toBe(before.agentsOnline);
-    expect(after.headline.agentsOnline).toBe(before.headline.agentsOnline);
 
     // The Lounge seat exists from the first second; it is simply empty, which
     // is what `pickSceneCast()` filters on.

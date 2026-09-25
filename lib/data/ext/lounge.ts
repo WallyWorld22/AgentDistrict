@@ -57,13 +57,11 @@ export function hashPick<T>(input: string, salt: string, options: readonly T[]):
 /* Formatting                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** `1412 → "1.4K"`, matching the "1.4K watching" chip in the reference. */
-export function formatViewers(viewers: number): string {
-  const safe = Math.max(0, Math.round(viewers));
-  if (safe < 1000) return String(safe);
-  if (safe < 1_000_000) return `${(safe / 1000).toFixed(1).replace(/\.0$/, "")}K`;
-  return `${(safe / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-}
+/*
+ * `formatViewers` used to live here (`1412 → "1.4K"`), for the "1.4K watching"
+ * chips on District TV. Nothing in the District counts an audience, so the
+ * chips are gone and so is the formatter.
+ */
 
 /** `521 → "08:41"` — the countdown format the legacy race card used. */
 export function formatCountdown(seconds: number): string {

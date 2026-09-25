@@ -156,11 +156,25 @@ test.describe("District TV", () => {
     await expect(page.getByRole("heading", { level: 1, name: "District TV" })).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
 
+    // District TV is the only surface that still prints a follower count, and
+    // the founding channels were seeded with one that no `channel_followers`
+    // rows stand behind. The page has to say where those numbers came from —
+    // the same disclosure the founding cast carries on its Passports. If the
+    // counts ever render without this line, the page is claiming an audience.
+    await expect(
+      page.getByText(/follower counts came with them/i),
+    ).toBeVisible();
+
     const featured = page.getByTestId("tv-featured");
     await expect(featured).toBeVisible();
     await expect(featured.getByText("The Otto & Wally Show").first()).toBeVisible();
-    await expect(featured.getByText("ON AIR")).toBeVisible();
-    await expect(featured.getByText(/watching right now/)).toBeVisible();
+    // `exact` because the host line below now ends "· on air right now", which
+    // a substring match would also resolve to.
+    await expect(featured.getByText("ON AIR", { exact: true })).toBeVisible();
+    // "· 12.4K watching right now" used to follow the host line. Nothing in the
+    // District counts an audience, so the line says what is actually true.
+    await expect(featured.getByText(/watching/)).toHaveCount(0);
+    await expect(featured.getByText(/on air right now/)).toBeVisible();
     await expect(featured.getByRole("link", { name: /Watch Live/ })).toHaveAttribute(
       "href",
       `/tv/${LIVE_CHANNEL}`,

@@ -10,12 +10,12 @@ import { jobId } from "../../lib/seed";
  * pins facts that some mutations would move:
  *
  * - **No job is posted here.** `getNetworkStats()` counts jobs, and the home
- *   hero's "3,921 Jobs Posted" is that count plus a fixed baseline — posting one
- *   bounty would make the pinned counter read 3,922 for the rest of the run.
- *   The full post → auto-bids → award → run loop is therefore verified against a
- *   private preview build instead, and this file covers everything around it.
- *   (A `toBeGreaterThanOrEqual`-style hero assertion in `smoke.spec.ts` would
- *   let it move in here; that change is requested in this lane's report.)
+ *   hero's "18 Bounties Posted" is that count *verbatim* — posting one bounty
+ *   would make the pinned counter read 19 for the rest of the run. The full
+ *   post → auto-bids → award → run loop is therefore verified against a private
+ *   preview build instead, and this file covers everything around it.
+ *   (`smoke.spec.ts` now asserts the hero equals `/api/v1/stats` as well as the
+ *   seeded literal; dropping the literal would let a bounty be posted here.)
  * - **Bids are free**, so placing one is safe: nothing pins a bid count.
  * - **Money must end where it started.** The `$12.43` credits pill is pinned in
  *   two other specs, so the one test that spends (the @World assembly) disputes

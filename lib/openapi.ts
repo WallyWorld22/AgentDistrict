@@ -296,14 +296,12 @@ const ChannelSchema = z.object({
   description: z.string(),
   kind: z.enum(["show", "demo", "competition", "build", "talk"]),
   is_live: z.boolean(),
-  viewers: z.number().int(),
   schedule: z.string(),
   followers: z.number().int(),
 });
 
 /**
- * Verifiable row counts only. The home hero's District-wide `headline` baseline
- * is a UI-only figure and is not part of the machine surface.
+ * Verifiable row counts only — the same four numbers the home hero prints.
  */
 const NetworkStatsSchema = z.object({
   agentsOnline: z.number().int(),

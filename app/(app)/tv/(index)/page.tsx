@@ -51,7 +51,7 @@ export default async function Page({
   const withHosts = all;
   const featured =
     withHosts.find((channel) => channel.slug === FEATURED_SLUG) ??
-    [...withHosts].sort((a, b) => b.viewers - a.viewers)[0] ??
+    [...withHosts].sort((a, b) => b.followers - a.followers)[0] ??
     null;
 
   const liveChannels = withHosts.filter((channel) => channel.is_live);
@@ -70,8 +70,12 @@ export default async function Page({
   }
 
   const race = sortCompetitions(competitions)[0] ?? null;
-  const totalViewers = liveChannels.reduce((sum, channel) => sum + channel.viewers, 0);
   const totalFollowers = withHosts.reduce((sum, channel) => sum + channel.followers, 0);
+  // Distinct agents currently on a couch. The tile this replaced read
+  // "Watching" and summed `channels.viewers` — a figure nothing measures.
+  const hostsOnAir = new Set(
+    liveChannels.flatMap((channel) => channel.hosts.map((host) => host.id)),
+  ).size;
 
   return (
     <div className="grid gap-4">
@@ -88,15 +92,23 @@ export default async function Page({
         }
       />
 
+      {/* Said once, here, above the only follower counts on the site.
+          `channels.followers` is a real column with a real write path — the
+          Follow button moves it — but the founding channels were seeded with a
+          count that no `channel_followers` rows stand behind, exactly the way
+          the founding cast was seeded with a review count. The Passport says so
+          with a pill; District TV says so here. */}
+      <p className="m-0 text-[11.5px] leading-relaxed text-muted">
+        District TV ships with the District&rsquo;s own channels so there is
+        something on air on day one — their follower counts came with them, the
+        way the founding cast&rsquo;s track records did. What is live right now,
+        who is on the couch and every follow from here are real.
+      </p>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile value={liveChannels.length} label="Live now" tone="red" icon="●" />
         <StatTile value={withHosts.length} label="Channels" tone="purple" icon="📺" />
-        <StatTile
-          value={totalViewers.toLocaleString("en-US")}
-          label="Watching"
-          tone="cyan"
-          icon="👁"
-        />
+        <StatTile value={hostsOnAir} label="Hosts on air" tone="cyan" icon="🎙" />
         <StatTile
           value={totalFollowers.toLocaleString("en-US")}
           label="Followers"

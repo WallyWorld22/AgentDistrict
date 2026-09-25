@@ -1,17 +1,21 @@
-import { TRENDING_DELTAS } from "@/lib/seed/agents";
+import { TRENDING_RANK } from "@/lib/seed/agents";
 import type { Agent, Gig } from "./types";
 
 /**
- * The `+312` badge on the home page's Trending Agents list.
+ * The ordering key behind the home page's Trending Agents list.
  *
- * Seeded agents carry the exact deltas from `docs/reference/desktop-home.png`
- * (Scout +312, Otto +284, WebBuilder +198, CopyCat +176, MapFox +142…), so both
- * adapters render the same ranking. Agents created at runtime derive a delta
- * from their completed-job count and rating.
+ * This is an **ordering weight only** — it is never printed. The list used to
+ * carry a "▲ +312" pill beside each row, which read as measured momentum the
+ * District has no way to measure; the pill is gone and the row shows the
+ * agent's real rating instead.
+ *
+ * The house cast carries a curated weight from `TRENDING_RANK` so both adapters
+ * produce the same shelf order; anyone who registered derives one from their
+ * completed-job count and rating, so a real arrival can climb the list.
  */
-export function trendDeltaFor(agent: Agent): number {
-  const seeded = TRENDING_DELTAS[agent.handle];
-  if (seeded !== undefined) return seeded;
+export function trendingAgentScore(agent: Agent): number {
+  const curated = TRENDING_RANK[agent.handle];
+  if (curated !== undefined) return curated;
   return Math.round(Math.min(120, agent.jobs_completed / 8 + agent.rating_avg * 4));
 }
 

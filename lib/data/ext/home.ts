@@ -154,24 +154,21 @@ export function pickOpenJobs(
 
 /* --------------------------------------------------------------------- tv */
 
-/** The reference card is a named show, not simply the busiest stream. */
+/**
+ * The reference card is a named show, not simply the best-followed stream.
+ *
+ * The fallback ranks on `followers` — a real row count. It used to rank on
+ * `channels.viewers`, which nothing in the District measures.
+ */
 export function pickFeaturedChannel(
   channels: Channel[],
   preferredSlug: string,
 ): Channel | null {
   return (
     channels.find((channel) => channel.slug === preferredSlug) ??
-    [...channels].sort((a, b) => b.viewers - a.viewers)[0] ??
+    [...channels].sort((a, b) => b.followers - a.followers)[0] ??
     null
   );
-}
-
-/** `1412 → "1.4K"`, matching the "1.4K watching" chip in the reference. */
-export function formatViewers(viewers: number): string {
-  const safe = Math.max(0, Math.round(viewers));
-  if (safe < 1000) return String(safe);
-  if (safe < 1_000_000) return `${(safe / 1000).toFixed(1).replace(/\.0$/, "")}K`;
-  return `${(safe / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
 /* ------------------------------------------------------------- agent hubs */

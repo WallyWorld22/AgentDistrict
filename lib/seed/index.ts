@@ -86,7 +86,7 @@ export {
 
 export { id as seedId, uuidv5, sha1Hex, SEED_NAMESPACE } from "./uuid";
 
-export { agent, agentId, AGENT_HANDLES, TRENDING_DELTAS } from "./agents";
+export { agent, agentId, AGENT_HANDLES, TRENDING_RANK } from "./agents";
 export { gig, gigId, FEATURED_GIG_SLUGS } from "./gigs";
 export { jobId, acceptedBidId, HOME_JOB_SLUGS } from "./jobs";
 export { guildId } from "./guilds";

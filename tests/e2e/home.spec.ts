@@ -5,7 +5,8 @@ import { expect, test, type Page } from "@playwright/test";
  * `docs/reference/mobile-screens.png`).
  *
  * `tests/e2e/smoke.spec.ts` already pins the reference *content* — the four
- * hero counters, the eight section headings, `$0.79`, `▲ +312`. This file
+ * hero counters (against `/api/v1/stats`, which they must equal), the eight
+ * section headings, `$0.79`, Scout's rating on the trending row. This file
  * covers the things only a real browser can prove: the room chips filter the
  * presence scene without navigating, the Lounge composer posts through the
  * Server Action and the line survives a reload, and the mobile entry points
@@ -132,7 +133,15 @@ test.describe("home dashboard (desktop)", () => {
 
     const tv = page.getByTestId("tv-card");
     await expect(tv.getByText("LIVE", { exact: true })).toBeVisible();
-    await expect(tv.getByText(/watching/)).toBeVisible();
+
+    // A LIVE flag, the show, the hosts and two ways in — and no crowd size of
+    // any kind. The "👁 1.4K watching" chip that used to sit opposite the flag
+    // counted an audience nothing in the District measures; a follower count in
+    // its place would be the seeded baseline in `channels.followers`, which the
+    // front page has nowhere to disclose. `/tv` prints those and explains them.
+    await expect(tv.getByText(/watching/)).toHaveCount(0);
+    await expect(tv.getByText(/followers/)).toHaveCount(0);
+    await expect(tv.getByText(/\d[\d,.]*K\b/)).toHaveCount(0);
     await expect(tv.getByText("Otto", { exact: true })).toBeVisible();
     await expect(tv.getByText("Wally", { exact: true })).toBeVisible();
 
@@ -172,8 +181,16 @@ test.describe("home dashboard (desktop)", () => {
       "/showrooms",
     );
 
-    // Trending deltas from the reference.
-    await expect(page.getByText("▲ +312")).toBeVisible();
+    // The trending rows end in the agent's rating, not an invented "▲ +312"
+    // momentum figure.
+    await expect(page.getByText("▲")).toHaveCount(0);
+    const trending = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Trending Agents" }) })
+      .last();
+    await expect(
+      trending.getByLabel("Rated 4.96 out of 5 from 1,842 reviews"),
+    ).toBeVisible();
   });
 
   test("the machine entrance links to real endpoints", async ({ page }) => {

@@ -7,7 +7,6 @@ import {
   MACHINE_ENTRANCES,
   chatTranscript,
   countOnline,
-  formatViewers,
   loadAgentHubs,
   pickFeaturedChannel,
   pickOpenJobs,
@@ -218,10 +217,12 @@ describe("pickOpenJobs", () => {
 });
 
 describe("pickFeaturedChannel", () => {
-  const channel = (slug: string, viewers: number): Channel =>
-    ({ slug, viewers, is_live: true }) as Channel;
+  // The fallback ranks on `followers` — a real row count. It used to rank on
+  // `channels.viewers`, a spectator figure nothing in the District measures.
+  const channel = (slug: string, followers: number): Channel =>
+    ({ slug, followers, is_live: true }) as Channel;
 
-  it("prefers the named show over the busiest stream", () => {
+  it("prefers the named show over the best-followed stream", () => {
     const picked = pickFeaturedChannel(
       [channel("research-race", 9000), channel("the-show", 10)],
       "the-show",
@@ -229,7 +230,7 @@ describe("pickFeaturedChannel", () => {
     expect(picked?.slug).toBe("the-show");
   });
 
-  it("falls back to the busiest live channel, then to null", () => {
+  it("falls back to the best-followed live channel, then to null", () => {
     expect(
       pickFeaturedChannel([channel("a", 5), channel("b", 900)], "missing")?.slug,
     ).toBe("b");
@@ -240,16 +241,6 @@ describe("pickFeaturedChannel", () => {
     const detail = await getRepo().getChannelBySlug(FEATURED_CHANNEL_SLUG);
     expect(detail?.is_live).toBe(true);
     expect(detail?.hosts.length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("formatViewers", () => {
-  it("matches the reference chip", () => {
-    expect(formatViewers(1412)).toBe("1.4K");
-    expect(formatViewers(918)).toBe("918");
-    expect(formatViewers(2000)).toBe("2K");
-    expect(formatViewers(1_250_000)).toBe("1.3M");
-    expect(formatViewers(-5)).toBe("0");
   });
 });
 

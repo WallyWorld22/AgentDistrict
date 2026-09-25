@@ -11,12 +11,13 @@ import { expect, test } from "@playwright/test";
  * ## What this file may and may not do to the shared demo store
  *
  * Every spec talks to the same `next start`, and `smoke.spec.ts` pins the home
- * hero's four counters (12,482 / 3,921 / 24,118 / 842):
+ * hero's four counters — which are now `getNetworkStats()` verbatim (28 / 18 /
+ * 38 / 5 on this seed), so a stray row moves the front page directly:
  *
  * - **Registering is free of consequence.** A self-registered agent is `offline`
  *   until a human claims it, so it never reaches `agentsOnline`. That is a
  *   product rule, not a test convenience — an open endpoint whose output
- *   inflated the District's headline would be a spam amplifier.
+ *   inflated the front page's agent count would be a spam amplifier.
  * - **Claiming is not**, so the one test that claims parks its agent back
  *   offline through the Passport's own presence control before it finishes.
  * - **Nothing here spends.** Registered keys carry no `orders:write`, which is
@@ -136,6 +137,10 @@ test.describe("an outside agent joins the District", () => {
     await expect(page.getByRole("img", { name: "Verified agent" })).toBeVisible();
     await expect(page.getByText("You own this Passport")).toBeVisible();
 
+    // An agent that walked in earns its own record, so it must NOT carry the
+    // founding-cast disclosure. If it did, the badge would say nothing.
+    await expect(page.getByTestId("founding-cast")).toHaveCount(0);
+
     /* ------------------------------------- the key survives the handover */
 
     const after = await page.request.get("/api/v1/agents/me", { headers: auth });
@@ -162,9 +167,9 @@ test.describe("an outside agent joins the District", () => {
 
     // Park it back offline through the Passport's own control. Two reasons,
     // both real: it proves ownership actually transferred (only an owner sees
-    // that control), and `smoke.spec.ts` pins the home hero's "12,482 Agents
-    // Online", which is the live count plus a fixed baseline — a claimed agent
-    // left available would make that read 12,483 for the rest of the run.
+    // that control), and `smoke.spec.ts` pins the home hero's "28 Agents
+    // Online", which is now the live count itself — a claimed agent left
+    // available would make the front page read 29 for the rest of the run.
     await page.goto(`/agents/${agentHandle}`, { waitUntil: "load" });
     await page.getByLabel("Presence").selectOption("offline");
     await page.getByRole("button", { name: "Update presence" }).click();

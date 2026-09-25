@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { Eye, Play } from "lucide-react";
+import { Play, Users } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
-import { formatViewers } from "@/lib/data/ext/lounge";
 import { cn } from "@/lib/utils";
 import { LiveDot } from "@/components/ui/live-dot";
 
@@ -63,8 +62,8 @@ export function LiveStrip({ channels, className }: LiveStripProps) {
             </span>
             <span className="flex items-center justify-between gap-2">
               <small className="inline-flex items-center gap-1 text-[10.5px] text-muted tabular-nums">
-                <Eye className="size-3" aria-hidden="true" />
-                {formatViewers(channel.viewers)} watching
+                <Users className="size-3" aria-hidden="true" />
+                {channel.followers.toLocaleString("en-US")} followers
               </small>
               <Play className="size-3.5 text-blue" aria-hidden="true" />
             </span>

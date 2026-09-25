@@ -23,8 +23,7 @@ import {
   sha256Hex,
 } from "../hash";
 import type { Repository, RepositoryMode } from "../repository";
-import { headlineStats } from "../stats";
-import { compareTrendingGigs, trendDeltaFor } from "../trending";
+import { compareTrendingGigs, trendingAgentScore } from "../trending";
 
 /**
  * How many rows the trending sort re-ranks in memory. The score is computed,
@@ -161,8 +160,8 @@ import { emptySearchCounts, searchHrefFor, summariseHits } from "../search";
  *    real money through this.
  */
 /**
- * How many agents to pull before an in-memory `trendDelta` sort. Comfortably
- * above the seeded roster; the demo adapter sorts the whole set.
+ * How many agents to pull before an in-memory `trendingAgentScore` sort.
+ * Comfortably above the seeded roster; the demo adapter sorts the whole set.
  */
 const TRENDING_WINDOW = 200;
 
@@ -381,7 +380,7 @@ export class SupabaseRepository implements Repository {
     const { data, error } = await client.rpc("network_stats");
     if (error) throw new UpstreamError(error.message);
     const real = toNetworkCounts(data);
-    return { ...real, headline: headlineStats(real) };
+    return real;
   }
 
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
@@ -520,8 +519,8 @@ export class SupabaseRepository implements Repository {
       query = query.eq("store_id", store ?? "");
     }
 
-    // `trendDelta` is a per-handle table in `lib/data/trending`, not a column,
-    // so there is no SQL ordering that matches it. Paginating in SQL and then
+    // The trending score is a per-handle table in `lib/data/trending`, not a
+    // column, so no SQL ordering matches it. Paginating in SQL and then
     // re-sorting in memory would sort *after* the page was chosen and return a
     // different set from the demo adapter; instead fetch a window and slice it.
     if (sort === "trending") {
@@ -562,9 +561,10 @@ export class SupabaseRepository implements Repository {
       client.from("agents").select("*").neq("status", "offline").limit(200),
       toAgent,
     );
+    // `trendingAgentScore` is an ordering key only — nothing is attached to the
+    // row, so what comes back is a plain `Agent` in both modes.
     return agents
-      .map((agent) => ({ ...agent, trendDelta: trendDeltaFor(agent) }))
-      .sort((a, b) => b.trendDelta - a.trendDelta)
+      .sort((a, b) => trendingAgentScore(b) - trendingAgentScore(a))
       .slice(0, limit);
   }
 
@@ -1976,8 +1976,9 @@ export class SupabaseRepository implements Repository {
     let query = client
       .from("channels")
       .select("*")
+      // Matches the demo adapter: live first, then followers (never `viewers`).
       .order("is_live", { ascending: false })
-      .order("viewers", { ascending: false })
+      .order("followers", { ascending: false })
       .range(offset, offset + limit - 1);
     if (liveOnly) query = query.eq("is_live", true);
     if (kind) query = query.eq("kind", kind);
@@ -2637,7 +2638,7 @@ function sortAgents(agents: Agent[], sort: NonNullable<AgentFilter["sort"]>): Ag
       case "newest":
         return b.created_at.localeCompare(a.created_at);
       default:
-        return trendDeltaFor(b) - trendDeltaFor(a) || b.rating_avg - a.rating_avg;
+        return trendingAgentScore(b) - trendingAgentScore(a) || b.rating_avg - a.rating_avg;
     }
   });
 }

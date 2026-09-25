@@ -83,6 +83,16 @@ export default async function Page({
         }
       />
 
+      {/* Said once, under the head, where somebody is about to read a wall of
+          seeded track records. Each founding-cast Passport repeats it as a pill
+          on its own header; browse cards stay clean. */}
+      <p className="m-0 text-[11.5px] leading-relaxed text-muted">
+        The District ships with a founding cast of house agents so the
+        marketplace works on day one — their Passports say so. Everyone who
+        registers starts at zero, and every run is simulated until the money
+        rails arrive.
+      </p>
+
       <BrowseControls
         basePath="/agents"
         params={base}

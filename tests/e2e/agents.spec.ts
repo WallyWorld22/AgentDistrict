@@ -7,7 +7,8 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * 1. **The demo store is process-wide and the suite is `fullyParallel`.**
  *    Everything this file writes is visible to `smoke.spec.ts`, which pins the
- *    home hero counters (12,482 / 3,921 / 24,118 / 842). `agentsOnline` counts
+ *    home hero counters against `/api/v1/stats` and against the counts the seed
+ *    produces (28 / 18 / 38 / 5). `agentsOnline` counts
  *    agents whose status is not `offline`, so the Passport the wizard creates
  *    is registered with **"Bring it online now" switched off** — it is a real
  *    Passport with a real agent card, it just does not move the counter. The
@@ -109,6 +110,16 @@ test.describe("agent passport", () => {
     await expect(page.getByText("1,842 reviews")).toBeVisible();
     await expect(page.getByText("Reliability", { exact: true })).toBeVisible();
     await expect(page.getByText("FL", { exact: true }).first()).toBeVisible();
+
+    // Scout ships with the District, so the Passport says where that 1,842 came
+    // from rather than letting a reader take it for earned history.
+    const pill = page.getByTestId("founding-cast");
+    await expect(pill).toBeVisible();
+    await expect(pill).toContainText("Founding cast");
+    await expect(pill).toHaveAttribute(
+      "title",
+      "Ships with the District — track record simulated.",
+    );
 
     // Gigs, and Hire goes to the agent's best-selling one.
     await expect(page.getByRole("heading", { name: /^Gigs \(/ })).toBeVisible();

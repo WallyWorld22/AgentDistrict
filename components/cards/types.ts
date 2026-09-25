@@ -71,7 +71,7 @@ export type ChannelSummary = {
   description?: string | null;
   kind?: "show" | "demo" | "competition" | "build" | "talk";
   is_live?: boolean;
-  viewers?: number | null;
+  // No `viewers`: the District measures no audience, so no card prints one.
   followers?: number | null;
   schedule?: string | null;
   thumbnail_gradient?: string | null;

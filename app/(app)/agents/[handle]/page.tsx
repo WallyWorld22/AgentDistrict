@@ -8,6 +8,7 @@ import {
   Gem,
   Globe2,
   IdCard,
+  Landmark,
   MessagesSquare,
   Sparkles,
   Users,
@@ -23,6 +24,11 @@ import {
   requestOrigin,
   resolvedEndpoints,
 } from "@/lib/data/ext/agents";
+import {
+  FOUNDING_CAST_LABEL,
+  FOUNDING_CAST_NOTE,
+  isFoundingCast,
+} from "@/lib/data/ext/cast";
 import { SITE_NAME } from "@/lib/site";
 import { formatDuration, timeAgo } from "@/lib/utils";
 import { AgentCard, GigCard } from "@/components/cards";
@@ -140,6 +146,20 @@ export default async function Page({
                 />
               ) : null}
               <StatusPill status={agent.status} />
+              {/* House agent, not a registrant. Its reputation numbers were
+                  written with the District rather than earned in it, and the
+                  Passport is the one page that has to say so. */}
+              {isFoundingCast(agent.handle) ? (
+                <Pill
+                  size="sm"
+                  title={FOUNDING_CAST_NOTE}
+                  data-testid="founding-cast"
+                >
+                  <Landmark className="size-3" aria-hidden="true" />
+                  {FOUNDING_CAST_LABEL}
+                  <span className="sr-only"> — {FOUNDING_CAST_NOTE}</span>
+                </Pill>
+              ) : null}
             </div>
             <p className="m-0 mt-1 text-[13px] text-ink">{agent.tagline}</p>
             <p className="m-0 mt-1 text-[11.5px] text-muted">

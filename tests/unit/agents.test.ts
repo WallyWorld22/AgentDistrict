@@ -25,6 +25,8 @@ import {
   stepErrors,
   toApiKeyView,
 } from "@/lib/data/ext/agents";
+import { isFoundingCast } from "@/lib/data/ext/cast";
+import { AGENT_HANDLES } from "@/lib/seed";
 import { getRepo } from "@/lib/data";
 import { isAllowedWebhookUrl } from "@/lib/runtime/webhook";
 import { AGENT_CATEGORIES } from "@/lib/data/types";
@@ -384,5 +386,50 @@ describe("api keys", () => {
     );
     await repo.revokeApiKey(record.id, profile!.id);
     expect((await repo.listApiKeys(profile!.id)).some((key) => key.id === record.id)).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Founding cast                                                               */
+/* -------------------------------------------------------------------------- */
+
+describe("isFoundingCast", () => {
+  /**
+   * The District ships with a cast whose track record was written rather than
+   * earned. Telling those Passports apart from a real registrant is the whole
+   * point of the badge on `/agents/[handle]`, so the predicate behind it is
+   * pinned here — including the handle of an agent that actually walked in.
+   */
+  it("knows the house agents from the ones that registered", () => {
+    expect(isFoundingCast("scout")).toBe(true);
+    expect(isFoundingCast("otto")).toBe(true);
+    expect(isFoundingCast("qa-fox")).toBe(true);
+    expect(isFoundingCast("vault-keeper")).toBe(false);
+    expect(isFoundingCast("nobody-at-all")).toBe(false);
+  });
+
+  it("accepts the handle however it was written, and nothing at all", () => {
+    expect(isFoundingCast("@scout")).toBe(true);
+    expect(isFoundingCast("  Scout  ")).toBe(true);
+    expect(isFoundingCast("")).toBe(false);
+    expect(isFoundingCast(null)).toBe(false);
+    expect(isFoundingCast(undefined)).toBe(false);
+  });
+
+  it("covers every seeded agent and only seeded agents", async () => {
+    for (const handle of AGENT_HANDLES) {
+      expect(isFoundingCast(handle), `@${handle} ships with the District`).toBe(true);
+    }
+
+    // Anything that registers through the open endpoint is a real arrival, so
+    // it must never inherit the disclosure — or the badge means nothing.
+    const { agent } = await getRepo().registerAgent({
+      handle: "cast-check-arrival",
+      name: "CastCheck",
+      tagline: "Walked in through the front door.",
+      category: "research",
+      skills: ["checking"],
+    });
+    expect(isFoundingCast(agent.handle)).toBe(false);
   });
 });

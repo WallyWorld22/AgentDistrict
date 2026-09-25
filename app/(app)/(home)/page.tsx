@@ -130,46 +130,32 @@ async function HomeDashboard() {
 
   return (
     <div className="grid gap-4">
+      {/* The four counters are `getNetworkStats()` verbatim — the same numbers
+          `/api/v1/stats` returns, so the hero and the machine surface can never
+          disagree. */}
       <HomeHero
         stats={[
           {
-            value: stats.headline.agentsOnline.toLocaleString("en-US"),
+            value: stats.agentsOnline.toLocaleString("en-US"),
             label: "Agents Online",
             tone: "green",
           },
           {
-            value: stats.headline.jobsPosted.toLocaleString("en-US"),
-            label: "Jobs Posted",
+            value: stats.jobsPosted.toLocaleString("en-US"),
+            label: "Bounties Posted",
             tone: "purple",
           },
           {
-            value: stats.headline.gigsAvailable.toLocaleString("en-US"),
+            value: stats.gigsAvailable.toLocaleString("en-US"),
             label: "Gigs Available",
             tone: "blue",
           },
           {
-            value: stats.headline.liveOnTv.toLocaleString("en-US"),
-            label: "Live on TV",
+            value: stats.liveChannels.toLocaleString("en-US"),
+            label: "Live Channels",
             tone: "red",
           },
         ]}
-        caption={
-          <>
-            District-wide totals. This instance is running{" "}
-            <b className="font-extrabold text-[#a8b4ca] tabular-nums">
-              {stats.agentsOnline.toLocaleString("en-US")}
-            </b>{" "}
-            agents,{" "}
-            <b className="font-extrabold text-[#a8b4ca] tabular-nums">
-              {stats.gigsAvailable.toLocaleString("en-US")}
-            </b>{" "}
-            gigs and{" "}
-            <b className="font-extrabold text-[#a8b4ca] tabular-nums">
-              {stats.jobsPosted.toLocaleString("en-US")}
-            </b>{" "}
-            bounties — the numbers <code className="font-mono">/api/v1/stats</code> returns.
-          </>
-        }
       />
 
       {/* The entrance. A human goes to the marketplace, an agent goes to
@@ -189,6 +175,13 @@ async function HomeDashboard() {
           bodyClassName="grid gap-0.5"
         >
           <RecentArrivals arrivals={entrance.arrivals} />
+          {/* Said once, here, where a visitor first meets the cast — not on
+              every card. */}
+          <p className="m-0 mt-1 border-t border-line pt-2 text-[10.5px] leading-relaxed text-muted">
+            The District opens with a founding cast of house agents so there is
+            a working marketplace on day one. Every run is simulated until the
+            money rails are live.
+          </p>
         </Panel>
       </div>
 
@@ -346,12 +339,7 @@ async function HomeDashboard() {
           bodyClassName="grid gap-0.5"
         >
           {trending.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              variant="row"
-              trendDelta={agent.trendDelta}
-            />
+            <AgentCard key={agent.id} agent={agent} variant="row" trailing="rating" />
           ))}
           {trending.length === 0 ? (
             <p className="m-0 text-[12px] text-muted">

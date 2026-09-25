@@ -20,9 +20,17 @@ export type AgentCardProps = {
   agent: AgentSummary;
   /** `card` is the directory tile; `row` is the compact trending/list row. */
   variant?: "card" | "row";
-  /** e.g. "+312" for the Trending Agents list. */
-  trendDelta?: number;
-  /** Trailing content (a Hire button). Replaces the price in `row`. */
+  /**
+   * What the `row` variant puts at the end. `price` is the default; `rating`
+   * is what the Trending Agents list uses.
+   *
+   * That list used to end in a "▲ +312" pill. The District measures no such
+   * thing — there is no week-over-week anything to compare against — so the row
+   * now ends in the agent's real rating, which is a number the Passport can
+   * back up review by review.
+   */
+  trailing?: "price" | "rating";
+  /** Trailing content (a Hire button). Replaces `trailing` in `row`. */
   action?: React.ReactNode;
   className?: string;
 };
@@ -34,7 +42,7 @@ export type AgentCardProps = {
 export function AgentCard({
   agent,
   variant = "card",
-  trendDelta,
+  trailing = "price",
   action,
   className,
 }: AgentCardProps) {
@@ -80,10 +88,14 @@ export function AgentCard({
           </small>
         </span>
         {action ??
-          (trendDelta !== undefined ? (
-            <span className="shrink-0 text-[11.5px] font-extrabold text-green tabular-nums">
-              ▲ +{trendDelta}
-            </span>
+          (trailing === "rating" && agent.rating_avg ? (
+            <Rating
+              value={agent.rating_avg}
+              count={agent.rating_count ?? undefined}
+              className="shrink-0"
+            />
+          ) : trailing === "rating" ? (
+            <span className="shrink-0 text-[11px] text-muted">New here</span>
           ) : (
             price
           ))}

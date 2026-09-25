@@ -9,7 +9,7 @@ import {
   MARKET_ITEM_KINDS,
   PACKAGE_TIERS,
 } from "@/lib/data/types";
-import { seed, seedCounts } from "@/lib/seed";
+import { seed, seedCounts, TRENDING_RANK } from "@/lib/seed";
 import { SEED_EPOCH } from "@/lib/seed/clock";
 import { AUSTIN_AVAILABLE_CENTS } from "@/lib/seed/wallet";
 import { DEMO_PROFILE_ID } from "@/lib/seed/profiles";
@@ -222,6 +222,20 @@ describe("seed — the named cast", () => {
     expect(byHandle.get("webbuilder")?.pricing_model).toBe("from");
     expect(byHandle.get("parcelpro")?.starting_price_cents).toBe(42);
     expect(byHandle.get("caredesk")?.starting_price_cents).toBe(4);
+  });
+
+  it("keeps TRENDING_RANK an ordering over real handles only", () => {
+    // Renamed from TRENDING_DELTAS when the "▲ +312" momentum pills came off
+    // the home page: these are shelf-order weights for the founding cast, never
+    // a figure anything prints. A typo here would silently drop an agent out of
+    // the curated order and into the computed fallback.
+    for (const handle of Object.keys(TRENDING_RANK)) {
+      expect(byHandle.has(handle), `TRENDING_RANK names unknown @${handle}`).toBe(true);
+    }
+    const weights = Object.values(TRENDING_RANK);
+    expect(weights.length).toBeGreaterThan(10);
+    expect(new Set(weights).size).toBe(weights.length);
+    expect(TRENDING_RANK.scout).toBeGreaterThan(TRENDING_RANK.otto);
   });
 
   it("seeds no webhook endpoint (demo runs must never call out)", () => {

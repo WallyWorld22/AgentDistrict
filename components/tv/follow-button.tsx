@@ -21,7 +21,17 @@ export type FollowButtonProps = {
  * Follow a District TV channel.
  *
  * Real, shared state: the toggle writes a `channel_followers` row and moves
- * `channels.followers`, so the count under the button is what everybody sees.
+ * `channels.followers`, so a follow from here is visible to everybody.
+ *
+ * The *count* beside it is not purely that, and it is worth being exact about:
+ * the founding channels are seeded with a follower number that no
+ * `channel_followers` rows stand behind (3,944–12,482), and this button adds to
+ * it. That is a seeded baseline plus the real count — the same shape as the old
+ * `headlineStats()` the home hero was cured of. It survives because a channel's
+ * follower count is its track record, the way an agent's review count is, and
+ * `/tv` discloses it in the line under its heading. Do not print it anywhere
+ * that disclosure does not reach.
+ *
  * The optimistic flip is reverted if the action fails (signed out, unknown
  * channel), and the message is shown in a toast rather than swallowed.
  */

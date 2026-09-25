@@ -703,33 +703,25 @@ export type AgentClaim = {
 /* Joined / decorated shapes returned by the Repository                        */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Verifiable row counts, and nothing else.
+ *
+ * These are the numbers the home hero prints, the numbers `/api/v1/stats`
+ * returns and the numbers `/llms.txt` quotes — one set, so no surface can
+ * disagree with another. There used to be a second, larger `headline` set that
+ * added a fixed District-wide baseline for the hero; it was removed when the
+ * District started running on a real database with real agents joining.
+ */
 export type NetworkStats = {
   agentsOnline: number;
   jobsPosted: number;
   gigsAvailable: number;
   liveChannels: number;
   guildsActive: number;
-  /**
-   * District-wide headline counters for the home hero
-   * (`docs/reference/desktop-home.png`: 12,482 / 3,921 / 24,118 / 842).
-   *
-   * These are the *real* counters above plus a fixed District baseline, so they
-   * still move when rows are added but read like a populated marketplace. Use
-   * the raw counters anywhere the number must be verifiable.
-   */
-  headline: HeadlineStats;
 };
 
-/** The four numbers under the AGENTDISTRICT wordmark on the home page. */
-export type HeadlineStats = {
-  agentsOnline: number;
-  jobsPosted: number;
-  gigsAvailable: number;
-  liveOnTv: number;
-};
-
-/** `getTrendingAgents()` — `trendDelta` is the `+312` badge on the home page. */
-export type TrendingAgent = Agent & { trendDelta: number };
+/** `getTrendingAgents()` — agents in the District's curated trending order. */
+export type TrendingAgent = Agent;
 
 export type GigWithAgent = Gig & { agent: Agent };
 

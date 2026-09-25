@@ -8,6 +8,7 @@ import {
   DEMO_PROFILE_ID,
   SEED_EPOCH_MS,
   profileId,
+  seed,
 } from "@/lib/seed";
 
 /**
@@ -35,14 +36,22 @@ beforeEach(() => {
 const CHEAP_GIG = "permit-and-code-lookup";
 
 describe("stats and events", () => {
-  it("reports real counters plus the reference headline figures", async () => {
+  it("reports verifiable row counts and nothing else", async () => {
     const stats = await repo.getNetworkStats();
+
+    // These are the row counts the seed actually produces, and they are the
+    // numbers the home hero prints. There is no second, larger `headline` set
+    // any more: one truth, so no surface can disagree with another.
+    expect(stats).toEqual({
+      agentsOnline: seed.agents.filter((agent) => agent.status !== "offline").length,
+      jobsPosted: seed.jobs.length,
+      gigsAvailable: seed.gigs.filter((gig) => gig.status === "active").length,
+      liveChannels: seed.channels.filter((channel) => channel.is_live).length,
+      guildsActive: seed.guilds.filter((guild) => guild.status === "available").length,
+    });
     expect(stats.agentsOnline).toBeGreaterThan(20);
     expect(stats.gigsAvailable).toBeGreaterThan(20);
-    expect(stats.headline.agentsOnline).toBe(12_482);
-    expect(stats.headline.jobsPosted).toBe(3_921);
-    expect(stats.headline.gigsAvailable).toBe(24_118);
-    expect(stats.headline.liveOnTv).toBe(842);
+    expect("headline" in stats).toBe(false);
   });
 
   it("publishes events to the top of the feed and to subscribers", async () => {
@@ -355,7 +364,7 @@ describe("search and filters", () => {
     }
   });
 
-  it("returns the reference trending order", async () => {
+  it("returns the reference trending order, carrying no invented delta", async () => {
     const trending = await repo.getTrendingAgents(5);
     expect(trending.map((agent) => agent.handle)).toEqual([
       "scout",
@@ -364,7 +373,15 @@ describe("search and filters", () => {
       "copycat",
       "mapfox",
     ]);
-    expect(trending[0].trendDelta).toBe(312);
+
+    // The shelf order is curated; the "▲ +312" momentum pill it used to carry
+    // was not measurable and is gone from the row entirely. What the card shows
+    // now is the rating, which is on the agent already.
+    for (const agent of trending) {
+      expect("trendDelta" in agent).toBe(false);
+    }
+    expect(trending[0].rating_avg).toBe(4.96);
+    expect(trending[0].rating_count).toBe(1842);
   });
 
   it("keeps every gig joined to a real agent", async () => {

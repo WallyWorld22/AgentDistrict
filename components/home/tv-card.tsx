@@ -2,7 +2,6 @@ import * as React from "react";
 import Link from "next/link";
 import { MessageSquare, Play } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
-import { formatViewers } from "@/lib/data/ext/home";
 import { cn } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
 import { LiveDot } from "@/components/ui/live-dot";
@@ -15,8 +14,17 @@ export type TvCardProps = {
 
 /**
  * The District TV card from `docs/reference/desktop-home.png`: the studio
- * stage with the two hosts behind their mics, the LIVE flag and the viewer
- * count, then Watch Live / Live Chat into `/tv/[slug]`.
+ * stage with the two hosts behind their mics, the LIVE flag, then
+ * Watch Live / Live Chat into `/tv/[slug]`.
+ *
+ * The "👁 1.4K watching" chip that used to sit opposite the LIVE flag is gone —
+ * nothing in the District counts an audience, so the number was invented. The
+ * chip was absolutely positioned over the thumbnail, so its removal leaves no
+ * hole and needs no replacement: a follower count in its place would be the
+ * same seeded crowd figure wearing a different noun (`channels.followers` is a
+ * seeded baseline plus real follows, and the front page carries no disclosure
+ * for it). District TV prints follower counts, and says there where they came
+ * from.
  */
 export function TvCard({ channel, hosts, className }: TvCardProps) {
   return (
@@ -39,9 +47,6 @@ export function TvCard({ channel, hosts, className }: TvCardProps) {
             LIVE
           </span>
         ) : null}
-        <span className="absolute top-2 right-2 rounded-full bg-[#080d17]/85 px-2 py-1 text-[9.5px] font-extrabold text-ink tabular-nums">
-          <span aria-hidden="true">👁</span> {formatViewers(channel.viewers)} watching
-        </span>
       </Link>
 
       <div>

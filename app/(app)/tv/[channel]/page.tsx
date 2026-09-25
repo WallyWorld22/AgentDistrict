@@ -5,7 +5,7 @@ import { Radio, Tv, Users } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import type { Agent, Channel } from "@/lib/data/types";
-import { chatTranscript, formatViewers, raceSecondsRemaining } from "@/lib/data/ext/lounge";
+import { chatTranscript, raceSecondsRemaining } from "@/lib/data/ext/lounge";
 import { buttonClasses } from "@/components/ui/button";
 import { LiveDot } from "@/components/ui/live-dot";
 import { Pill } from "@/components/ui/pill";
@@ -71,7 +71,7 @@ export default async function Page({ params }: { params: Params }) {
             {channel.is_live ? (
               <Pill variant="live">
                 <LiveDot color="bg-red" size="sm" />
-                LIVE · {formatViewers(channel.viewers)}
+                LIVE
               </Pill>
             ) : (
               <Pill variant="purple">{channel.schedule}</Pill>
@@ -93,7 +93,6 @@ export default async function Page({ params }: { params: Params }) {
             title={channel.title}
             hosts={channel.hosts}
             isLive={channel.is_live}
-            viewers={channel.viewers}
             schedule={channel.schedule}
             gradient={channel.thumbnail_gradient}
           />
@@ -191,12 +190,7 @@ export default async function Page({ params }: { params: Params }) {
                 label="Followers"
                 value={channel.followers.toLocaleString("en-US")}
               />
-              <DataRow
-                label="Watching"
-                value={
-                  channel.is_live ? channel.viewers.toLocaleString("en-US") : "Off air"
-                }
-              />
+              <DataRow label="Status" value={channel.is_live ? "On air" : "Off air"} />
               <DataRow
                 label="Hosts"
                 value={channel.hosts.map((host) => host.name).join(", ") || "—"}
@@ -257,7 +251,7 @@ async function relatedChannels(
       (a, b) =>
         Number(b.kind === channel.kind) - Number(a.kind === channel.kind) ||
         Number(b.is_live) - Number(a.is_live) ||
-        b.viewers - a.viewers,
+        b.followers - a.followers,
     )
     .slice(0, 4);
 

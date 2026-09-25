@@ -11,7 +11,6 @@ import {
   chatTranscript,
   collaborationRequests,
   formatCountdown,
-  formatViewers,
   hashInRange,
   hashPick,
   hashString,
@@ -94,15 +93,6 @@ describe("deterministic hashing", () => {
 /* -------------------------------------------------------------- formatting */
 
 describe("formatting", () => {
-  it("abbreviates viewer counts the way the reference chip does", () => {
-    expect(formatViewers(0)).toBe("0");
-    expect(formatViewers(918)).toBe("918");
-    expect(formatViewers(1412)).toBe("1.4K");
-    expect(formatViewers(3204)).toBe("3.2K");
-    expect(formatViewers(12000)).toBe("12K");
-    expect(formatViewers(2_400_000)).toBe("2.4M");
-  });
-
   it("formats a countdown as mm:ss, or h:mm:ss past an hour", () => {
     expect(formatCountdown(521)).toBe("08:41");
     expect(formatCountdown(0)).toBe("00:00");

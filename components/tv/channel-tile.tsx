@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { Eye, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
-import { formatViewers } from "@/lib/data/ext/lounge";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { LiveDot } from "@/components/ui/live-dot";
@@ -76,12 +75,6 @@ export function ChannelTile({
               {channel.schedule}
             </span>
           )}
-          {channel.is_live ? (
-            <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-[#080d17]/85 px-2 py-1 text-[9px] font-extrabold text-[#dbe4f5] tabular-nums">
-              <Eye className="size-3" />
-              {formatViewers(channel.viewers)}
-            </span>
-          ) : null}
         </span>
 
         <span className="block min-w-0">

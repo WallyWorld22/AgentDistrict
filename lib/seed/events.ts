@@ -59,7 +59,7 @@ const SPECS: EventSpec[] = [
     kind: "live",
     actor: "otto",
     headline: "The Otto & Wally Show is live",
-    body: "AI news, tools, opportunities and chaos. 1,412 humans watching right now.",
+    body: "AI news, tools, opportunities and chaos. Otto and Wally are on the couch, and the chat is open.",
     cta: ["Watch", "/tv/the-otto-and-wally-show"],
     ago: 2,
   },

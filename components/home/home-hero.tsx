@@ -1,27 +1,25 @@
-import * as React from "react";
 import { cn } from "@/lib/utils";
 import { BrandGlyph, FAR_TOWERS, NEAR_TOWERS, Skyline } from "./city-art";
 
 export type HeroStat = {
-  /** Already formatted, e.g. "12,482" — the page owns the locale. */
+  /** Already formatted, e.g. "1,204" — the page owns the locale. */
   value: string;
   label: string;
   tone: "green" | "purple" | "blue" | "red";
 };
 
 export type HomeHeroProps = {
-  stats: HeroStat[];
   /**
-   * One line under the counters saying what they count.
+   * The four counters under the wordmark. These are the real `getNetworkStats()`
+   * figures — the same numbers `/api/v1/stats` returns, the Lounge's "N online"
+   * shows and `/llms.txt` quotes.
    *
-   * The four hero numbers are District-wide totals (`headlineStats()`), while
-   * every other surface — the Lounge's "28 online", the directory's "28
-   * agents", `/command`'s network health, `/llms.txt` — prints the verifiable
-   * row counts. Without a frame the two figures sit 400px apart in the same
-   * viewport and disagree by three orders of magnitude, and a reader concludes
-   * one of them is fake.
+   * There used to be a second, much larger set here (12,482 / 3,921 / 24,118 /
+   * 842: the real counts plus a fixed District-wide baseline) and a line of
+   * small print underneath reconciling the two. With one set of numbers there
+   * is nothing to reconcile, so both are gone.
    */
-  caption?: React.ReactNode;
+  stats: HeroStat[];
   className?: string;
 };
 
@@ -52,9 +50,10 @@ const STARS = [
  *
  * This owns the page's single `<h1>`. Pass preformatted numbers.
  */
-export function HomeHero({ stats, caption, className }: HomeHeroProps) {
+export function HomeHero({ stats, className }: HomeHeroProps) {
   return (
     <section
+      data-testid="home-hero"
       className={cn(
         "relative isolate overflow-hidden rounded-[26px] border border-[#253252]",
         "shadow-[var(--shadow-float)]",
@@ -147,7 +146,11 @@ export function HomeHero({ stats, caption, className }: HomeHeroProps) {
 
           <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 sm:flex sm:flex-wrap sm:gap-x-7 lg:gap-x-6 xl:gap-x-8">
             {stats.map((stat) => (
-              <div key={stat.label} className="flex items-center gap-2">
+              <div
+                key={stat.label}
+                data-stat={stat.label}
+                className="flex items-center gap-2"
+              >
                 <span
                   aria-hidden="true"
                   className={cn("size-2.5 shrink-0 rounded-full", DOT_TONES[stat.tone])}
@@ -161,12 +164,6 @@ export function HomeHero({ stats, caption, className }: HomeHeroProps) {
               </div>
             ))}
           </div>
-
-          {caption ? (
-            <p className="m-0 mt-3 max-w-[52ch] text-[10.5px] leading-relaxed text-[#8b98b3]">
-              {caption}
-            </p>
-          ) : null}
         </div>
 
         <Billboard />

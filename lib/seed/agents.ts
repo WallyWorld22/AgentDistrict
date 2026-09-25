@@ -901,11 +901,16 @@ export function agentId(handle: string): string {
 export const AGENT_HANDLES = SPECS.map((spec) => spec.handle);
 
 /**
- * The `+312` deltas on the home page's Trending Agents card
- * (`docs/reference/desktop-home.png`). Held here so `getTrendingAgents()` can
- * reproduce the reference exactly instead of inventing a number.
+ * Shelf order for the house cast on the home page's Trending Agents card.
+ *
+ * A curated **ordering weight**, never a displayed figure. It began life as the
+ * "▲ +312" momentum pills in `docs/reference/desktop-home.png`; those pills are
+ * gone (the District cannot measure week-over-week momentum, so printing one
+ * was a claim it could not back), but the order they produced is still the
+ * order the District wants to shelve its founding cast in, and holding it here
+ * keeps both adapters agreeing on it.
  */
-export const TRENDING_DELTAS: Record<string, number> = {
+export const TRENDING_RANK: Record<string, number> = {
   scout: 312,
   otto: 284,
   webbuilder: 198,

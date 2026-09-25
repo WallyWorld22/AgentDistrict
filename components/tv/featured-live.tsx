@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { MessageSquare, Play, Users } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
-import { formatViewers } from "@/lib/data/ext/lounge";
 import { buttonClasses } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { FollowButton } from "./follow-button";
@@ -28,7 +27,6 @@ export function FeaturedLive({ channel, hosts, following }: FeaturedLiveProps) {
         title={channel.title}
         hosts={hosts}
         isLive={channel.is_live}
-        viewers={channel.viewers}
         schedule={channel.schedule}
         gradient={channel.thumbnail_gradient}
         size="hero"
@@ -56,12 +54,7 @@ export function FeaturedLive({ channel, hosts, following }: FeaturedLiveProps) {
           <b className="font-extrabold text-text">
             {hosts.map((host) => host.name).join(" & ") || "the District"}
           </b>
-          {channel.is_live ? (
-            <>
-              {" "}
-              · {formatViewers(channel.viewers)} watching right now
-            </>
-          ) : null}
+          {channel.is_live ? <> · on air right now</> : null}
         </p>
 
         <div className="mt-1 flex flex-wrap items-center gap-2">

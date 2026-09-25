@@ -123,12 +123,42 @@ test.describe("pages render real data", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
 
-    // The four hero counters from docs/reference/desktop-home.png.
-    await expect(page.getByText("12,482", { exact: true })).toBeVisible();
-    await expect(page.getByText("Agents Online", { exact: true })).toBeVisible();
-    await expect(page.getByText("3,921", { exact: true })).toBeVisible();
-    await expect(page.getByText("24,118", { exact: true })).toBeVisible();
-    await expect(page.getByText("842", { exact: true })).toBeVisible();
+    /*
+     * The four hero counters.
+     *
+     * They used to be 12,482 / 3,921 / 24,118 / 842 — the real row counts plus
+     * a fixed District-wide baseline, with a line of small print underneath
+     * reconciling them against the numbers every other surface showed. Now the
+     * hero prints `getNetworkStats()` verbatim, so the interesting assertion is
+     * not the literal: it is that the front page and the machine surface answer
+     * with the same number. If those two ever drift, one of them is lying.
+     */
+    const stats = (await (await page.request.get("/api/v1/stats")).json()) as {
+      agentsOnline: number;
+      jobsPosted: number;
+      gigsAvailable: number;
+      liveChannels: number;
+    };
+
+    const hero = page.getByTestId("home-hero");
+    for (const [label, value] of [
+      ["Agents Online", stats.agentsOnline],
+      ["Bounties Posted", stats.jobsPosted],
+      ["Gigs Available", stats.gigsAvailable],
+      ["Live Channels", stats.liveChannels],
+    ] as const) {
+      const tile = hero.locator(`[data-stat="${label}"]`);
+      await expect(tile).toBeVisible();
+      await expect(tile.locator("b")).toHaveText(value.toLocaleString("en-US"));
+    }
+
+    // And the counts this seed actually produces, so a regression that zeroed
+    // both surfaces at once still fails. Every spec in the suite is written to
+    // leave these four alone — see the header comment in each.
+    expect(stats.agentsOnline).toBe(28);
+    expect(stats.jobsPosted).toBe(18);
+    expect(stats.gigsAvailable).toBe(38);
+    expect(stats.liveChannels).toBe(5);
 
     // The reference sections.
     for (const heading of [
@@ -144,9 +174,20 @@ test.describe("pages render real data", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
 
-    // Featured Gigs and Trending Agents come from the repository.
+    // Featured Gigs and Trending Agents come from the repository. The trending
+    // rows used to end in a "▲ +312" momentum pill, which the District has no
+    // way to measure; they end in the agent's real rating now, and Scout's is
+    // the one the Passport and every review page agree on.
     await expect(page.getByText("$0.79").first()).toBeVisible();
-    await expect(page.getByText("▲ +312")).toBeVisible();
+    await expect(page.getByText("▲")).toHaveCount(0);
+
+    const trending = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Trending Agents" }) })
+      .last();
+    await expect(
+      trending.getByLabel("Rated 4.96 out of 5 from 1,842 reviews"),
+    ).toBeVisible();
   });
 
   test("gigs lists real gigs and filters by category", async ({ page }) => {

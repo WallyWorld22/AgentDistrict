@@ -1,6 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
-import { Eye, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { LiveDot } from "@/components/ui/live-dot";
@@ -16,14 +16,13 @@ export type ChannelCardProps = {
   className?: string;
 };
 
-function formatViewers(viewers: number): string {
-  if (viewers >= 1000) return `${(viewers / 1000).toFixed(1)}K`;
-  return String(viewers);
-}
-
 /**
  * District TV channel tile (docs/reference/desktop-home.png "District TV").
  * Presentational only — links to `/tv/[slug]`.
+ *
+ * The stage carries a LIVE flag and nothing else. It used to carry a spectator
+ * count beside it; the District has no audience measurement, so that number was
+ * never anything but decoration.
  */
 export function ChannelCard({
   channel,
@@ -60,12 +59,6 @@ export function ChannelCard({
         <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2 py-1 text-[9px] font-extrabold text-[#ff8293]">
           <LiveDot color="bg-red" size="sm" />
           LIVE
-        </span>
-      ) : null}
-      {channel.viewers ? (
-        <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-[#080d17]/85 px-2 py-1 text-[9px] font-extrabold text-[#dbe4f5]">
-          <Eye className="size-3" />
-          {formatViewers(channel.viewers)}
         </span>
       ) : null}
     </span>

@@ -249,10 +249,22 @@ describe("cards", () => {
     expect(screen.getByText("$0.79/run")).toBeInTheDocument();
   });
 
-  it("AgentCard row shows the trend delta instead of a price", () => {
-    render(<AgentCard agent={AGENT} variant="row" trendDelta={312} />);
-    expect(screen.getByText("▲ +312")).toBeInTheDocument();
+  it("AgentCard row can trail with the rating instead of a price", () => {
+    render(<AgentCard agent={AGENT} variant="row" trailing="rating" />);
+
+    // The rating is a number the Passport can back up review by review. The
+    // "▲ +312" momentum pill that used to sit here was not measured by
+    // anything, so it no longer exists as a prop at all.
+    expect(
+      screen.getByLabelText("Rated 4.96 out of 5 from 1,842 reviews"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("$0.79/run")).not.toBeInTheDocument();
+    expect(screen.queryByText(/▲/)).not.toBeInTheDocument();
+  });
+
+  it("AgentCard row trails with the price by default", () => {
+    render(<AgentCard agent={AGENT} variant="row" />);
+    expect(screen.getByText("$0.79/run")).toBeInTheDocument();
   });
 
   it("GigCard links to the gig and shows the starting price", () => {
@@ -316,7 +328,7 @@ describe("cards", () => {
     );
   });
 
-  it("ChannelCard marks a live channel and links to the player", () => {
+  it("ChannelCard marks a live channel and prints no spectator count", () => {
     render(
       <ChannelCard
         channel={{
@@ -325,7 +337,7 @@ describe("cards", () => {
           description: "AI news, tools, opportunities and chaos.",
           kind: "show",
           is_live: true,
-          viewers: 1400,
+          followers: 12408,
           hosts: [AGENT],
         }}
       />,
@@ -335,13 +347,17 @@ describe("cards", () => {
       "/tv/the-otto-and-wally-show",
     );
     expect(screen.getByText("LIVE")).toBeInTheDocument();
-    expect(screen.getByText("1.4K")).toBeInTheDocument();
+
+    // The stage used to carry a "1.4K" eye chip beside the LIVE flag. Nothing
+    // in the District counts an audience, so there is no such number to print.
+    expect(screen.queryByText(/watching/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^\d+(\.\d+)?K$/)).not.toBeInTheDocument();
   });
 
   it("StatTile renders a value, label and optional link", () => {
-    render(<StatTile value="12,482" label="Agents Online" href="/agents" />);
+    render(<StatTile value="28" label="Agents Online" href="/agents" />);
     expect(screen.getByRole("link")).toHaveAttribute("href", "/agents");
-    expect(screen.getByText("12,482")).toBeInTheDocument();
+    expect(screen.getByText("28")).toBeInTheDocument();
   });
 });
 

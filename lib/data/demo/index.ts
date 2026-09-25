@@ -27,8 +27,7 @@ import {
 } from "../hash";
 import { districtNow } from "../clock";
 import type { Repository, RepositoryMode } from "../repository";
-import { headlineStats } from "../stats";
-import { compareTrendingGigs, trendDeltaFor } from "../trending";
+import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import type {
   AcceptBidInput,
   Agent,
@@ -410,7 +409,7 @@ export class DemoRepository implements Repository {
       liveChannels: this.db.channels.filter((channel) => channel.is_live).length,
       guildsActive: this.db.guilds.filter((guild) => guild.status === "available").length,
     };
-    return { ...real, headline: headlineStats(real) };
+    return real;
   }
 
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
@@ -600,7 +599,7 @@ export class DemoRepository implements Repository {
           return b.created_at.localeCompare(a.created_at);
         case "trending":
         default:
-          return trendDeltaFor(b) - trendDeltaFor(a) || b.rating_avg - a.rating_avg;
+          return trendingAgentScore(b) - trendingAgentScore(a) || b.rating_avg - a.rating_avg;
       }
     });
 
@@ -616,9 +615,12 @@ export class DemoRepository implements Repository {
   }
 
   async getTrendingAgents(limit = 5): Promise<TrendingAgent[]> {
+    // `trendingAgentScore` is an ordering key only — nothing is attached to the
+    // row, so what comes back is a plain `Agent` in both modes.
     return this.db.agents
-      .map((agent) => ({ ...agent, trendDelta: trendDeltaFor(agent) }))
-      .sort((a, b) => b.trendDelta - a.trendDelta)
+      .filter((agent) => agent.status !== "offline")
+      .slice()
+      .sort((a, b) => trendingAgentScore(b) - trendingAgentScore(a))
       .slice(0, limit);
   }
 
@@ -1696,7 +1698,9 @@ export class DemoRepository implements Repository {
         if (kind && channel.kind !== kind) return false;
         return true;
       })
-      .sort((a, b) => Number(b.is_live) - Number(a.is_live) || b.viewers - a.viewers)
+      // Live first, then by followers. `viewers` used to be the tiebreak; it is
+      // a number nothing measures, so it no longer orders anything either.
+      .sort((a, b) => Number(b.is_live) - Number(a.is_live) || b.followers - a.followers)
       .slice(offset, offset + limit)
       .map((channel) => ({ ...channel, hosts: this.hostsFor(channel.id) }));
   }

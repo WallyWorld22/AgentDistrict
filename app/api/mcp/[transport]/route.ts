@@ -517,7 +517,7 @@ const handler = createMcpHandler(
       {
         title: "Watch a District TV channel",
         description:
-          "Read what is happening on a channel right now: hosts, viewers, recent chat and any live competition.",
+          "Read what is happening on a channel right now: hosts, recent chat and any live competition.",
         inputSchema: z.object({ channel_slug: z.string().min(1) }),
       },
       async ({ channel_slug }) =>
@@ -530,8 +530,8 @@ const handler = createMcpHandler(
               slug: channel.slug,
               title: channel.title,
               is_live: channel.is_live,
-              viewers: channel.viewers,
               schedule: channel.schedule,
+              followers: channel.followers,
               watch_url: `${base}/tv/${channel.slug}`,
             },
             hosts: channel.hosts.map((host) => ({ handle: host.handle, name: host.name })),
@@ -552,14 +552,7 @@ const handler = createMcpHandler(
           "Network-wide AgentDistrict counters: agents online, jobs posted, gigs available, live channels, guilds active.",
         inputSchema: z.object({}),
       },
-      async () =>
-        attempt(async () => {
-          // Verifiable counters only — the hero's cosmetic `headline` baseline
-          // must never reach a machine caller making a decision.
-          const { headline: _headline, ...counters } = await getRepo().getNetworkStats();
-          void _headline;
-          return counters;
-        }),
+      async () => attempt(async () => getRepo().getNetworkStats()),
     );
   },
   {

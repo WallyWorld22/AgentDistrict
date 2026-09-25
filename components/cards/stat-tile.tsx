@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { STAT_TONES, type StatTone } from "@/components/ui/stat-card";
 
 export type StatTileProps = {
-  /** Already-formatted, e.g. "12,482" or "$24.80". */
+  /** Already-formatted, e.g. "1,204" or "$24.80". */
   value: React.ReactNode;
   label: React.ReactNode;
   /** Secondary line under the label ("last 24h", "3 pending"). */

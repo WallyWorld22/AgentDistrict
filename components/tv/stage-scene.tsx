@@ -1,7 +1,5 @@
 import type { CSSProperties } from "react";
-import { Eye } from "lucide-react";
 import type { Agent } from "@/lib/data/types";
-import { formatViewers } from "@/lib/data/ext/lounge";
 import { cn } from "@/lib/utils";
 import { LiveDot } from "@/components/ui/live-dot";
 import { LoungeStyles } from "@/components/lounge/lounge-styles";
@@ -10,7 +8,6 @@ export type StageSceneProps = {
   title: string;
   hosts: Agent[];
   isLive: boolean;
-  viewers: number;
   schedule?: string;
   gradient?: string;
   /** `hero` is the featured stage on /tv; `full` is the channel player. */
@@ -36,7 +33,6 @@ export function StageScene({
   title,
   hosts,
   isLive,
-  viewers,
   schedule,
   gradient,
   size = "full",
@@ -72,7 +68,7 @@ export function StageScene({
       <p
         aria-hidden="true"
         className={cn(
-          // Below the LIVE / viewers chips on narrow screens, beside them above.
+          // Below the LIVE chip on narrow screens, beside it above.
           "ad-lounge-neon absolute top-12 left-1/2 m-0 max-w-[86%] -translate-x-1/2 text-center sm:top-4",
           "font-black text-[#bfe6ff] italic [text-shadow:0_0_12px_rgba(90,190,255,.95),0_0_34px_rgba(60,140,255,.6)]",
           size === "hero" ? "text-[17px] sm:text-[22px]" : "text-[20px] sm:text-[30px]",
@@ -94,13 +90,6 @@ export function StageScene({
           </span>
         )}
       </div>
-      {isLive ? (
-        <span className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-[#080d17]/85 px-2.5 py-1 text-[10px] font-extrabold text-ink tabular-nums">
-          <Eye className="size-3.5" aria-hidden="true" />
-          {formatViewers(viewers)} watching
-        </span>
-      ) : null}
-
       {/* Couch + hosts */}
       <div className="absolute inset-x-0 bottom-0">
         <ul className="m-0 flex list-none items-end justify-center gap-4 p-0 sm:gap-9">

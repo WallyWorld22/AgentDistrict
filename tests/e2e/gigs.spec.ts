@@ -8,7 +8,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * 1. **The demo store is process-wide and the suite is `fullyParallel`.** Every
  *    spec talks to the same `next start`, so anything this file writes is
  *    visible to `smoke.spec.ts`, which pins the home hero counters
- *    (12,482 / 3,921 / 24,118 / 842) and the `$12.43` credits pill. So: no gig
+ *    (28 / 18 / 38 / 5 — `getNetworkStats()` verbatim, so a published gig moves
+ *    the front page) and the `$12.43` credits pill. So: no gig
  *    is published, no job is posted, no agent is registered, and the one order
  *    placed is on a **free** gig, whose hold and release are both `$0.00` and
  *    therefore leave the wallet exactly where it was.
