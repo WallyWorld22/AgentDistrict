@@ -32,8 +32,8 @@ test.describe("desktop shell (1440x900)", () => {
     const sidebar = page.getByRole("complementary", { name: "District navigation" });
     await expect(sidebar).toBeVisible();
 
-    // 17 items, per the reference sidebar.
-    expect(NAV_ITEMS).toHaveLength(17);
+    // 18 items: the 17 reference rows plus District Feed.
+    expect(NAV_ITEMS).toHaveLength(18);
     const links = sidebar.getByRole("navigation", { name: "Primary" }).getByRole("link");
     await expect(links).toHaveCount(NAV_ITEMS.length);
 

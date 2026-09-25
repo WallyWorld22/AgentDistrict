@@ -1,6 +1,7 @@
 import {
   DEMO_PROFILE_HANDLE,
   FEATURED_GIG_SLUGS,
+  REGISTRY_PROFILE_HANDLE,
   ROOM_FOR_CATEGORY,
   seed,
 } from "@/lib/seed";
@@ -15,7 +16,15 @@ import {
   NotFoundError,
   ValidationError,
 } from "../errors";
-import { API_KEY_PREFIX, apiKeyMatches, apiKeyPrefix, generateApiKey, hashApiKey } from "../hash";
+import {
+  API_KEY_PREFIX,
+  apiKeyMatches,
+  apiKeyPrefix,
+  generateApiKey,
+  generateClaimToken,
+  hashApiKey,
+  hashClaimToken,
+} from "../hash";
 import { districtNow } from "../clock";
 import type { Repository, RepositoryMode } from "../repository";
 import { headlineStats } from "../stats";
@@ -23,8 +32,12 @@ import { compareTrendingGigs, trendDeltaFor } from "../trending";
 import type {
   AcceptBidInput,
   Agent,
+  AgentClaim,
+  AgentClaimPreview,
   AgentFilter,
   ApiKey,
+  RegisterAgentInput,
+  RegisteredAgent,
   Bid,
   BidWithAgent,
   Channel,
@@ -90,6 +103,7 @@ import type {
   WalletPolicyPatch,
   WalletTransaction,
 } from "../types";
+import { REGISTERED_AGENT_SCOPES } from "../types";
 import { emptySearchCounts, filterByTerms, rankSearchHits } from "../search";
 
 /** Sentinel: a handle filter that matched nothing, so the page is empty. */
@@ -123,6 +137,14 @@ export class DemoRepository implements Repository {
    * and — like every other demo mutation — resets on cold start.
    */
   private readonly channelFollows = new Set<string>();
+  /**
+   * Claim rows, keyed by `token_hash`.
+   *
+   * Demo mode has no `agent_claims` table to clone — the seed ships no claims,
+   * because a claim only exists once an agent has registered itself — so, like
+   * `channelFollows`, it lives beside the dataset and resets on cold start.
+   */
+  private readonly agentClaims = new Map<string, AgentClaim>();
 
   constructor(options: { now?: () => number; dataset?: DistrictDataset } = {}) {
     this.db = options.dataset ?? structuredClone(seed);
@@ -589,6 +611,10 @@ export class DemoRepository implements Repository {
     return this.db.agents.find((agent) => agent.handle === handle) ?? null;
   }
 
+  async getAgentById(id: UUID): Promise<Agent | null> {
+    return this.agentById(id);
+  }
+
   async getTrendingAgents(limit = 5): Promise<TrendingAgent[]> {
     return this.db.agents
       .map((agent) => ({ ...agent, trendDelta: trendDeltaFor(agent) }))
@@ -839,6 +865,114 @@ export class DemoRepository implements Repository {
     }
 
     return review;
+  }
+
+  /* -------------------------------------------------------- the entrance */
+
+  async registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent> {
+    const registry = await this.getProfileByHandle(REGISTRY_PROFILE_HANDLE);
+    if (!registry) throw new NotFoundError("The District registry profile");
+
+    // `createAgent` owns handle validation, the taken-handle 409, presence and
+    // the `discovered` event, so registration is genuinely the same front door
+    // the onboarding wizard uses — only the owner and the credential differ.
+    const agent = await this.createAgent(
+      {
+        handle: input.handle,
+        name: input.name,
+        tagline: input.tagline,
+        description: input.description,
+        avatar_emoji: input.avatar_emoji,
+        avatar_gradient: input.avatar_gradient,
+        category: input.category,
+        skills: input.skills,
+        regions: input.regions,
+        pricing_model: input.pricing_model ?? "per_run",
+        starting_price_cents: input.starting_price_cents ?? 0,
+        endpoints: input.endpoints,
+        mcp_tools: input.mcp_tools,
+      },
+      registry.id,
+    );
+
+    const rawApiKey = generateApiKey();
+    this.db.apiKeys.unshift({
+      id: this.id(),
+      profile_id: registry.id,
+      label: `@${agent.handle} (self-registered)`,
+      key_hash: await hashApiKey(rawApiKey),
+      key_prefix: apiKeyPrefix(rawApiKey),
+      scopes: [...REGISTERED_AGENT_SCOPES],
+      last_used_at: null,
+      created_at: this.nowIso(),
+      agent_id: agent.id,
+    });
+
+    const claimToken = generateClaimToken();
+    this.agentClaims.set(await hashClaimToken(claimToken), {
+      id: this.id(),
+      agent_id: agent.id,
+      token_hash: await hashClaimToken(claimToken),
+      created_at: this.nowIso(),
+      claimed_at: null,
+      claimed_by: null,
+    });
+
+    return { agent, rawApiKey, claimToken };
+  }
+
+  async claimAgent(rawToken: string, profileId: UUID): Promise<Agent> {
+    const claim = this.agentClaims.get(await hashClaimToken(rawToken));
+    // Deliberately the same error for "no such token" and "malformed token":
+    // a claim link is a bearer secret, and a distinguishable response turns
+    // this endpoint into an oracle.
+    if (!claim) throw new NotFoundError("That claim link");
+    if (claim.claimed_at) {
+      throw new ConflictError("This agent has already been claimed.");
+    }
+    const profile = this.profileById(profileId);
+    if (!profile) throw new NotFoundError("Profile");
+
+    const agent = this.requireAgentById(claim.agent_id);
+    const timestamp = this.nowIso();
+    agent.owner_id = profileId;
+    agent.verified = true;
+    agent.updated_at = timestamp;
+    claim.claimed_at = timestamp;
+    claim.claimed_by = profileId;
+
+    // The agent's own key follows its owner. Without this the key still acts as
+    // the registry after the claim, and `POST /api/v1/jobs/{id}/bids` — which
+    // checks `agent.owner_id === profile.id` — would start refusing the agent's
+    // own bids the moment its human claimed it.
+    for (const key of this.db.apiKeys) {
+      if (key.agent_id === agent.id) key.profile_id = profileId;
+    }
+
+    await this.publishEvent({
+      kind: "available",
+      actor_type: "agent",
+      actor_id: agent.id,
+      actor_name: agent.name,
+      headline: `${agent.name} was claimed and verified`,
+      body: `${profile.display_name} now owns this Passport.`,
+      cta_label: "View passport",
+      cta_href: `/agents/${agent.handle}`,
+    });
+    return agent;
+  }
+
+  async getAgentClaim(rawToken: string): Promise<AgentClaimPreview | null> {
+    const claim = this.agentClaims.get(await hashClaimToken(rawToken));
+    if (!claim) return null;
+    const agent = this.agentById(claim.agent_id);
+    if (!agent) return null;
+    return {
+      agent,
+      claimed: claim.claimed_at !== null,
+      claimed_at: claim.claimed_at,
+      claimed_by: this.profileById(claim.claimed_by),
+    };
   }
 
   /* ------------------------------------------------------------------ gigs */
@@ -1885,6 +2019,7 @@ export class DemoRepository implements Repository {
       scopes: input.scopes,
       last_used_at: null,
       created_at: this.nowIso(),
+      agent_id: input.agentId ?? null,
     };
     this.db.apiKeys.unshift(record);
     return { key: raw, record };

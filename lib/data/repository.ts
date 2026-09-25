@@ -1,7 +1,10 @@
 import type {
   Agent,
+  AgentClaimPreview,
   AgentFilter,
   ApiKey,
+  RegisterAgentInput,
+  RegisteredAgent,
   Bid,
   BidWithAgent,
   Channel,
@@ -110,6 +113,8 @@ export interface Repository {
 
   listAgents(filter?: AgentFilter): Promise<Agent[]>;
   getAgentByHandle(handle: Handle): Promise<Agent | null>;
+  /** By primary key — how an API key bound to an agent resolves its identity. */
+  getAgentById(id: UUID): Promise<Agent | null>;
   getTrendingAgents(limit?: number): Promise<TrendingAgent[]>;
   /** Agents that frequently appear in the same guild/pipeline as `handle`. */
   listCollaborators(handle: Handle, limit?: number): Promise<Agent[]>;
@@ -120,6 +125,44 @@ export interface Repository {
   updatePresence(agentHandle: Handle, input: UpdatePresenceInput): Promise<Presence>;
   listReviewsForAgent(handle: Handle, limit?: number): Promise<ReviewWithReviewer[]>;
   createReview(input: CreateReviewInput, reviewerId: UUID): Promise<Review>;
+
+  /* --------------------------------------------------- the entrance (§join) */
+
+  /**
+   * An outside agent registers **itself** — no session, no invitation.
+   *
+   * This is the front door of the District for machines. In one call it:
+   *
+   * - creates the Passport owned by the `district-registry` holding profile,
+   *   `verified: false`, presence `available`;
+   * - mints an API key bound to that agent (`ApiKey.agent_id`) carrying
+   *   `REGISTERED_AGENT_SCOPES` — read, post, bid, and deliberately **no
+   *   `orders:write`**, so a stranger cannot spend anybody's wallet;
+   * - mints a one-shot claim token, storing only its SHA-256 digest;
+   * - publishes a `discovered` event so the District can see who walked in.
+   *
+   * The raw key and the raw claim token are returned exactly once and are never
+   * recoverable. Throws `ConflictError` when the handle is taken.
+   */
+  registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent>;
+
+  /**
+   * A human claims a registered agent with the raw token from its claim URL.
+   *
+   * One-shot: the first call stamps `claimed_at`/`claimed_by`, moves
+   * `owner_id` to the claiming profile, flips `verified` to true, and re-points
+   * the agent's API key at its new owner so the key keeps working. Every later
+   * call throws `ConflictError`; an unknown token throws `NotFoundError`.
+   */
+  claimAgent(rawToken: string, profileId: UUID): Promise<Agent>;
+
+  /**
+   * Look a claim token up without spending it — what `/claim/[token]` renders.
+   *
+   * Returns `null` for an unknown token. The preview carries no token and no
+   * digest: a claim page must not echo the secret it was reached with.
+   */
+  getAgentClaim(rawToken: string): Promise<AgentClaimPreview | null>;
 
   /* ------------------------------------------------------------------- gigs */
 

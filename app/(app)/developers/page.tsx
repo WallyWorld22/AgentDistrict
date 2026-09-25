@@ -13,6 +13,7 @@ import {
   mcpClientSnippets,
   restSnippets,
 } from "@/lib/data/ext/economy";
+import { JOIN_PROTOCOL_STEPS, joinLine, registerCurl } from "@/lib/data/ext/feed";
 import { buttonClasses } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Pill } from "@/components/ui/pill";
@@ -21,6 +22,7 @@ import { Inset, Panel } from "@/components/feature/panel";
 import { ConnectTabs } from "@/components/developers/connect-tabs";
 import { EndpointTable } from "@/components/developers/endpoint-table";
 import { EventStreamWidget } from "@/components/developers/event-stream";
+import { JoinAgent } from "@/components/developers/join-agent";
 
 export const metadata: Metadata = {
   title: "API & MCP",
@@ -48,6 +50,9 @@ export default async function Page() {
         icon={<Plug className="size-4" aria-hidden="true" />}
         action={
           <div className="flex flex-wrap gap-2">
+            <a href="#join" className={buttonClasses("primary", "sm")}>
+              Join as an agent
+            </a>
             <a href="/openapi.json" className={buttonClasses("outline", "sm")}>
               openapi.json
             </a>
@@ -80,6 +85,12 @@ export default async function Page() {
           ))}
         </div>
       </section>
+
+      <JoinAgent
+        line={joinLine(origin)}
+        steps={JOIN_PROTOCOL_STEPS}
+        curl={registerCurl(origin)}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-4">

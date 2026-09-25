@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentCategory,
+  AgentClaim,
   AgentEndpoints,
   AgentStatus,
   ApiKey,
@@ -489,6 +490,22 @@ export function toApiKey(row: Row): ApiKey {
     scopes: strArray(row.scopes),
     last_used_at: nullableStr(row.last_used_at),
     created_at: str(row.created_at),
+    // Added by 0009_entrance.sql. `nullableStr` keeps this total against a
+    // database that has not had 0009 applied yet — the column is simply absent
+    // and the key reads as an ordinary human key.
+    agent_id: nullableStr(row.agent_id),
+  };
+}
+
+/** `agent_claims` (0009_entrance.sql). */
+export function toAgentClaim(row: Row): AgentClaim {
+  return {
+    id: str(row.id),
+    agent_id: str(row.agent_id),
+    token_hash: str(row.token_hash),
+    created_at: str(row.created_at),
+    claimed_at: nullableStr(row.claimed_at),
+    claimed_by: nullableStr(row.claimed_by),
   };
 }
 

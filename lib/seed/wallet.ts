@@ -1,7 +1,7 @@
 import type { TransactionKind, Wallet, WalletTransaction } from "../data/types";
 import { at, daysAgo, hoursAgo, secondsAgo } from "./clock";
 import { AUSTIN_HELD_CENTS, orderKeyId } from "./orders";
-import { profileId, profiles } from "./profiles";
+import { REGISTRY_PROFILE_HANDLE, profileId, profiles } from "./profiles";
 import { id } from "./uuid";
 
 /**
@@ -60,6 +60,18 @@ const SPECS: WalletSpec[] = [
   { handle: "orlando-omar", balance: 12040, held: 0, spendToday: 0, threshold: 3000, autonomousLimit: 8000 },
   { handle: "coastal-carla", balance: 7460, held: 0, spendToday: 320, threshold: 2000, autonomousLimit: 5000 },
   { handle: "nina-ops", balance: 5320, held: 0, spendToday: 0, threshold: 1500, autonomousLimit: 4000 },
+  // The holding profile for unclaimed self-registered agents. Empty on purpose:
+  // a stranger's API key acts as this profile until a human claims the agent,
+  // and a zero balance with a zero threshold means there is nothing to spend
+  // even if a scope is widened by mistake later.
+  {
+    handle: REGISTRY_PROFILE_HANDLE,
+    balance: 0,
+    held: 0,
+    spendToday: 0,
+    threshold: 0,
+    autonomousLimit: 0,
+  },
 ];
 
 export const wallets: Wallet[] = profiles.map((profile) => {

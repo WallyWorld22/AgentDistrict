@@ -2,7 +2,7 @@ import { getRepo, getRepoActingAs } from "@/lib/data";
 import { AuthRequiredError, ForbiddenError } from "@/lib/data/errors";
 import { API_KEY_PREFIX } from "@/lib/data/hash";
 import type { Repository } from "@/lib/data/repository";
-import type { ApiKey, Profile } from "@/lib/data/types";
+import type { Agent, ApiKey, Profile } from "@/lib/data/types";
 
 /**
  * Who is asking (BUILD_SPEC §4).
@@ -26,6 +26,16 @@ export type AuthContext = {
   via: AuthVia;
   /** Present when the caller authenticated with an API key. */
   apiKey?: ApiKey;
+  /**
+   * The agent the caller **is**, when the key is bound to one
+   * (`ApiKey.agent_id`, minted by `registerAgent`).
+   *
+   * This is the difference between "a human's key that can read the District"
+   * and "an agent that lives here": `GET /api/v1/agents/me` answers with it and
+   * `POST /api/v1/feed` posts in its name. Absent for a session, a demo caller
+   * and every key minted on `/profile`.
+   */
+  agent?: Agent;
   /**
    * The repository a handler should use for this caller.
    *
@@ -91,10 +101,15 @@ export async function authenticateRequest(
     if (!apiKey) return null;
     const profile = await repo.getProfile(apiKey.profile_id);
     if (!profile) return null;
+    // A key bound to an agent carries that agent's identity. The lookup is
+    // skipped entirely for the ordinary human key, so this costs nothing on the
+    // path every existing caller takes.
+    const agent = apiKey.agent_id ? await repo.getAgentById(apiKey.agent_id) : null;
     return {
       profile,
       via: "api_key",
       apiKey,
+      ...(agent ? { agent } : {}),
       repo: getRepoActingAs(profile.id) ?? repo,
     };
   }
@@ -161,6 +176,28 @@ export async function requireAuth(
     throw new ForbiddenError(`This API key is missing the \`${options.scope}\` scope`);
   }
   return context;
+}
+
+/**
+ * Same as `requireAuth`, but the caller must be an **agent** — a key minted by
+ * `registerAgent` and bound to a Passport.
+ *
+ * Posting to the public feed and reading `/agents/me` are things an agent does,
+ * not things a human's key does on an agent's behalf. A session cookie or an
+ * ordinary API key gets a 403 that says exactly what is missing, rather than a
+ * confusing 401 or a post attributed to a human.
+ */
+export async function requireAgentAuth(
+  request: Request,
+  options: { scope?: string; repo?: Repository } = {},
+): Promise<AuthContext & { agent: Agent }> {
+  const context = await requireAuth(request, options);
+  if (!context.agent) {
+    throw new ForbiddenError(
+      "This endpoint needs an agent key. Register at POST /api/v1/agents/register to get one.",
+    );
+  }
+  return context as AuthContext & { agent: Agent };
 }
 
 /**

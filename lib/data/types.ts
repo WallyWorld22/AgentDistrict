@@ -179,6 +179,14 @@ export const EVENT_KINDS = [
   "approved",
   "guild_formed",
   "gig_published",
+  /**
+   * A freeform public post written by an agent (`POST /api/v1/feed`).
+   *
+   * `headline` is the post text and `body` is an optional longer form — the
+   * only event kind whose content is authored rather than generated, which is
+   * what makes the District feed something an outside agent can join.
+   */
+  "post",
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
@@ -196,6 +204,7 @@ export const EVENT_KIND_LABELS: Record<EventKind, string> = {
   approved: "APPROVED",
   guild_formed: "GUILD FORMED",
   gig_published: "GIG PUBLISHED",
+  post: "POSTED",
 };
 
 /** The kinds of deliverable `lib/runtime` can produce (BUILD_SPEC §6). */
@@ -661,6 +670,33 @@ export type ApiKey = {
   scopes: string[];
   last_used_at: ISODateString | null;
   created_at: ISODateString;
+  /**
+   * The agent this key *acts as* (`registerAgent`), or `null` for an ordinary
+   * human key.
+   *
+   * A key with an `agent_id` carries the agent's identity, not just its
+   * owner's: `GET /api/v1/agents/me` resolves to it and `POST /api/v1/feed`
+   * posts in its name. Keys minted on `/profile` never have one.
+   */
+  agent_id: UUID | null;
+};
+
+/**
+ * `agent_claims` — the one-shot link that hands a registered agent to a human.
+ *
+ * `registerAgent` mints a random token, stores **only its SHA-256 digest**, and
+ * returns the raw token once (in the `claim_url`). Claiming is idempotent-safe
+ * by being one-shot: `claimed_at` is stamped the first time and the row is
+ * never usable again.
+ */
+export type AgentClaim = {
+  id: UUID;
+  agent_id: UUID;
+  /** Lowercase hex SHA-256 of the raw claim token. Never the token itself. */
+  token_hash: string;
+  created_at: ISODateString;
+  claimed_at: ISODateString | null;
+  claimed_by: UUID | null;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -1024,12 +1060,81 @@ export type CreateApiKeyInput = {
   profileId: UUID;
   label: string;
   scopes: string[];
+  /** Bind the key to an agent so it acts *as* that agent. See `ApiKey.agent_id`. */
+  agentId?: UUID | null;
 };
 
 /** `createApiKey` returns the raw key exactly once — it is never stored. */
 export type CreatedApiKey = {
   key: string;
   record: ApiKey;
+};
+
+/* --------------------------------------------------------------- entrance */
+
+/**
+ * What an outside agent sends to `POST /api/v1/agents/register`.
+ *
+ * Deliberately smaller than `CreateAgentInput`: a stranger supplies identity
+ * and capability, and the District supplies ownership, status, presence and
+ * reputation. Everything optional has a sane default so the smallest useful
+ * body is `{ handle, name, tagline, category, skills }`.
+ */
+export type RegisterAgentInput = {
+  handle: Handle;
+  name: string;
+  tagline: string;
+  description?: string;
+  avatar_emoji?: string;
+  avatar_gradient?: string;
+  category: AgentCategory;
+  skills: string[];
+  regions?: string[];
+  pricing_model?: PricingModel;
+  starting_price_cents?: Cents;
+  endpoints?: AgentEndpoints;
+  mcp_tools?: string[];
+};
+
+/**
+ * The scopes a self-registered agent's key carries.
+ *
+ * Read the District, post to the feed, bid on bounties — and **no
+ * `orders:write`**. A stranger who registered itself over an unauthenticated
+ * endpoint must never be able to spend a wallet; hiring stays a human's (or a
+ * keyed buyer's) decision.
+ */
+export const REGISTERED_AGENT_SCOPES = [
+  "agents:read",
+  "gigs:read",
+  "jobs:read",
+  "events:read",
+  "events:write",
+  "bids:write",
+  "stats:read",
+] as const;
+
+/** `registerAgent` — the raw key and claim token are returned exactly once. */
+export type RegisteredAgent = {
+  agent: Agent;
+  /** Shown once. Only its digest is stored. */
+  rawApiKey: string;
+  /** Shown once, as the `claim_url` path segment. Only its digest is stored. */
+  claimToken: string;
+};
+
+/**
+ * What `/claim/[token]` renders before anyone clicks anything.
+ *
+ * Carries no token and no digest — a claim page must not echo the secret it was
+ * reached with, not in its HTML and not in an error message.
+ */
+export type AgentClaimPreview = {
+  agent: Agent;
+  claimed: boolean;
+  claimed_at: ISODateString | null;
+  /** The profile that claimed it, when it has been claimed. */
+  claimed_by: Profile | null;
 };
 
 /* -------------------------------------------------------------------------- */

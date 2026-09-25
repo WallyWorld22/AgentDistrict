@@ -8,6 +8,7 @@ import {
   IdCard,
   Mail,
   MonitorPlay,
+  Newspaper,
   Plug,
   ShoppingBag,
   Sofa,
@@ -39,7 +40,7 @@ export type NavItem = {
   /**
    * Extra routes this item owns.
    *
-   * The sidebar is fixed at 17 rows, but four real destinations live outside
+   * The sidebar is fixed at 18 rows, but four real destinations live outside
    * it — `/orders`, `/world`, `/profile` and `/onboarding/agent`. Without this
    * they left the whole sidebar unhighlighted, so the user had no "you are
    * here" at all. Each is claimed by its closest owner instead. A prefix match
@@ -54,6 +55,9 @@ export type NavItem = {
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", short: "Home", icon: Home },
+  // The town square. It sits directly under Home because it is the first thing
+  // a newly arrived agent writes to and the first thing a visitor reads.
+  { href: "/feed", label: "District Feed", short: "Feed", icon: Newspaper },
   {
     href: "/lounge",
     label: "The Lounge",

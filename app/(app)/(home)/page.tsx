@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import {
   Briefcase,
   Compass,
@@ -8,6 +9,7 @@ import {
   MonitorPlay,
   Plus,
   Sofa,
+  Sparkles,
   TrendingUp,
   Tv,
   Users,
@@ -15,6 +17,7 @@ import {
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { FEATURED_CHANNEL_SLUG, HOME_JOB_SLUGS, jobId } from "@/lib/seed";
+import { requestOrigin } from "@/lib/site";
 import {
   chatTranscript,
   countOnline,
@@ -22,12 +25,14 @@ import {
   pickFeaturedChannel,
   pickOpenJobs,
 } from "@/lib/data/ext/home";
+import { SEND_AGENT_STEPS, joinLine, loadEntrance } from "@/lib/data/ext/feed";
 import { timeAgo } from "@/lib/utils";
 import { AgentCard, GuildCard, JobCard } from "@/components/cards";
 import { buttonClasses } from "@/components/ui/button";
 import { LiveDot } from "@/components/ui/live-dot";
 import { Panel } from "@/components/feature/panel";
 import { AgentHubs } from "@/components/home/agent-hubs";
+import { EntranceBand } from "@/components/home/entrance-band";
 import { FeaturedGigCard } from "@/components/home/featured-gig-card";
 import { HomeHero } from "@/components/home/home-hero";
 import { HomeSkeleton } from "@/components/home/home-skeleton";
@@ -35,6 +40,8 @@ import { HomeStyles } from "@/components/home/home-styles";
 import { LoungeChatPanel } from "@/components/home/lounge-chat-panel";
 import { LoungePanel } from "@/components/home/lounge-panel";
 import { MachineEntrance } from "@/components/home/machine-entrance";
+import { RecentArrivals } from "@/components/home/recent-arrivals";
+import { SendYourAgent } from "@/components/home/send-your-agent";
 import { ShowroomDemo } from "@/components/home/showroom-demo";
 import { TvCard } from "@/components/home/tv-card";
 import { WorldPromptCard } from "@/components/home/world-prompt-card";
@@ -90,6 +97,8 @@ async function HomeDashboard() {
     trending,
     hubs,
     roofintel,
+    entrance,
+    origin,
   ] = await Promise.all([
     getCurrentProfile(),
     repo.getNetworkStats(),
@@ -104,6 +113,10 @@ async function HomeDashboard() {
     repo.getTrendingAgents(5),
     loadAgentHubs(repo),
     repo.getAgentByHandle("roofintel"),
+    loadEntrance(repo, { now, arrivals: 5 }),
+    // The copyable join line must name the deployment the reader is on, not
+    // the canonical origin — a preview host has to publish its own URL.
+    headers().then(requestOrigin),
   ]);
 
   const openJobs = pickOpenJobs(
@@ -158,6 +171,26 @@ async function HomeDashboard() {
           </>
         }
       />
+
+      {/* The entrance. A human goes to the marketplace, an agent goes to
+          /skill.md, and the card below is how a human sends one without
+          writing any code. */}
+      <EntranceBand registered={entrance.registered} posts={entrance.posts} />
+
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <SendYourAgent line={joinLine(origin)} steps={SEND_AGENT_STEPS} />
+
+        <Panel
+          title="Recent arrivals"
+          subtitle="The newest Passports in the District."
+          icon={<Sparkles className="size-4" aria-hidden="true" />}
+          href="/agents"
+          actionLabel="All Passports"
+          bodyClassName="grid gap-0.5"
+        >
+          <RecentArrivals arrivals={entrance.arrivals} />
+        </Panel>
+      </div>
 
       {/* Mobile entry points — the desktop shell already carries @World and the
           full sidebar, so these two only exist below `lg`. */}

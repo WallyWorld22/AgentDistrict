@@ -17,7 +17,9 @@ import {
   API_KEY_PREFIX,
   apiKeyPrefix,
   generateApiKey,
+  generateClaimToken,
   hashApiKey,
+  hashClaimToken,
   sha256Hex,
 } from "../hash";
 import type { Repository, RepositoryMode } from "../repository";
@@ -36,6 +38,7 @@ import {
   asRow,
   asRows,
   toAgent,
+  toAgentClaim,
   toApiKey,
   toBid,
   toChannel,
@@ -66,8 +69,11 @@ import {
 import type {
   AcceptBidInput,
   Agent,
+  AgentClaimPreview,
   AgentFilter,
   ApiKey,
+  RegisterAgentInput,
+  RegisteredAgent,
   Bid,
   BidWithAgent,
   Channel,
@@ -132,6 +138,8 @@ import type {
   WalletPolicyPatch,
   WalletTransaction,
 } from "../types";
+import { REGISTERED_AGENT_SCOPES } from "../types";
+import { REGISTRY_PROFILE_HANDLE } from "@/lib/seed/profiles";
 import { emptySearchCounts, searchHrefFor, summariseHits } from "../search";
 
 /**
@@ -543,6 +551,11 @@ export class SupabaseRepository implements Repository {
     );
   }
 
+  async getAgentById(id: UUID): Promise<Agent | null> {
+    const client = await this.client();
+    return this.one(client.from("agents").select("*").eq("id", id).maybeSingle(), toAgent);
+  }
+
   async getTrendingAgents(limit = 5): Promise<TrendingAgent[]> {
     const client = await this.client();
     const agents = await this.many(
@@ -811,6 +824,105 @@ export class SupabaseRepository implements Repository {
     if (error) throw new UpstreamError(error.message);
 
     return review;
+  }
+
+  /* -------------------------------------------------------- the entrance */
+
+  /**
+   * Registration is one `register_agent()` call, not six statements.
+   *
+   * Every write it performs is refused for the caller that makes it: the
+   * request carries **no credential at all** (that is the point of an open
+   * front door), so `auth.uid()` is null, the agent would be inserted with an
+   * owner the caller is not, and `api_keys` / `agent_claims` are private under
+   * RLS. The SECURITY DEFINER function in 0009 is the one narrow hole, and it
+   * is also the only way the five rows land in a single transaction — a half
+   * registration would leave a Passport nobody holds the key to.
+   */
+  async registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent> {
+    const handle = slugify(input.handle);
+    if (!handle) throw new ValidationError("A handle is required");
+
+    const rawApiKey = generateApiKey();
+    const claimToken = generateClaimToken();
+    const client = await this.client();
+
+    const { data, error } = await client.rpc("register_agent", {
+      p_handle: handle,
+      p_name: input.name,
+      p_tagline: input.tagline,
+      p_description: input.description ?? input.tagline,
+      p_avatar_emoji: input.avatar_emoji ?? "🤖",
+      p_avatar_gradient: input.avatar_gradient ?? "linear-gradient(135deg,#297dff,#7559ff)",
+      p_category: input.category,
+      p_skills: input.skills,
+      p_regions: input.regions ?? ["US"],
+      p_room_slug: ROOM_FOR_CATEGORY[input.category],
+      p_pricing_model: input.pricing_model ?? "per_run",
+      p_starting_price_cents: input.starting_price_cents ?? 0,
+      p_endpoints: validateAgentEndpoints(input.endpoints),
+      p_mcp_tools: input.mcp_tools ?? [],
+      p_key_hash: await hashApiKey(rawApiKey),
+      p_key_prefix: apiKeyPrefix(rawApiKey),
+      p_scopes: [...REGISTERED_AGENT_SCOPES],
+      p_token_hash: await hashClaimToken(claimToken),
+      p_registry_handle: REGISTRY_PROFILE_HANDLE,
+    });
+    if (error) {
+      const message = error.message ?? "";
+      if (/already registered|handle_key|duplicate key/i.test(message)) {
+        throw new ConflictError(`@${handle} is already registered in the District`);
+      }
+      if (/registry profile/i.test(message)) {
+        throw new NotFoundError("The District registry profile");
+      }
+      throw new UpstreamError(message);
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new UpstreamError("Agent was not registered");
+    return { agent: toAgent(asRow(row)), rawApiKey, claimToken };
+  }
+
+  async claimAgent(rawToken: string, profileId: UUID): Promise<Agent> {
+    const client = await this.client();
+    const { data, error } = await client.rpc("claim_agent", {
+      p_token_hash: await hashClaimToken(rawToken),
+      p_profile_id: profileId,
+      p_actor: this.actor(),
+    });
+    if (error) {
+      const message = error.message ?? "";
+      if (/already been claimed/i.test(message)) throw new ConflictError(message);
+      if (/claim link|not found/i.test(message)) throw new NotFoundError("That claim link");
+      if (/another profile|authenticated caller/i.test(message)) {
+        throw new ForbiddenError("Sign in as the profile that should own this agent");
+      }
+      throw new UpstreamError(message);
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new NotFoundError("That claim link");
+    return toAgent(asRow(row));
+  }
+
+  async getAgentClaim(rawToken: string): Promise<AgentClaimPreview | null> {
+    const client = await this.client();
+    const { data, error } = await client.rpc("find_agent_claim", {
+      p_token_hash: await hashClaimToken(rawToken),
+    });
+    if (error) throw new UpstreamError(error.message);
+    const rows = asRows(data);
+    if (rows.length === 0) return null;
+
+    const claim = toAgentClaim(rows[0]);
+    const agent = await this.getAgentById(claim.agent_id);
+    if (!agent) return null;
+    return {
+      agent,
+      claimed: claim.claimed_at !== null,
+      claimed_at: claim.claimed_at,
+      claimed_by: claim.claimed_by ? await this.getProfile(claim.claimed_by) : null,
+    };
   }
 
   /* ------------------------------------------------------------------ gigs */
@@ -2425,6 +2537,7 @@ export class SupabaseRepository implements Repository {
           key_hash: await hashApiKey(raw),
           key_prefix: apiKeyPrefix(raw),
           scopes: input.scopes,
+          agent_id: input.agentId ?? null,
         })
         .select("*")
         .maybeSingle(),

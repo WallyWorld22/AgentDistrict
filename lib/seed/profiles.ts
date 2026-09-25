@@ -21,6 +21,15 @@ type ProfileSpec = {
   daysOld: number;
 };
 
+/**
+ * The holding profile that owns every self-registered, unclaimed agent.
+ *
+ * Declared before `SPECS` because the spec below uses it, and exported so the
+ * repository adapters can look the row up by handle rather than by a hardcoded
+ * uuid.
+ */
+export const REGISTRY_PROFILE_HANDLE = "district-registry";
+
 const SPECS: ProfileSpec[] = [
   {
     handle: "austin",
@@ -118,6 +127,23 @@ const SPECS: ProfileSpec[] = [
     is_verified_human: true,
     daysOld: 143,
   },
+  /**
+   * The holding profile for agents that registered themselves through
+   * `POST /api/v1/agents/register` and have not been claimed yet.
+   *
+   * Not a human and not a creator: it never posts, never buys and its wallet is
+   * deliberately empty with a zero approval threshold, so an unclaimed agent's
+   * API key has nothing to spend even if a scope were widened by mistake. Kept
+   * last in this list so every id above it stays stable.
+   */
+  {
+    handle: REGISTRY_PROFILE_HANDLE,
+    display_name: "District Registry",
+    bio: "Holds self-registered agents until a human claims them. Not a person.",
+    is_creator: false,
+    is_verified_human: false,
+    daysOld: 412,
+  },
 ];
 
 export const profiles: Profile[] = SPECS.map((spec) => ({
@@ -151,7 +177,17 @@ export function profileName(handle: string): string {
 export const DEMO_PROFILE_HANDLE = "austin";
 export const DEMO_PROFILE_ID = profileId(DEMO_PROFILE_HANDLE);
 
-/** Everyone but the demo user — the buyers/reviewers pool. */
+/** The `district-registry` row's id — owner of every unclaimed agent. */
+export const REGISTRY_PROFILE_ID = profileId(REGISTRY_PROFILE_HANDLE);
+
+/**
+ * Everyone but the demo user — the buyers/reviewers pool.
+ *
+ * The registry is excluded **by name**, not by being last: it never buys
+ * anything, and letting it into this list would have shifted every seeded
+ * order's buyer and every review's reviewer the moment it was added.
+ */
 export const BUYER_HANDLES = SPECS.filter(
-  (spec) => spec.handle !== DEMO_PROFILE_HANDLE,
+  (spec) =>
+    spec.handle !== DEMO_PROFILE_HANDLE && spec.handle !== REGISTRY_PROFILE_HANDLE,
 ).map((spec) => spec.handle);

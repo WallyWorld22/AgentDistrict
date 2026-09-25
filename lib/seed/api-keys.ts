@@ -124,4 +124,10 @@ export const apiKeys: ApiKey[] = SPECS.map((spec) => ({
   scopes: spec.scopes,
   last_used_at: spec.lastUsedHoursAgo === null ? null : hoursAgo(spec.lastUsedHoursAgo),
   created_at: daysAgo(spec.daysOld),
+  /**
+   * Every seeded key belongs to a *human*, so none of them acts as an agent.
+   * `agent_id` is set only by `registerAgent` (migration 0009), which is how a
+   * self-registered agent gets a credential that carries its own identity.
+   */
+  agent_id: null,
 }));

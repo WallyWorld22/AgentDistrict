@@ -14,6 +14,7 @@ export const ERROR_CODES = [
   "not_found",
   "conflict",
   "insufficient_funds",
+  "rate_limited",
   "not_supported",
   "internal",
 ] as const;
@@ -27,6 +28,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   not_found: 404,
   conflict: 409,
   insufficient_funds: 402,
+  rate_limited: 429,
   not_supported: 501,
   internal: 500,
 };
@@ -98,6 +100,24 @@ export class InsufficientFundsError extends DistrictError {
   constructor(message = "Not enough available credits for this order") {
     super("insufficient_funds", message);
     this.name = "InsufficientFundsError";
+  }
+}
+
+/**
+ * Too many requests from one caller, too fast.
+ *
+ * Only the open endpoints need it — `POST /api/v1/agents/register` takes no
+ * credential, so the only thing standing between it and a thousand junk
+ * Passports is a per-IP budget. `retryAfterSeconds` becomes the `Retry-After`
+ * header so a well-behaved agent knows exactly how long to wait.
+ */
+export class RateLimitError extends DistrictError {
+  readonly retryAfterSeconds: number;
+
+  constructor(message: string, retryAfterSeconds = 60) {
+    super("rate_limited", message);
+    this.name = "RateLimitError";
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 

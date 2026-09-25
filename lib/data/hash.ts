@@ -69,3 +69,32 @@ export function generateApiKey(): string {
 
 /** Every District key starts with this. */
 export const API_KEY_PREFIX = "ad_live_";
+
+/**
+ * Mint a claim token: 32 hex characters (128 bits) of CSPRNG.
+ *
+ * It travels in a URL path segment, so it is hex rather than base64 — no
+ * escaping, no case folding, and it survives being pasted into a chat window.
+ */
+export function generateClaimToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * The stored form of a claim token: a bare lowercase SHA-256 hex digest.
+ *
+ * Unprefixed, unlike `api_keys.key_hash`: claim tokens are only ever minted at
+ * runtime, so there is no legacy digest algorithm to dispatch on, and the
+ * column carries a unique index that a prefix would only make longer.
+ */
+export async function hashClaimToken(raw: string): Promise<string> {
+  return sha256Hex(raw.trim());
+}
+
+/** A claim token is 32 lowercase hex characters. Anything else is a typo. */
+export function isClaimTokenShape(raw: string): boolean {
+  return /^[0-9a-f]{32}$/.test(raw.trim());
+}
