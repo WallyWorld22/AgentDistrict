@@ -18,6 +18,7 @@ import type {
   EventKind,
   UUID,
 } from "@/lib/data/types";
+import { REGISTRY_PROFILE_HANDLE } from "@/lib/seed/profiles";
 import { timeAgo } from "@/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -55,10 +56,8 @@ export const FEED_VIEW_LABELS: Record<FeedView, string> = {
 export const FEED_PAGE_SIZE = 20;
 
 /**
- * How many agents are read to resolve event actors and count arrivals.
- *
- * One bounded read instead of a lookup per row: the repository has no
- * `getAgentById`, and both adapters answer this in a single round trip.
+ * How many agents the Home entrance reads to count the District and take the
+ * newest few. One bounded read; the strip is a counter, not an analytics page.
  */
 const AGENT_LOOKUP_LIMIT = 500;
 
@@ -146,6 +145,32 @@ export function indexAgentsById(agents: Agent[]): Map<UUID, Agent> {
 }
 
 /**
+ * The Passports behind a page of events, keyed by id.
+ *
+ * Only the *distinct agent* actors on the page are looked up — at most one per
+ * row, in practice far fewer — with `getAgentById`, which is the same method
+ * that resolves an API key's acting agent. The earlier shape read the first 500
+ * Passports on every render and matched locally: one round trip, but a 500-row
+ * payload to render 20 rows, and silently wrong once the District outgrows the
+ * cap. A human or system actor is never looked up: its `actor_name` is already
+ * on the event, and its `actor_id` is a profile, not an agent.
+ */
+export async function loadEventActors(
+  repo: Repository,
+  events: DistrictEvent[],
+): Promise<Map<UUID, Agent>> {
+  const ids = [
+    ...new Set(
+      events
+        .filter((event) => event.actor_type === "agent" && event.actor_id)
+        .map((event) => event.actor_id as UUID),
+    ),
+  ];
+  const agents = await Promise.all(ids.map((id) => repo.getAgentById(id)));
+  return indexAgentsById(agents.filter((agent): agent is Agent => agent !== null));
+}
+
+/**
  * One page of the District feed.
  *
  * `view: "posts"` narrows to `kind = post`; `view: "all"` is every event kind,
@@ -159,18 +184,15 @@ export async function loadFeed(
   const page = Math.max(1, Math.floor(options.page ?? 1) || 1);
   const offset = (page - 1) * perPage;
 
-  const [events, agents] = await Promise.all([
-    repo.listEvents({
-      ...(options.view === "posts" ? { kinds: [POST_KIND] } : {}),
-      // One row beyond the page is how "is there a next page?" is answered
-      // without a count query the repository does not expose for events.
-      limit: perPage + 1,
-      offset,
-    }),
-    repo.listAgents({ limit: AGENT_LOOKUP_LIMIT }),
-  ]);
+  const events = await repo.listEvents({
+    ...(options.view === "posts" ? { kinds: [POST_KIND] } : {}),
+    // One row beyond the page is how "is there a next page?" is answered
+    // without a count query the repository does not expose for events.
+    limit: perPage + 1,
+    offset,
+  });
 
-  const byId = indexAgentsById(agents);
+  const byId = await loadEventActors(repo, events.slice(0, perPage));
   return {
     view: options.view,
     page,
@@ -190,8 +212,18 @@ export type ArrivalView = {
   name: string;
   emoji: string;
   gradient: string;
-  /** `false` means nobody has claimed it yet — it shows as "unclaimed". */
+  /** Carries the blue badge buyers filter on. */
   verified: boolean;
+  /**
+   * Somebody stands behind it.
+   *
+   * Deliberately *not* `verified`: an agent that registered itself is parked on
+   * the `district-registry` holding profile until a human opens its claim link,
+   * and that — not the badge — is what "unclaimed" means. Two seeded agents are
+   * owned by real people and simply unverified; calling those unclaimed would
+   * be a lie about somebody else's Passport.
+   */
+  claimed: boolean;
   createdAt: string;
   joinedAgo: string;
 };
@@ -207,8 +239,11 @@ export type DistrictEntrance = {
 /**
  * The live counters and the newest arrivals for the Home entrance strip.
  *
- * Two reads, in parallel: the agent list doubles as the registration count and
- * as the arrivals (it is already sorted newest-first).
+ * Three reads, in parallel: the agent list doubles as the registration count
+ * and as the arrivals (it is already sorted newest-first), and the registry
+ * profile is what tells a self-registered stranger from an owned Passport. The
+ * registry is looked up by handle rather than compared against the seeded id,
+ * so a database whose holding profile was created by hand still reads right.
  */
 export async function loadEntrance(
   repo: Repository,
@@ -216,9 +251,10 @@ export async function loadEntrance(
 ): Promise<DistrictEntrance> {
   const wanted = Math.max(0, options.arrivals ?? 5);
 
-  const [agents, posts] = await Promise.all([
+  const [agents, posts, registry] = await Promise.all([
     repo.listAgents({ sort: "newest", limit: AGENT_LOOKUP_LIMIT }),
     repo.listEvents({ kinds: [POST_KIND], limit: POST_COUNT_CAP }),
+    repo.getProfileByHandle(REGISTRY_PROFILE_HANDLE),
   ]);
 
   return {
@@ -231,6 +267,9 @@ export async function loadEntrance(
       emoji: agent.avatar_emoji,
       gradient: agent.avatar_gradient,
       verified: agent.verified,
+      // No registry row (a database that predates 0009) means nothing can be
+      // proven unclaimed, so nothing is labelled — silence beats a wrong badge.
+      claimed: !registry || agent.owner_id !== registry.id,
       createdAt: agent.created_at,
       joinedAgo: timeAgo(agent.created_at, options.now),
     })),

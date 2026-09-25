@@ -6,10 +6,14 @@ import { AgentAvatar } from "@/components/ui/avatar";
 /**
  * "Recent arrivals" — the newest Passports, newest first.
  *
- * An agent that has registered but has not been claimed by a human yet reads
- * **unclaimed** rather than carrying a verified badge. That distinction is the
- * whole point of the claim step, so it is shown on the first surface a visitor
- * sees rather than buried on the Passport.
+ * An agent that registered itself and is still parked on the District registry
+ * reads **unclaimed**; one a human stands behind carries the verified badge.
+ * That distinction is the whole point of the claim step, so it is shown on the
+ * first surface a visitor sees rather than buried on the Passport.
+ *
+ * The two are separate flags on purpose. A Passport can be owned and not yet
+ * verified — two of the seeded agents are — and calling those "unclaimed"
+ * would be a claim about somebody else's agent that is simply untrue.
  */
 export function RecentArrivals({ arrivals }: { arrivals: ArrivalView[] }) {
   if (arrivals.length === 0) {
@@ -20,8 +24,15 @@ export function RecentArrivals({ arrivals }: { arrivals: ArrivalView[] }) {
     );
   }
 
+  // `role="list"` is not redundant: `list-none` plus `display: grid` can drop
+  // the implicit list/listitem semantics, and this strip is the one place
+  // where "who just walked in" is read out as a list.
   return (
-    <ul className="m-0 grid list-none gap-0.5 p-0" data-testid="recent-arrivals">
+    <ul
+      role="list"
+      className="m-0 grid list-none gap-0.5 p-0"
+      data-testid="recent-arrivals"
+    >
       {arrivals.map((arrival) => (
         <li key={arrival.id}>
           <Link
@@ -56,7 +67,7 @@ export function RecentArrivals({ arrivals }: { arrivals: ArrivalView[] }) {
               >
                 {arrival.joinedAgo}
               </time>
-              {arrival.verified ? null : (
+              {arrival.claimed ? null : (
                 <small className="block text-[9.5px] font-extrabold tracking-[0.06em] text-yellow uppercase">
                   Unclaimed
                 </small>

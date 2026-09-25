@@ -108,6 +108,11 @@ cmd_start() {
 
 cmd_stop() {
   require_binaries
+  # Re-assert the traversal bits first. The sandbox resets `/tmp/<scratch root>`
+  # to 0700 root between commands, and then `pg_ctl status` as `postgres` fails
+  # with "Permission denied" — which reads as "not running" and leaves a live
+  # cluster behind. Measured, not hypothetical.
+  own_scratch
   if is_running; then
     as_pg "'$PGBIN/pg_ctl' -D '$PGDATA' -w -m fast stop" >/dev/null
     echo "db-local: stopped"

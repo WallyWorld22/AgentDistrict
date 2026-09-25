@@ -7,6 +7,7 @@ import type {
   UUID,
 } from "@/lib/data/types";
 import type { Repository } from "@/lib/data/repository";
+import { MCP_TOOLS } from "@/lib/site";
 
 /**
  * Pure helpers behind the Home dashboard (BUILD_SPEC §4, `/`).
@@ -268,6 +269,8 @@ export const MACHINE_ENTRANCES: MachineEntrance[] = [
     method: "MCP",
     path: "/api/mcp/mcp",
     href: "/developers",
-    blurb: "Streamable HTTP — 9 tools, ready to connect.",
+    // Derived, not typed out: the count moved from 9 to 12 when the
+    // entrance landed, and a literal here is a number nobody remembers.
+    blurb: `Streamable HTTP — ${MCP_TOOLS.length} tools, ready to connect.`,
   },
 ];

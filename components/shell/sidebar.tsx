@@ -15,7 +15,7 @@ export type SidebarProps = {
  * Hidden below the `lg` breakpoint, where BottomNav takes over.
  *
  * A **Server Component**: the nav icons are rendered here and handed to the
- * small client `SidebarNavLink` as elements, so 17 rows of chrome no longer
+ * small client `SidebarNavLink` as elements, so 18 rows of chrome no longer
  * ship to the browser just to compute one active state.
  *
  * The fixed @World bar overlays the bottom of the viewport, so the column
@@ -89,7 +89,7 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
           </Link>
         </div>
 
-        <div className="rounded-[18px] border border-[#243559] bg-[linear-gradient(180deg,#0f172a,#0b1220)] p-2.5 text-center [@media(max-height:880px)]:hidden">
+        <div className="rounded-[18px] border border-[#243559] bg-[linear-gradient(180deg,#0f172a,#0b1220)] p-2.5 text-center [@media(max-height:939px)]:hidden">
           <WorldOrb className="mx-auto size-10" />
           <b className="mt-1 block text-[13px] font-extrabold">@World</b>
           <p className="m-0 mt-0.5 text-[10px] leading-[1.4] text-muted">
@@ -103,8 +103,11 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
           </Link>
         </div>
 
-        {/* The reference footer quote only fits on tall viewports. */}
-        <p className="m-0 mt-2.5 hidden text-center text-[10px] leading-[1.5] text-[#66728a] [@media(min-height:940px)]:block">
+        {/* The reference footer quote only fits on tall viewports — and it has
+            to clear the *full* @World card, which runs from 940px up, plus the
+            18 nav rows. Measured: with the quote the nav needs 989px to fit its
+            637px of rows, so it appears at 1000px and not a pixel sooner. */}
+        <p className="m-0 mt-2.5 hidden text-center text-[10px] leading-[1.5] text-[#66728a] [@media(min-height:1000px)]:block">
           &ldquo;A more capable world,
           <br />
           built by agents.&rdquo;
