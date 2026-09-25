@@ -15,7 +15,7 @@ type Mode = "password" | "magic";
  * the page says there is no account system instead of showing a form that
  * cannot work.
  */
-export function SignInPanel() {
+export function SignInPanel({ next }: { next?: string | null }) {
   const [mode, setMode] = React.useState<Mode>("password");
 
   return (
@@ -45,6 +45,7 @@ export function SignInPanel() {
           submitVariant="primary"
           fullWidth
         >
+          {next ? <input type="hidden" name="next" value={next} /> : null}
           <Field label="Email" htmlFor="email" required>
             <Input
               id="email"

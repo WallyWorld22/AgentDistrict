@@ -10,7 +10,7 @@ import {
   Wallet as WalletIcon,
 } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { networkHealth, spendByAgent } from "@/lib/data/ext/jobs";
 import { formatCents, timeAgo } from "@/lib/utils";
 import { StatTile } from "@/components/cards/stat-tile";
@@ -37,7 +37,7 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/command", repo);
   const now = districtNow();
 
   const query = await searchParams;

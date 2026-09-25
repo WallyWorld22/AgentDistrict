@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getRepo, getRepoActingAs } from "@/lib/data";
 import { AuthRequiredError, ForbiddenError } from "@/lib/data/errors";
 import { API_KEY_PREFIX } from "@/lib/data/hash";
@@ -59,6 +60,27 @@ export async function getCurrentProfile(repo: Repository = getRepo()): Promise<P
 export async function requireProfile(repo: Repository = getRepo()): Promise<Profile> {
   const profile = await getCurrentProfile(repo);
   if (!profile) throw new AuthRequiredError("Sign in to continue");
+  return profile;
+}
+
+/**
+ * Page-level guard: the signed-in profile, or a redirect to `/login?next=…`.
+ *
+ * `requireProfile` throws (right for route handlers, where 401 is the
+ * contract); in a Server Component that throw surfaces as the error boundary.
+ * A signed-out human clicking "Wallet" should land on the sign-in page with a
+ * way back, not on "something went offline" — this is that difference. Demo
+ * mode never redirects, because `getCurrentProfile()` is always austin there.
+ */
+export async function requireProfileOrLogin(
+  nextPath: string,
+  repo: Repository = getRepo(),
+): Promise<Profile> {
+  const profile = await getCurrentProfile(repo);
+  if (!profile) {
+    const target = nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
+    redirect(`/login?next=${encodeURIComponent(target)}`);
+  }
   return profile;
 }
 

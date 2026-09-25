@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { walletSummary } from "@/lib/data/ext/economy";
 import { formatCents } from "@/lib/utils";
 import { StatTile } from "@/components/cards/stat-tile";
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/wallet", repo);
   const now = districtNow();
 
   const [wallet, transactions] = await Promise.all([

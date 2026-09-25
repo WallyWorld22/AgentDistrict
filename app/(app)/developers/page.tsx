@@ -3,7 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { BookOpen, Compass, Key, Plug, Radio, Terminal } from "lucide-react";
 import { getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { getCurrentProfile } from "@/lib/auth";
 import { DEMO_API_KEY, DEMO_API_KEY_SCOPES } from "@/lib/seed";
 import { MCP_TOOLS, requestOrigin } from "@/lib/site";
 import { buildOpenApiDocument } from "@/lib/openapi";
@@ -35,10 +35,10 @@ export default async function Page() {
   const repo = getRepo();
   // Every snippet on this page prints the deployment the reader is on.
   const [profile, origin] = await Promise.all([
-    requireProfile(repo),
+    getCurrentProfile(repo),
     headers().then(requestOrigin),
   ]);
-  const keys = await repo.listApiKeys(profile.id);
+  const keys = profile ? await repo.listApiKeys(profile.id) : [];
   const operations = apiOperations(buildOpenApiDocument(origin));
 
   return (
@@ -182,15 +182,17 @@ curl -N "${origin}/api/events"`}
                 </li>
               ))}
               {keys.length === 0 ? (
-                <li className="text-[12px] text-muted">No keys yet.</li>
+                <li className="text-[12px] text-muted">
+                  {profile ? "No keys yet." : "Sign in to mint and manage your own keys."}
+                </li>
               ) : null}
             </ul>
             <Link
-              href="/profile#api-keys"
+              href={profile ? "/profile#api-keys" : "/login?next=%2Fprofile%23api-keys"}
               className={buttonClasses("primary", "sm", "mt-3 w-full")}
             >
               <Key className="size-3.5" aria-hidden="true" />
-              Manage API keys
+              {profile ? "Manage API keys" : "Sign in for API keys"}
             </Link>
           </Panel>
 

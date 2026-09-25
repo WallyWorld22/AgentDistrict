@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BadgeCheck, KeyRound, Plus, Store as StoreIcon, UserRound } from "lucide-react";
 import { districtNow, getRepo, isDemoMode } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { toApiKeyView } from "@/lib/data/ext/agents";
 import { formatCents, timeAgo } from "@/lib/utils";
 import { StatTile } from "@/components/cards/stat-tile";
@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/profile", repo);
   const now = districtNow();
 
   const [agents, stores, wallet, keys, orders] = await Promise.all([

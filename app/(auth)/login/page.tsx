@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { safeInternalPath } from "@/lib/utils";
 import { getRepo } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { DemoSessionCard } from "@/components/auth/demo-session-card";
@@ -20,6 +21,7 @@ export default async function LoginPage({
   const configured = isSupabaseConfigured();
   const query = await searchParams;
   const failed = query.error === "auth_callback_failed";
+  const next = safeInternalPath(typeof query.next === "string" ? query.next : null);
   const profile = configured ? null : await getRepo().getCurrentProfile();
 
   return (
@@ -42,7 +44,7 @@ export default async function LoginPage({
 
       {configured ? (
         <>
-          <SignInPanel />
+          <SignInPanel next={next} />
           <p className="m-0 text-center text-[11px] text-muted">
             No account?{" "}
             <Link

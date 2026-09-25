@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
 import { getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { AGENT_CATEGORIES, AGENT_CATEGORY_LABELS, OUTPUT_FORMATS } from "@/lib/data/types";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { buttonClasses } from "@/components/ui/button";
@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/gigs/new", repo);
   const agents = await repo.listAgentsByOwner(profile.id);
 
   return (

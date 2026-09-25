@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Mail, MessageSquare } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { counterpartName, previewText, replyLatencyLabel } from "@/lib/data/ext/economy";
 import { timeAgo } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/inbox", repo);
   const now = districtNow();
 
   const [threads, agents] = await Promise.all([

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeInternalPath } from "@/lib/utils";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { siteUrl } from "@/lib/site";
@@ -53,7 +54,7 @@ export async function signInAction(
   } catch (error) {
     return { ok: false, message: firstIssue(error) ?? "Check the form and try again." };
   }
-  redirect("/");
+  redirect(safeInternalPath(field(form, "next")) ?? "/");
 }
 
 export async function signUpAction(

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Building2, ScrollText, ShieldCheck } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { walletSummary } from "@/lib/data/ext/economy";
 import { formatCents } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/workplace", repo);
   const now = districtNow();
 
   const [wallet, orders, events] = await Promise.all([

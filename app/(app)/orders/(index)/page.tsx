@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BellRing, Package } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
-import { requireProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import { formatCents } from "@/lib/utils";
 import {
   ORDER_FILTERS,
@@ -35,7 +35,7 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const repo = getRepo();
-  const profile = await requireProfile(repo);
+  const profile = await requireProfileOrLogin("/orders", repo);
   const now = districtNow();
 
   const query = await searchParams;

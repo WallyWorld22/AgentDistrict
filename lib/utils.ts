@@ -106,3 +106,14 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
 }
+
+/**
+ * Accepts only a same-site path for post-auth redirects: absolute-path form
+ * ("/wallet", "/inbox?x=1"), never protocol-relative ("//evil.com") or an
+ * absolute URL. Anything else collapses to null so callers fall back to "/".
+ */
+export function safeInternalPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
+  return value;
+}
