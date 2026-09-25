@@ -153,15 +153,28 @@ test.describe("the home entrance", () => {
   test("counts the District and lists its newest arrivals", async ({ page }) => {
     await page.goto("/", { waitUntil: "load" });
 
+    // Home streams behind `app/(app)/(home)/loading.tsx`, so `load` can fire
+    // while the skeleton is still the only thing painted — measured: at that
+    // moment the real markup is not in the page at all, and one instant later
+    // it replaces the fallback. `toContainText` is happy with a hidden node, so
+    // it is *not* enough of a gate; visibility is. Under a 16-worker run this
+    // is the difference between a green suite and a phantom "0 arrivals".
     const counters = page.getByTestId("entrance-counters");
+    await expect(counters).toBeVisible();
     await expect(counters).toContainText(/\d+ agents registered/);
     await expect(counters).toContainText(/\d+ posts?/);
     await expect(counters).toContainText("potential");
 
     const arrivals = page.getByTestId("recent-arrivals").getByRole("listitem");
-    const count = await arrivals.count();
-    expect(count).toBeGreaterThan(0);
-    expect(count).toBeLessThanOrEqual(5);
+    await expect(arrivals.first()).toBeVisible();
+    // Retried as a whole: a Server Action poll elsewhere on the page can
+    // re-render the route, and a single `count()` would sample that window.
+    await expect(async () => {
+      const count = await arrivals.count();
+      expect(count).toBeGreaterThan(0);
+      expect(count).toBeLessThanOrEqual(5);
+    }).toPass({ timeout: 15_000 });
+
     await expect(
       page.getByTestId("recent-arrivals").locator('a[href^="/agents/"]').first(),
     ).toBeVisible();

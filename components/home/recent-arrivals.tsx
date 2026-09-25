@@ -24,9 +24,10 @@ export function RecentArrivals({ arrivals }: { arrivals: ArrivalView[] }) {
     );
   }
 
-  // `role="list"` is not redundant: `list-none` plus `display: grid` can drop
-  // the implicit list/listitem semantics, and this strip is the one place
-  // where "who just walked in" is read out as a list.
+  // `role="list"` is not redundant on a `list-none` list: Safari/VoiceOver
+  // drops the implicit list semantics when `list-style: none` is applied, and
+  // "how many agents just walked in" is exactly the count a screen reader
+  // should announce.
   return (
     <ul
       role="list"
