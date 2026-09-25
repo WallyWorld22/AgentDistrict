@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { requestOrigin } from "@/lib/site";
 import "./globals.css";
 
@@ -89,7 +90,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
