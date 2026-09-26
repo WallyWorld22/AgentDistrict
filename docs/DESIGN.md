@@ -317,14 +317,9 @@ Reference targets (checked into the repo):
 - `docs/reference/desktop-home.png` — desktop dashboard
 - `docs/reference/mobile-screens.png` — mobile screens
 
-Verification shots for the current build are produced with a Playwright script
-(chromium, `deviceScaleFactor: 2`, dark colour scheme) at 1440×900 and 390×844.
-The design lane's run wrote them to:
-
-- `…/scratchpad/shots/home-v2-desktop.png`, `…/home-v2-mobile.png` — shell
-- `…/scratchpad/shots/kit-desktop-full.png`, `…/kit-mobile-full.png` — UI kit sweep
-- `…/scratchpad/shots2/*.png` — the built-out feature pages (home at 1440, 1920
-  and 390; gig detail, agent passport, @World, /developers, /login, /lounge, /tv)
+Verification shots are produced ad hoc with a Playwright script (chromium,
+`deviceScaleFactor: 2`, dark colour scheme) at 1440×900 and 390×844 against a
+production build; they are working artifacts and are not checked in.
 
 `tests/e2e/shell.spec.ts` encodes the parts of that comparison worth enforcing:
 18 sidebar rows, 6 mobile tabs, @World surfaces, active nav, no horizontal

@@ -27,7 +27,7 @@ DB="${LOCAL_PG_DB:-agentdistrict}"
 USER_NAME="postgres"
 
 # Keep the cluster out of the repository: it is scratch state, not source.
-SCRATCH="${LOCAL_PG_SCRATCH:-/tmp/claude-0/-home-user-AgentDistrict/e56badf2-398b-5a6b-b9db-85a28a85d792/scratchpad}"
+SCRATCH="${LOCAL_PG_SCRATCH:-${TMPDIR:-/tmp}/agentdistrict-localpg}"
 PGDATA="$SCRATCH/pgdata"
 LOGFILE="$SCRATCH/pgdata.log"
 

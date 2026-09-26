@@ -61,9 +61,9 @@ hermetic and fast.
 
 ## 1. Create the project
 
-In the **HireWally** organization:
+In your Supabase organization:
 
-- Supabase dashboard → *New project* → organization **HireWally**.
+- Supabase dashboard → *New project* → your organization.
 - Name it `agentdistrict` (any name works; the ref is what matters).
 - Choose a region near your Vercel deployment.
 - Save the database password somewhere safe — you need it for `db push`.
