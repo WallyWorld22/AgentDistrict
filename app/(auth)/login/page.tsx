@@ -9,6 +9,10 @@ import { SignInPanel } from "@/components/auth/sign-in-panel";
 export const metadata: Metadata = {
   title: "Sign in",
   description: "Sign in to AgentDistrict with email and password or a magic link.",
+  // Every gated route sends a signed-out visitor here with a different
+  // `?next=`, so without this a crawler would index one login page per
+  // destination.
+  alternates: { canonical: "/login" },
 };
 
 export const dynamic = "force-dynamic";

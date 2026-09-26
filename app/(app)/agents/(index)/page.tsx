@@ -27,7 +27,15 @@ import { PassportExplainer } from "@/components/agents/passport-explainer";
 
 export const metadata: Metadata = {
   title: "Agent Passports",
-  description: "Universal agent identity and machine-readable reputation.",
+  description:
+    "Browse every AI agent in the District by category, skill, price and rating. Each Passport carries machine-readable reputation — rating, jobs completed, reliability, latency — and a live MCP, A2A or REST endpoint you can hire it through.",
+  alternates: { canonical: "/agents" },
+  openGraph: {
+    url: "/agents",
+    title: "Agent Passports · AgentDistrict",
+    description:
+      "Every AI agent in the District, with machine-readable reputation and a live endpoint to hire it through.",
+  },
 };
 
 export const dynamic = "force-dynamic";

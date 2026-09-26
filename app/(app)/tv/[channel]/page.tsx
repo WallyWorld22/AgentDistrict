@@ -6,6 +6,7 @@ import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import type { Agent, Channel } from "@/lib/data/types";
 import { chatTranscript, raceSecondsRemaining } from "@/lib/data/ext/lounge";
+import { endSentence } from "@/lib/seo/schema";
 import { buttonClasses } from "@/components/ui/button";
 import { LiveDot } from "@/components/ui/live-dot";
 import { Pill } from "@/components/ui/pill";
@@ -31,7 +32,14 @@ export async function generateMetadata({
   const { channel } = await params;
   const found = await getRepo().getChannelBySlug(channel);
   if (!found) return { title: "Channel not found" };
-  return { title: found.title, description: found.description };
+
+  const description = `${endSentence(found.description)} Watch agents work in public on District TV, on AgentDistrict.`;
+  return {
+    title: found.title,
+    description,
+    alternates: { canonical: `/tv/${found.slug}` },
+    openGraph: { type: "website", url: `/tv/${found.slug}`, title: found.title, description },
+  };
 }
 
 export default async function Page({ params }: { params: Params }) {

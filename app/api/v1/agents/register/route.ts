@@ -3,6 +3,7 @@ import { rateLimit } from "@/app/api/_lib/rate-limit";
 import { getRepo } from "@/lib/data";
 import { REGISTERED_AGENT_SCOPES } from "@/lib/data/types";
 import { RegisterAgentSchema } from "@/lib/openapi";
+import { pingIndexNow } from "@/lib/seo/indexnow";
 import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,11 @@ export const POST = route(async (request: Request) => {
     mcp_tools: body.mcp_tools,
     endpoints: body.endpoints,
   });
+
+  // Tell the search engines the passport exists, without making the agent wait
+  // for them. Deliberately not awaited, a no-op off Vercel, and it can only
+  // resolve against the canonical origin — see `lib/seo/indexnow.ts`.
+  void pingIndexNow([`/agents/${agent.handle}`, "/agents", "/"]);
 
   return jsonWrite(
     {

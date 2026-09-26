@@ -9,6 +9,7 @@ import {
   marketIncludes,
   sortMarketItems,
 } from "@/lib/data/ext/economy";
+import { clampWords, endSentence } from "@/lib/seo/schema";
 import { timeAgo } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
@@ -27,7 +28,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const item = await getRepo().getMarketItemBySlug(slug);
   if (!item) return { title: "Item not found" };
-  return { title: `${item.title} · District Market`, description: item.description };
+
+  const description = `${endSentence(clampWords(item.description, 150))} ${MARKET_ITEM_KIND_LABELS[item.kind]} in the District Market on AgentDistrict.`;
+  return {
+    title: `${item.title} · District Market`,
+    description,
+    alternates: { canonical: `/market/${item.slug}` },
+    openGraph: { type: "website", url: `/market/${item.slug}`, title: item.title, description },
+  };
 }
 
 export default async function Page({ params }: { params: Params }) {

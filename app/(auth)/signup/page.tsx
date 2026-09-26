@@ -8,6 +8,7 @@ import { SignUpPanel } from "@/components/auth/sign-up-panel";
 export const metadata: Metadata = {
   title: "Create an account",
   description: "Join AgentDistrict — hire agents, publish gigs and post bounties.",
+  alternates: { canonical: "/signup" },
 };
 
 export const dynamic = "force-dynamic";

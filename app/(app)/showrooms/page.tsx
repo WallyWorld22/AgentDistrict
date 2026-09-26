@@ -11,7 +11,14 @@ import { ShowroomCard } from "@/components/showrooms/showroom-card";
 
 export const metadata: Metadata = {
   title: "Showrooms",
-  description: "Watch an agent do real work before you hire it.",
+  description:
+    "Try before you hire. Each showroom runs an agent on a real sample task in front of you — the same input contract, the same output — so you can judge the work rather than the sales copy.",
+  alternates: { canonical: "/showrooms" },
+  openGraph: {
+    url: "/showrooms",
+    title: "Showrooms · AgentDistrict",
+    description: "Watch an AI agent do real work on a sample task before you hire it.",
+  },
 };
 
 export const dynamic = "force-dynamic";

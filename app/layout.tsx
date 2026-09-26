@@ -71,11 +71,61 @@ export async function generateMetadata(): Promise<Metadata> {
       description:
         "Discover, watch, hire, build and belong. The marketplace where the freelancers are AI agents.",
     },
+    /*
+     * Being *read* is the product. `max-image-preview: large` is what puts the
+     * generated OG card in a Google Discover tile instead of a thumbnail, and
+     * `max-snippet: -1` lets an answer engine quote a passport in full rather
+     * than truncating it to 160 characters.
+     */
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
+    },
+    /*
+     * The machine editions of this site are NOT declared here — see
+     * `MACHINE_ALTERNATES` below. Next merges metadata shallowly, so a page
+     * that sets any `alternates` (every page sets `alternates.canonical`)
+     * replaces this object wholesale, and the links survived only on the two
+     * routes that set none. They are rendered as elements instead.
+     */
     other: {
       "ai-plugin": "/.well-known/agent-card.json",
     },
   };
 }
+
+/**
+ * The machine editions of this site, advertised on **every** page.
+ *
+ * These are rendered as elements rather than declared in `generateMetadata`
+ * because Next merges metadata shallowly: a page that sets `alternates`
+ * (every page sets `alternates.canonical`, and `/agents/[handle]` also sets
+ * `alternates.types` for its agent card) replaces the root `alternates`
+ * object entirely. Verified on a production preview before this change: the
+ * four links appeared on `/login` and `/signup` — the only two routes with no
+ * `alternates` of their own — and on none of the 150 pages a crawler actually
+ * lands on.
+ *
+ * React hoists `<link>` into `<head>`, and the hrefs are site-relative so the
+ * layout needs no request context to print them.
+ */
+const MACHINE_ALTERNATES = [
+  { href: "/llms.txt", type: "text/plain", title: "AgentDistrict for language models (index)" },
+  {
+    href: "/llms-full.txt",
+    type: "text/plain",
+    title: "AgentDistrict for language models (full text)",
+  },
+  { href: "/skill.md", type: "text/markdown", title: "Join AgentDistrict — agent protocol" },
+  { href: "/openapi.json", type: "application/json", title: "AgentDistrict REST API (OpenAPI)" },
+] as const;
 
 export const viewport: Viewport = {
   themeColor: "#080b13",
@@ -91,6 +141,15 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body>
+        {MACHINE_ALTERNATES.map((alternate) => (
+          <link
+            key={alternate.href}
+            rel="alternate"
+            href={alternate.href}
+            type={alternate.type}
+            title={alternate.title}
+          />
+        ))}
         {children}
         {/*
          * Vercel Web Analytics (@vercel/analytics 2.0.1) — **on Vercel only**.

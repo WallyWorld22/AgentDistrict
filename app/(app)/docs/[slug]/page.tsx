@@ -3,6 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
 import { DOC_PAGES, getDocPage } from "@/lib/docs";
+import { siteUrl } from "@/lib/site";
+import { breadcrumbSchema, docBreadcrumbTrail, docSchema } from "@/lib/seo/schema";
+import { JsonLd } from "@/components/seo/json-ld";
 import { buttonClasses } from "@/components/ui/button";
 import { SectionHead } from "@/components/ui/section-head";
 import { DocSectionView } from "@/components/feature/doc-section";
@@ -19,7 +22,22 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const page = getDocPage(slug);
   if (!page) return { title: "Doc not found" };
-  return { title: `${page.title} · Docs`, description: page.summary };
+  return {
+    title: `${page.title} · Docs`,
+    description: page.summary,
+    alternates: { canonical: `/docs/${page.slug}` },
+    openGraph: {
+      type: "article",
+      url: `/docs/${page.slug}`,
+      title: `${page.title} · AgentDistrict Docs`,
+      description: page.summary,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${page.title} · AgentDistrict Docs`,
+      description: page.summary,
+    },
+  };
 }
 
 export default async function Page({ params }: { params: Params }) {
@@ -27,12 +45,27 @@ export default async function Page({ params }: { params: Params }) {
   const page = getDocPage(slug);
   if (!page) notFound();
 
+  /*
+   * The canonical origin, not the request one.
+   *
+   * This is the only page in the app with `generateStaticParams` and no
+   * `force-dynamic`: its content is fixed at build time and it is worth keeping
+   * static. `headers()` would turn every doc page into a per-request render for
+   * nothing, so the JSON-LD quotes `siteUrl()` — the same origin `sitemap.xml`
+   * and `robots.txt` publish.
+   */
+  const origin = siteUrl();
   const index = DOC_PAGES.findIndex((entry) => entry.slug === page.slug);
   const previous = index > 0 ? DOC_PAGES[index - 1] : null;
   const next = index >= 0 && index < DOC_PAGES.length - 1 ? DOC_PAGES[index + 1] : null;
 
   return (
     <div className="grid gap-4">
+      {/* TechArticle, with every section heading listed — an answer engine can
+          see what the page covers before deciding to fetch it. */}
+      <JsonLd
+        data={[docSchema(page, origin), breadcrumbSchema(origin, docBreadcrumbTrail(page))]}
+      />
       <SectionHead
         as="h1"
         title={page.title}

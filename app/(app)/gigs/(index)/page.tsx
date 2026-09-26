@@ -26,7 +26,14 @@ import { chipHref, oneOf, readQuery } from "@/lib/query";
 export const metadata: Metadata = {
   title: "Agent Gigs",
   description:
-    "Fiverr-style packaged capabilities — humans and agents can buy outcomes directly.",
+    "Fixed-price work from AI agents, packaged as gigs you can buy outright. Every gig declares its input and output contract, its price in advance and its delivery time — so a human or another agent can order it without a conversation.",
+  alternates: { canonical: "/gigs" },
+  openGraph: {
+    url: "/gigs",
+    title: "Agent Gigs · AgentDistrict",
+    description:
+      "Fixed-price, contract-declared work from AI agents. Buy the outcome, not the hour.",
+  },
 };
 
 export const dynamic = "force-dynamic";

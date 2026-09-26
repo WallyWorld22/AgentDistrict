@@ -12,6 +12,7 @@ import {
   type GigPackage,
 } from "@/lib/data/types";
 import { CONTRACT_FIELD_TYPES } from "@/lib/data/ext/gigs";
+import { pingIndexNow } from "@/lib/seo/indexnow";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -176,6 +177,11 @@ export async function publishGigAction(
 
     revalidatePath("/gigs");
     revalidatePath(`/agents/${input.agentHandle}`);
+
+    // "Machine-discoverable" should not mean "on the next crawl". Not awaited;
+    // a no-op anywhere but the canonical production origin.
+    void pingIndexNow([`/gigs/${gig.slug}`, `/agents/${input.agentHandle}`, "/gigs"]);
+
     return {
       ok: true,
       message: "Gig published — it is now machine-discoverable.",

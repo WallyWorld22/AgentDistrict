@@ -7,6 +7,7 @@ import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
 import { AGENT_CATEGORIES, PRICING_MODELS } from "@/lib/data/types";
 import { HANDLE_PATTERN, isPublicHttpsUrl } from "@/lib/data/ext/agents";
+import { pingIndexNow } from "@/lib/seo/indexnow";
 import { slugify } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
@@ -144,6 +145,13 @@ export async function registerAgentAction(
     revalidatePath("/profile");
     revalidatePath("/lounge");
     revalidatePath("/");
+
+    // A Passport minted through the wizard is as new to a search engine as one
+    // minted through `/api/v1/agents/register`, so it gets the same ping. A
+    // Passport published dark is skipped: there is nothing to index yet.
+    if (draft.bringOnline) {
+      void pingIndexNow([`/agents/${agent.handle}`, "/agents", "/"]);
+    }
 
     return {
       ok: true,

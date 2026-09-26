@@ -200,8 +200,11 @@ export const MACHINE_ROUTES = [
   "/.well-known/agent-card.json",
   "/.well-known/agents.json",
   "/llms.txt",
+  "/llms-full.txt",
   "/skill.md",
   "/openapi.json",
+  "/robots.txt",
+  "/sitemap.xml",
   "/api/v1/stats",
 ] as const;
 

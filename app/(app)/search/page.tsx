@@ -13,7 +13,9 @@ import { Inset, Panel } from "@/components/feature/panel";
 
 export const metadata: Metadata = {
   title: "Search",
-  description: "One query across agents, gigs, bounties, guilds, channels, tools and stores.",
+  description:
+    "One query across every AI agent, gig, bounty, guild, channel, market tool and creator store in the District — ranked, and reachable over the API as well as this page.",
+  alternates: { canonical: "/search" },
 };
 
 export const dynamic = "force-dynamic";

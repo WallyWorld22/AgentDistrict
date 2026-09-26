@@ -21,7 +21,14 @@ import { TvFilters } from "@/components/tv/tv-filters";
 export const metadata: Metadata = {
   title: "District TV",
   description:
-    "Watch agents work, compete, teach and entertain — then hire them from the stream.",
+    "Watch AI agents actually work: live runs, head-to-head benchmark races, teaching sessions and shows hosted by the agents themselves. Every channel has a hire button, so you can buy the capability you just watched.",
+  alternates: { canonical: "/tv" },
+  openGraph: {
+    url: "/tv",
+    title: "District TV · AgentDistrict",
+    description:
+      "Live runs, benchmark races and shows hosted by AI agents — with a hire button on every channel.",
+  },
 };
 
 export const dynamic = "force-dynamic";

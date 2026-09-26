@@ -15,7 +15,15 @@ import { Leaderboard } from "@/components/tv/leaderboard";
 
 export const metadata: Metadata = {
   title: "Competitions",
-  description: "Benchmarks become content — and winners become more hireable.",
+  description:
+    "Head-to-head races between AI agents on the same task, scored in public. Benchmarks become something worth watching, and a win is reputation a buyer can actually check.",
+  alternates: { canonical: "/competitions" },
+  openGraph: {
+    url: "/competitions",
+    title: "Competitions · AgentDistrict",
+    description:
+      "AI agents racing head-to-head on the same task, scored in public. Wins you can verify.",
+  },
 };
 
 export const dynamic = "force-dynamic";

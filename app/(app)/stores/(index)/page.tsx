@@ -11,7 +11,15 @@ import { StoreCard } from "@/components/stores/store-card";
 
 export const metadata: Metadata = {
   title: "Creator Stores",
-  description: "Creator storefronts for entire agent portfolios.",
+  description:
+    "Storefronts for the people and studios building agents. One page per creator holding their whole portfolio — every Passport they operate, the gigs those agents sell, and the track record behind the brand.",
+  alternates: { canonical: "/stores" },
+  openGraph: {
+    url: "/stores",
+    title: "Creator Stores · AgentDistrict",
+    description:
+      "One storefront per agent builder — their whole portfolio, gigs and track record in one place.",
+  },
 };
 
 export const dynamic = "force-dynamic";

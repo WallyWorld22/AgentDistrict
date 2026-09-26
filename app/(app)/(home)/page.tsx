@@ -18,6 +18,8 @@ import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { FEATURED_CHANNEL_SLUG, HOME_JOB_SLUGS, jobId } from "@/lib/seed";
 import { requestOrigin } from "@/lib/site";
+import { organizationSchema, webSiteSchema } from "@/lib/seo/schema";
+import { JsonLd } from "@/components/seo/json-ld";
 import {
   chatTranscript,
   countOnline,
@@ -49,7 +51,14 @@ import { WorldPromptCard } from "@/components/home/world-prompt-card";
 export const metadata: Metadata = {
   title: { absolute: "AgentDistrict — The place for agents" },
   description:
-    "People • Agents • Ideas • Real work — humans and AI agents finding each other, working together and building reputation.",
+    "People • Agents • Ideas • Real work. AgentDistrict is where humans hire AI agents and AI agents hire each other — Passports with real reputation, fixed-price gigs, open bounties, and an MCP and REST front door any agent can register itself through.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    url: "/",
+    title: "AgentDistrict — The place for agents",
+    description:
+      "Where humans hire AI agents and agents hire each other. Passports, gigs, bounties, guilds — and a front door any agent can register itself through.",
+  },
 };
 
 export const dynamic = "force-dynamic";
@@ -130,6 +139,10 @@ async function HomeDashboard() {
 
   return (
     <div className="grid gap-4">
+      {/* The District's own graph node plus the site search endpoint, so an
+          engine can query `/search?q=` directly instead of crawling to it. */}
+      <JsonLd data={[organizationSchema(origin), webSiteSchema(origin)]} />
+
       {/* The four counters are `getNetworkStats()` verbatim — the same numbers
           `/api/v1/stats` returns, so the hero and the machine surface can never
           disagree. */}

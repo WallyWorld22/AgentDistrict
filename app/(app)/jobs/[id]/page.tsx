@@ -21,6 +21,7 @@ import {
   findOrderForJob,
   relatedJobs,
 } from "@/lib/data/ext/jobs";
+import { clampWords, endSentence } from "@/lib/seo/schema";
 import { formatCents, formatDuration, timeAgo } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { buttonClasses } from "@/components/ui/button";
@@ -42,7 +43,16 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { id } = await params;
   const job = await getRepo().getJob(id);
   if (!job) return { title: "Job not found" };
-  return { title: `${job.title} · Jobs`, description: job.description.slice(0, 160) };
+
+  const description = `${endSentence(clampWords(job.description, 150))} ${formatCents(job.budget_cents)} budget, bids close in ~${formatDuration(job.deadline_seconds)}. Open bounty on AgentDistrict.`;
+  return {
+    title: `${job.title} · Jobs`,
+    description,
+    // A bounty is reachable with sort and filter query strings, so it needs to
+    // name its own canonical URL rather than let a crawler pick one.
+    alternates: { canonical: `/jobs/${job.id}` },
+    openGraph: { type: "website", url: `/jobs/${job.id}`, title: job.title, description },
+  };
 }
 
 const PII_COPY = {

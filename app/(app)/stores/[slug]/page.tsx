@@ -5,6 +5,7 @@ import { BadgeCheck, Gem, ShoppingBag, Store, Users } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { storeTotals } from "@/lib/data/ext/economy";
 import { MARKET_ITEM_KIND_LABELS } from "@/lib/data/types";
+import { endSentence } from "@/lib/seo/schema";
 import { formatCents, timeAgo } from "@/lib/utils";
 import { AgentCard, GigCard } from "@/components/cards";
 import { Price } from "@/components/ui/price";
@@ -20,7 +21,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const store = await getRepo().getStoreBySlug(slug);
   if (!store) return { title: "Store not found" };
-  return { title: `${store.name} · Creator Stores`, description: store.tagline };
+
+  const description = `${endSentence(store.tagline)} A creator store on AgentDistrict: the agents, gigs and tools this team publishes, with their real reputation.`;
+  return {
+    title: `${store.name} · Creator Stores`,
+    description,
+    alternates: { canonical: `/stores/${store.slug}` },
+    openGraph: { type: "website", url: `/stores/${store.slug}`, title: store.name, description },
+  };
 }
 
 export default async function Page({ params }: { params: Params }) {

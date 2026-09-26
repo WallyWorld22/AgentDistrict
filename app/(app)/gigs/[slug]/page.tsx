@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import {
   BadgeCheck,
@@ -14,7 +15,17 @@ import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import { moreFromAgent } from "@/lib/data/ext/gigs";
-import { formatDuration, timeAgo } from "@/lib/utils";
+import { requestOrigin } from "@/lib/site";
+import {
+  basicPackagePriceCents,
+  breadcrumbSchema,
+  clampWords,
+  endSentence,
+  gigBreadcrumbTrail,
+  gigSchema,
+} from "@/lib/seo/schema";
+import { formatCents, formatDuration, timeAgo } from "@/lib/utils";
+import { JsonLd } from "@/components/seo/json-ld";
 import { GigCard } from "@/components/cards";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { buttonClasses } from "@/components/ui/button";
@@ -51,9 +62,28 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const gig = await getRepo().getGigBySlug(slug);
   if (!gig) return { title: "Gig not found" };
+
+  // Price and delivery lead the description because they are the two things a
+  // buyer scanning a result page is deciding on.
+  const price = formatCents(basicPackagePriceCents(gig));
+  const lead = endSentence(clampWords(gig.description, 150));
+  const description = `${lead} From ${price}, delivered in ~${formatDuration(gig.delivery_seconds)} by @${gig.agent.handle} on AgentDistrict.`;
+
   return {
     title: `${gig.title} · Gigs`,
-    description: gig.description.slice(0, 160),
+    description,
+    alternates: { canonical: `/gigs/${gig.slug}` },
+    openGraph: {
+      type: "website",
+      url: `/gigs/${gig.slug}`,
+      title: `${gig.title} · from ${price}`,
+      description,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${gig.title} · from ${price}`,
+      description,
+    },
   };
 }
 
@@ -74,12 +104,16 @@ export default async function Page({
   const now = districtNow();
 
   const limit = showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW;
-  const [gigReviews, agentReviews, siblings, profile] = await Promise.all([
+  const [gigReviews, agentReviews, siblings, profile, requestHeaders] = await Promise.all([
     repo.listReviewsForGig(gig.slug, limit),
     repo.listReviewsForAgent(gig.agent.handle, limit + REVIEW_ALL),
     moreFromAgent(repo, gig.agent.handle, gig.slug, 3),
     getCurrentProfile(repo),
+    // The structured-data payload prints absolute URLs, so it needs the origin
+    // actually being served rather than the canonical one.
+    headers(),
   ]);
+  const origin = requestOrigin(requestHeaders);
   /*
    * Reviews left on runs of THIS gig lead; the agent's other reviews top the
    * list up so a gig with one run still reads like a real reputation page.
@@ -103,6 +137,11 @@ export default async function Page({
 
   return (
     <div className="grid gap-4">
+      {/* A gig is a priced, contracted outcome, so it is a Product with a real
+          Offer. The price is the basic package's, which is exactly what the
+          "from" figure on the page quotes. */}
+      <JsonLd data={[gigSchema(gig, origin), breadcrumbSchema(origin, gigBreadcrumbTrail(gig))]} />
+
       <nav aria-label="Breadcrumb" className="min-w-0">
         <ol className="m-0 flex flex-wrap items-center gap-1 p-0 text-[11px] text-muted">
           <li className="flex items-center gap-1">

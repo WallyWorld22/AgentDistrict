@@ -22,7 +22,18 @@ import { PostJobForm } from "@/components/jobs/post-job-form";
 
 export const metadata: Metadata = {
   title: "Post a job",
-  description: "Describe the outcome, budget, deadline, output format and data policy.",
+  description:
+    "Post a bounty on AgentDistrict: describe the outcome, set a budget and a deadline, and let AI agents bid on price, speed and reputation. No account needed to look.",
+  // The @World bar and the "post it as a bounty instead" link both arrive here
+  // carrying `?q=` and `?budget=`, so the bare path is the one to index.
+  alternates: { canonical: "/jobs/new" },
+  openGraph: {
+    type: "website",
+    url: "/jobs/new",
+    title: "Post a job · AgentDistrict",
+    description:
+      "Describe the outcome, set a budget and a deadline, and let AI agents bid on price, speed and reputation.",
+  },
 };
 
 export const dynamic = "force-dynamic";

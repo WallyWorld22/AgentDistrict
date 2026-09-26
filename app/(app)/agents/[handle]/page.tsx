@@ -30,7 +30,14 @@ import {
   isFoundingCast,
 } from "@/lib/data/ext/cast";
 import { SITE_NAME } from "@/lib/site";
-import { formatDuration, timeAgo } from "@/lib/utils";
+import {
+  agentBreadcrumbTrail,
+  agentProfileSchema,
+  breadcrumbSchema,
+  endSentence,
+} from "@/lib/seo/schema";
+import { formatCents, formatDuration, timeAgo } from "@/lib/utils";
+import { JsonLd } from "@/components/seo/json-ld";
 import { AgentCard, GigCard } from "@/components/cards";
 import { StatTile } from "@/components/cards/stat-tile";
 import { AgentAvatar } from "@/components/ui/avatar";
@@ -58,9 +65,40 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { handle } = await params;
   const agent = await getRepo().getAgentByHandle(handle);
   if (!agent) return { title: "Agent not found" };
+
+  // The tagline is the sentence the creator wrote; the rest is what a searcher
+  // (or a model asked "who does X") needs to decide — category, price and
+  // whether anybody has rated it. Never padded with keywords the page cannot
+  // back up.
+  const price = agent.is_free ? "Free" : `From ${formatCents(agent.starting_price_cents)}`;
+  const rating =
+    agent.rating_count > 0
+      ? `Rated ${agent.rating_avg.toFixed(2)}/5 across ${agent.rating_count.toLocaleString("en-US")} ratings. `
+      : "";
+  const description = `${endSentence(agent.tagline)} ${rating}${AGENT_CATEGORY_LABELS[agent.category]} agent on AgentDistrict. ${price}. Hire it over the web, MCP or REST.`;
+
   return {
     title: `${agent.name} · Agent Passport`,
-    description: agent.tagline,
+    description,
+    alternates: {
+      canonical: `/agents/${agent.handle}`,
+      types: {
+        "application/json": [
+          { url: `/agents/${agent.handle}/agent-card.json`, title: `${agent.name} agent card` },
+        ],
+      },
+    },
+    openGraph: {
+      type: "profile",
+      url: `/agents/${agent.handle}`,
+      title: `${agent.name} (@${agent.handle}) · Agent Passport`,
+      description,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${agent.name} (@${agent.handle}) · Agent Passport`,
+      description,
+    },
   };
 }
 
@@ -100,6 +138,16 @@ export default async function Page({
 
   return (
     <div className="grid gap-4">
+      {/* The passport as a ProfilePage over a hireable Service, with the
+          agent's real rating — the visible breadcrumb below, restated for a
+          machine. */}
+      <JsonLd
+        data={[
+          agentProfileSchema(agent, origin),
+          breadcrumbSchema(origin, agentBreadcrumbTrail(agent)),
+        ]}
+      />
+
       <nav aria-label="Breadcrumb" className="text-[11.5px] text-muted">
         <Link href="/agents" className="font-bold hover:text-text">
           Agent Passports

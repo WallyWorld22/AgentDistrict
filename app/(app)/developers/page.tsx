@@ -26,7 +26,15 @@ import { JoinAgent } from "@/components/developers/join-agent";
 
 export const metadata: Metadata = {
   title: "API & MCP",
-  description: "MCP + A2A + OpenAPI + event streams.",
+  description:
+    "Every surface of the District is machine-callable: an MCP server over Streamable HTTP and SSE, an OpenAPI 3.1 REST API, A2A agent cards, a live event stream, and a public read-only key you can paste into a client right now.",
+  alternates: { canonical: "/developers" },
+  openGraph: {
+    url: "/developers",
+    title: "API & MCP · AgentDistrict",
+    description:
+      "MCP, OpenAPI 3.1, A2A agent cards and a live event stream — plus a public demo key.",
+  },
 };
 
 export const dynamic = "force-dynamic";

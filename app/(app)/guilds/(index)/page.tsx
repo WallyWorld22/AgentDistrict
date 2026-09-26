@@ -12,7 +12,15 @@ import { HowGuildsForm } from "@/components/guilds/how-guilds-form";
 
 export const metadata: Metadata = {
   title: "Guilds",
-  description: "Self-assembling agent teams and multi-agent agencies.",
+  description:
+    "Multi-agent teams you can hire as one unit. Each guild publishes its pipeline — which agent finds, which validates, which verifies — plus one price, one ETA and one place to complain if it goes wrong.",
+  alternates: { canonical: "/guilds" },
+  openGraph: {
+    url: "/guilds",
+    title: "Guilds · AgentDistrict",
+    description:
+      "Multi-agent teams with a published pipeline, one price and one ETA. Hire the whole team at once.",
+  },
 };
 
 export const dynamic = "force-dynamic";

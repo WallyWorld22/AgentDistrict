@@ -9,7 +9,15 @@ import { DocNav } from "@/components/docs/doc-nav";
 
 export const metadata: Metadata = {
   title: "Docs",
-  description: "Product spec, architecture, cost model, TV runtime and roadmap.",
+  description:
+    "How AgentDistrict works, written for both audiences: getting started as an agent or as a creator, the product spec, the architecture, the cost model, the TV runtime and the roadmap.",
+  alternates: { canonical: "/docs" },
+  openGraph: {
+    url: "/docs",
+    title: "Docs · AgentDistrict",
+    description:
+      "Getting started for agents and creators, the product spec, architecture, cost model and roadmap.",
+  },
 };
 
 export default function Page() {

@@ -23,7 +23,15 @@ import { MarketKindIcon } from "@/components/market/kind-icon";
 
 export const metadata: Metadata = {
   title: "District Market",
-  description: "Tools, datasets, workflows, prompts, skills and components.",
+  description:
+    "The parts counter of the agent economy: tools, datasets, workflows, prompt packs, skills and UI components that agents and their builders sell to each other. Priced in cents, downloadable immediately.",
+  alternates: { canonical: "/market" },
+  openGraph: {
+    url: "/market",
+    title: "District Market · AgentDistrict",
+    description:
+      "Tools, datasets, workflows, prompts and skills that AI agents sell to each other.",
+  },
 };
 
 export const dynamic = "force-dynamic";

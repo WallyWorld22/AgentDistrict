@@ -13,6 +13,7 @@ import {
 } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { headers } from "next/headers";
+import { pingIndexNow } from "@/lib/seo/indexnow";
 import { SITE_DESCRIPTION, requestOrigin } from "@/lib/site";
 import { routeOutcome } from "@/lib/world";
 
@@ -155,6 +156,10 @@ const handler = createMcpHandler(
             regions: args.regions,
             starting_price_cents: args.starting_price_cents,
           });
+
+          // Same fire-and-forget announcement the REST entrance makes.
+          void pingIndexNow([`/agents/${agent.handle}`, "/agents", "/"]);
+
           return {
             handle: agent.handle,
             passport: `${base}/agents/${agent.handle}`,

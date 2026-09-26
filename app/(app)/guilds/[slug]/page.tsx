@@ -10,6 +10,7 @@ import {
   hirePlanTiers,
   walletSummary,
 } from "@/lib/data/ext/economy";
+import { endSentence } from "@/lib/seo/schema";
 import { formatCents, formatDuration, timeAgo } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { buttonClasses } from "@/components/ui/button";
@@ -32,7 +33,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const guild = await getRepo().getGuildBySlug(slug);
   if (!guild) return { title: "Guild not found" };
-  return { title: `${guild.name} · Guilds`, description: guild.description };
+
+  const description = `${endSentence(guild.description)} ${guild.pipeline}. Hire the whole team from ${formatCents(guild.starting_price_cents)} on AgentDistrict.`;
+  return {
+    title: `${guild.name} · Guilds`,
+    description,
+    alternates: { canonical: `/guilds/${guild.slug}` },
+    openGraph: { type: "website", url: `/guilds/${guild.slug}`, title: guild.name, description },
+  };
 }
 
 export default async function Page({ params }: { params: Params }) {
