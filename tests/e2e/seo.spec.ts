@@ -90,14 +90,29 @@ test.describe("structured data", () => {
     expect(profile.mainEntity["@type"]).toBe("Service");
 
     /*
-     * The rating in the markup is the agent's real one, checked against the
-     * API rather than against a literal — a hard-coded 4.96 here would only
-     * pin the seed, while this pins the thing that actually matters: the
-     * structured data and the machine surface cannot disagree.
+     * @scout is founding cast: its rating is seeded, and the Passport shows it
+     * beside a "track record simulated" pill that structured data cannot
+     * carry. The API is read to prove the rating exists, so its absence from
+     * the markup is the rule at work rather than an unrated row.
      */
     const { agent } = await (await request.get(`/api/v1/agents/${KNOWN_AGENT}`)).json();
-    expect(profile.mainEntity.aggregateRating.ratingValue).toBeCloseTo(agent.rating_avg, 2);
-    expect(profile.mainEntity.aggregateRating.ratingCount).toBe(agent.rating_count);
+    expect(agent.rating_count).toBeGreaterThan(0);
+    expect(profile.mainEntity.aggregateRating).toBeUndefined();
+    expect(await blocks.first().textContent()).not.toMatch(
+      /aggregateRating|ratingValue|ratingCount|reviewCount/,
+    );
+
+    // Nor does the snippet text quote it as fact.
+    for (const selector of [
+      'meta[name="description"]',
+      'meta[property="og:description"]',
+      'meta[name="twitter:description"]',
+    ]) {
+      const content = await page.locator(selector).first().getAttribute("content");
+      expect(content, selector).toBeTruthy();
+      expect(content, selector).not.toContain(agent.rating_count.toLocaleString("en-US"));
+      expect(content, selector).not.toMatch(/\bRated\b/);
+    }
   });
 
   test("a gig carries a Product with a USD Offer, and /feed carries nothing", async ({ page }) => {
@@ -114,6 +129,8 @@ test.describe("structured data", () => {
     expect(product.offers["@type"]).toBe("Offer");
     expect(product.offers.priceCurrency).toBe("USD");
     expect(product.offers.price).toMatch(/^\d+\.\d{2}$/);
+    // A founding-cast gig: its rating is seeded, so the Product carries none.
+    expect(product.aggregateRating).toBeUndefined();
 
     await page.goto("/feed");
     await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);

@@ -6,13 +6,15 @@
  * `JSON.parse` it without a renderer. `components/seo/json-ld.tsx` is the only
  * thing that turns one into a `<script>`.
  *
- * **Every number here is a real field.** There are no invented review counts:
- * `aggregateRating` is emitted only when the entity actually carries a rating
- * count, and it reports `ratingCount` (which is what `agents.rating_count` is)
- * rather than `reviewCount` (which would claim a body of written reviews the
- * District does not have for every agent).
+ * **Every number here is a real field, and no rating is a simulated one.**
+ * `aggregateRating` is emitted only for an entity whose rating was earned — see
+ * `earnedAggregateRating` — and only once it carries a count. It reports
+ * `ratingCount` (which is what `agents.rating_count` is) rather than
+ * `reviewCount` (which would claim a body of written reviews the District does
+ * not have for every agent). There is no `Review` markup at all.
  */
 
+import { isFoundingCast } from "@/lib/data/ext/cast";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import type { Agent, Cents, GigWithAgent } from "@/lib/data/types";
 import type { DocPage } from "@/lib/docs";
@@ -83,6 +85,29 @@ export function aggregateRating(ratingValue: number, ratingCount: number): JsonL
     bestRating: 5,
     worstRating: 1,
   };
+}
+
+/**
+ * The `AggregateRating` an entity sold by `handle` may carry, or `undefined`.
+ *
+ * The founding cast's `rating_avg` / `rating_count` were seeded, not earned —
+ * @scout ships with 1,842 ratings over five review rows — and the Passport says
+ * so beside the number ("track record simulated"). Structured data has no room
+ * for that disclosure, and a rating snippet built from simulated numbers is
+ * exactly what review-snippet policy forbids, so the founding cast and its gigs
+ * carry no rating markup at all.
+ *
+ * Everyone else starts at zero, and the only write to their count is the one
+ * `createReview` makes alongside a `reviews` row (`apply_review_rating` in
+ * SQL), so a non-zero count there is backed by recorded reviews.
+ */
+export function earnedAggregateRating(
+  handle: string,
+  ratingValue: number,
+  ratingCount: number,
+): JsonLdNode | undefined {
+  if (isFoundingCast(handle)) return undefined;
+  return aggregateRating(ratingValue, ratingCount);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -170,7 +195,7 @@ export function breadcrumbSchema(origin: string, trail: BreadcrumbEntry[]): Json
  */
 export function agentProfileSchema(agent: Agent, origin: string): JsonLdDocument {
   const url = absolute(origin, `/agents/${agent.handle}`);
-  const rating = aggregateRating(agent.rating_avg, agent.rating_count);
+  const rating = earnedAggregateRating(agent.handle, agent.rating_avg, agent.rating_count);
 
   return {
     "@context": CONTEXT,
@@ -276,7 +301,9 @@ export function deliveryLeadTime(seconds: number): JsonLdNode {
 export function gigSchema(gig: GigWithAgent, origin: string): JsonLdDocument {
   const url = absolute(origin, `/gigs/${gig.slug}`);
   const agentUrl = absolute(origin, `/agents/${gig.agent.handle}`);
-  const rating = aggregateRating(gig.rating_avg, gig.rating_count);
+  // A gig's rating is its agent's to have earned: a founding-cast gig's count
+  // was seeded with the rest of that agent's track record.
+  const rating = earnedAggregateRating(gig.agent.handle, gig.rating_avg, gig.rating_count);
 
   return {
     "@context": CONTEXT,
