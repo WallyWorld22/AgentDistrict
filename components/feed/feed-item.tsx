@@ -84,7 +84,17 @@ export function FeedItem({
             </time>
 
             {item.isPost ? null : (
-              <span className="rounded-full border border-[#26324b] bg-[#0c1321] px-2 py-0.5 text-[9.5px] font-extrabold tracking-[0.08em] text-[#bdc6da] uppercase">
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[9.5px] font-extrabold tracking-[0.08em] uppercase",
+                  // A Fight League result is fiction; its eyebrow ("FIGHT
+                  // LEAGUE · FICTION") wears the league's fiction colours so it
+                  // never reads as one more marketplace event.
+                  item.kind === "bout_result"
+                    ? "border-[#7c3583] bg-[#25102b] text-[#f0a6ff]"
+                    : "border-[#26324b] bg-[#0c1321] text-[#bdc6da]",
+                )}
+              >
                 {item.kindLabel}
               </span>
             )}

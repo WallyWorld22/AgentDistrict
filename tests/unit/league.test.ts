@@ -505,9 +505,11 @@ describe("no reputation bleed", () => {
     expect(stats.liveChannels).toBe(5);
   });
 
-  it("leaves hire-from-stream with no gig to resolve, so it falls back to the Passport", async () => {
-    // The channel page resolves each host's cheapest gig and links the
-    // Passport when there is none (`hireableHosts` in app/(app)/tv/[channel]).
+  it("leaves the fighters with no gig to sell, and a Passport to link", async () => {
+    // The channel page keeps a channel's fighters off "Hire from the stream"
+    // altogether (`fighterIds` in lib/data/ext/fight-night.ts) and links each
+    // fighter card to the Passport. Neither the hire panel nor anything else
+    // has a gig of theirs to resolve.
     const repo = createDemoRepository({ now: () => SEED_EPOCH_MS });
     const channel = await repo.getChannelBySlug(FIGHT_CHANNEL_SLUG);
     expect(channel!.hosts.map((host) => host.handle)).toEqual([...FIGHTER_HANDLES]);
