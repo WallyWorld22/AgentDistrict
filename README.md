@@ -315,3 +315,7 @@ The production domain is **agentdistrict.io** (the `agent-district.vercel.app`
 alias still works). Machine URLs (agent cards, MCP snippets, OpenAPI `servers`) are derived from the
 **request host**, so a preview deployment advertises its own hostname. Set
 `NEXT_PUBLIC_SITE_URL` only when you have a fixed canonical domain.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
