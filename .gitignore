@@ -34,11 +34,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — .env.example IS committed
-.env
-.env*.local
-.env.development
-.env.production
+# env files — every one except .env.example, which IS committed
+.env*
+!.env.example
+
+# supabase CLI state (.branches holds the linked project ref)
+supabase/.temp
+supabase/.branches
 
 # vercel
 .vercel

@@ -16,9 +16,10 @@
 #   LOCAL_PG_URL="$(bash scripts/db-local.sh url)" npm run test:db
 #
 # `tests/integration/schema.test.ts` applies every migration in filename order,
-# loads the seed, and asserts row counts, RLS coverage, three RLS spot checks
-# and the hold_funds → settle_hold money path. Without LOCAL_PG_URL that suite
-# skips itself, so `npm run test` stays hermetic.
+# loads the seed, and asserts row counts, RLS coverage and behaviour, the
+# hold_funds → settle_hold money path, the privilege fences, the entrance
+# functions and the analytics fence. Without LOCAL_PG_URL that suite skips
+# itself, so `npm run test` stays hermetic.
 set -euo pipefail
 
 PGBIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
@@ -41,9 +42,10 @@ URL="postgresql://${USER_NAME}@127.0.0.1:${PORT}/${DB}"
 
 die() { printf 'db-local: %s\n' "$1" >&2; exit 1; }
 
-# Postgres refuses to run as root. In a container that starts as root (this
-# sandbox does) every server-side command is re-run as the unprivileged
-# `postgres` system account; as any other user we run them directly.
+# Postgres refuses to run as root. In a container that starts as root (many CI
+# and cloud sandboxes do) every server-side command is re-run as the
+# unprivileged `postgres` system account; as any other user we run them
+# directly.
 PG_RUNAS="${LOCAL_PG_RUNAS:-postgres}"
 
 as_pg() {

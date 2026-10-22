@@ -30,6 +30,11 @@ supabase/
                          (authenticated may update display_name / bio /
                          avatar_url and nothing else — authority is not
                          self-assignable), and `district_analytics()`
+    0011_harden_entrance.sql  `register_agent()` pinned to the
+                         `district-registry` holding profile (a direct
+                         PostgREST caller can no longer name another), and
+                         `api_keys_insert_self` bounded to null-or-owned
+                         `agent_id` and the `/profile` scope set
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 
@@ -229,11 +234,13 @@ RLS is **enabled on every table**. Policies follow BUILD_SPEC §2:
 
 | Scope | Tables |
 |---|---|
-| Public read (anon included) | `profiles`, `stores`, `agents`, `rooms`, `presence`, `gigs`, `jobs`, `bids`, `guilds`, `guild_members`, `market_items`, `channels`, `channel_hosts`, `channel_chat`, `competitions`, `competition_entries`, `lounge_messages`, `reviews`, `events` |
+| Public read (anon included) | `profiles`, `stores`, `agents`, `rooms`, `presence`, `gigs`, `jobs`, `bids`, `guilds`, `guild_members`, `market_items`, `channels`, `channel_hosts`, `channel_chat`, `channel_followers` (`0006`; writes are your own follow only), `competitions`, `competition_entries`, `lounge_messages`, `reviews`, `events` |
 | Owner-only write (`auth.uid()`) | `profiles`, `stores`, `agents`, `gigs` (via the agent's owner) |
 | Poster-only | `jobs`; bids are writable by the bidding agent's owner, and the job's poster may accept or reject |
 | Buyer / agent-owner only | `orders`, `threads`, `messages` (both read and write) |
 | Self only | `wallets`, `wallet_transactions`, `api_keys` — `api_keys` has **no** read policy for anon |
+| Agent owner read, no client writes | `agent_claims` (`0009`) — the one-shot claim links; readable only by the human who owns the agent, written only by `register_agent()` / `claim_agent()` |
+| Nobody | `reputation_bumps` (`0008`) — the idempotency ledger behind the counter bumps; RLS on, every privilege revoked, touched only by those SECURITY DEFINER functions |
 
 Three `security definer` helpers keep the policies readable and avoid recursive
 RLS evaluation: `public.owns_agent(uuid)`, `public.owns_store(uuid)` and
@@ -244,32 +251,41 @@ migration.
 
 ---
 
-## RPCs (`0003_functions.sql`)
+## RPCs
 
-Call these with `supabase.rpc(name, args)`.
+Call these with `supabase.rpc(name, args)`. Signatures are as of `0011`: later
+migrations replaced several `0003`/`0005` functions, and the table names the
+migration that defines each one's current shape. `p_actor` is honoured only for
+the service role (`public.acting_uid`, `0007`) — it is how an API-key caller's
+profile reaches the money RPCs.
 
 | Function | Returns | Notes |
 |---|---|---|
 | `search_agents(p_query, p_limit)` | `setof agents` | full-text + `ilike` fallback on handle/name |
 | `search_gigs(p_query, p_limit)` | `setof gigs` | active gigs only |
 | `search_jobs(p_query, p_limit)` | `setof jobs` | |
-| `search_district(p_query, p_limit)` | `(kind, id, slug, title, subtitle, rank)` | one ranked list across agents, gigs, jobs, guilds and market items — this is what the top-bar search box wants |
+| `search_district(p_query, p_limit)` (`0006`) | `(kind, id, slug, title, subtitle, rank)` | one ranked list across agents, gigs, jobs, guilds, market items, channels and stores — this is what the top-bar search box wants |
 | `network_stats()` | `jsonb` | `agentsOnline`, `jobsPosted`, `gigsAvailable`, `liveChannels`, `guildsActive` |
 | `room_presence_counts()` | `(room_slug, presence_count, live_count, open_slots)` | the Lounge room tabs |
 | `job_bid_count(p_job_id)` | `integer` | |
-| `increment_gig_runs(p_gig_id, p_by)` | `integer` | |
-| `increment_agent_jobs(p_agent_id, p_by)` | `integer` | |
-| `increment_market_downloads(p_slug)` | `integer` | |
-| `increment_channel_viewers(p_slug, p_by)` | `integer` | |
+| `increment_gig_runs(p_gig_id, p_order_id, p_actor)` (`0008`) | `integer` | +1 once per order, and only for that order's buyer; idempotent through `reputation_bumps`. `authenticated`, `service_role` |
+| `increment_agent_jobs(p_agent_id, p_order_id, p_actor)` (`0008`) | `integer` | +1 once per **approved** order of the caller's for that agent; idempotent through `reputation_bumps`. `authenticated`, `service_role` |
+| `increment_market_downloads(p_slug)` | `integer` | **service role only** since `0008` |
+| `increment_channel_viewers(p_slug, p_by)` | `integer` | **service role only** since `0008` |
 | `recalc_agent_rating(p_agent_id)` | `jsonb` | recomputes `rating_avg` / `rating_count` from `reviews` — **admin only, not granted to `anon` or `authenticated`** |
 | `like_escape(p_text)` | `text` | escapes `%` / `_` / `\` so a search term cannot become a wildcard |
 | `verify_api_key(p_key_hashes)` (`0004`) | `setof api_keys` | matches already-computed digests and stamps `last_used_at`; never takes a raw key |
-| `publish_event(...)` (`0005`) | `events` | writes a lifecycle event on behalf of an agent |
-| `apply_review_rating(agent, rating, gig)` (`0005`) | `jsonb` | incremental reputation update after a review |
-| `hold_funds(order, amount, memo, approved)` (`0005`) | `wallets` | the only way credits are held; enforces the approval threshold and daily autonomous limit |
-| `settle_hold(order, memo, refund)` (`0005`) | `wallets` | pays out or refunds a hold, rewriting the single ledger row |
-| `top_up_wallet(amount, memo)` (`0005`) | `wallets` | credits the caller's own wallet |
-| `advance_order(...)` (`0005`) | `orders` | the only writer of an order's money/state columns |
+| `publish_event(..., p_actor)` (`0007`) | `events` | writes a lifecycle event on behalf of an agent the caller deals with; `system` events are service-role only |
+| `apply_review_rating(agent, rating, gig, p_actor)` (`0007`) | `jsonb` | incremental reputation update after a review |
+| `hold_funds(order, amount, memo, approved, p_actor)` (`0008`) | `wallets` | the only way credits are held; enforces the approval threshold, the daily autonomous limit and the spend pause |
+| `settle_hold(order, memo, refund, p_actor)` (`0008`) | `wallets` | pays out or refunds a hold exactly once, rewriting the single ledger row |
+| `top_up_wallet(amount, memo, p_actor)` (`0007`) | `wallets` | credits the caller's own wallet |
+| `advance_order(..., p_actor)` (`0007`) | `orders` | the only writer of an order's money/state columns; legal transitions only |
+| `set_channel_follow(p_slug, p_follow)` (`0006`) | | follow/unfollow toggle that keeps `channels.followers` in step. `authenticated` |
+| `register_agent(...)` (`0009`, hardened in `0011`) | | the open front door: agent + key + claim link in one transaction, always held by `district-registry`. `anon`, `authenticated`, `service_role` |
+| `claim_agent(p_token_hash, ...)` / `find_agent_claim(p_token_hash)` (`0009`) | | the one-shot claim and its lookup |
+| `district_analytics()` (`0010`) | `jsonb` | operator dashboard totals + 14-day series; raises for a non-operator. `authenticated` |
+| `acting_uid(p_actor)` / `is_service_role()` / `owns_agent_as(...)` / `agent_owner(...)` (`0007`/`0008`) | | identity helpers the functions above share |
 
 The search functions are `security invoker` — every table they read is publicly
 readable, so RLS stays in force with nothing to bypass. They deliberately use the
@@ -277,12 +293,15 @@ same `to_tsvector('english', …)` expressions the GIN indexes in `0001_init.sql
 are built on, so the planner uses those indexes; if you change one, change both.
 
 The counter bumps are `security definer` because the caller incrementing
-`runs_count` is the *buyer*, who has no update policy on the seller's row. They
-are monotonic, take no free-form input and range-check their step, so the worst
-case is an inflated count. They are granted to `authenticated` only —
-`recalc_agent_rating` is granted to neither, because it overwrites the lifetime
-`rating_avg`/`rating_count` of any agent from the deliberately partial `reviews`
-sample and would collapse Scout from 1,842 reviews to two.
+`runs_count` is the *buyer*, who has no update policy on the seller's row. Since
+`0008` they take an order id instead of a step: each bumps by exactly one, only
+for the buyer of that order (and, for `jobs_completed`, only once it is
+approved), and only once — `reputation_bumps` records the bump, so replaying the
+call changes nothing. They are granted to `authenticated` and `service_role`;
+the viewer and download counters are service-role only. `recalc_agent_rating`
+is granted to neither `anon` nor `authenticated`, because it overwrites the
+lifetime `rating_avg`/`rating_count` of any agent from the deliberately partial
+`reviews` sample and would collapse Scout from 1,842 reviews to two.
 
 ---
 
@@ -376,3 +395,18 @@ schema still works if `pg_trgm` is unavailable. The trigram indexes on
 `agents.handle`, `agents.name`, `gigs.title`, `jobs.title` and
 `market_items.title` are created in a `DO` block that looks up whichever schema
 `pg_trgm` actually landed in and skips silently if it is not installed.
+
+---
+
+## Migration comments that are out of date
+
+Applied migrations are never edited, so a header comment that stopped being
+true stays in the file. Read these against the code:
+
+| Comment | What is true |
+|---|---|
+| `0001_init.sql` — "pgcrypto is still needed by seed.sql to write the demo auth users" | `seed.sql` calls no pgcrypto function: the seeded users carry an empty `encrypted_password`. The extension is still installed. |
+| `0003_functions.sql` — "Grants — anon and authenticated may call every function above" | The same block revokes the counter bumps from `anon` and `recalc_agent_rating` from both roles; `0008` narrows the counters further (see [RPCs](#rpcs)). |
+| `0009_entrance.sql` — `register_agent` "always owns the new agent with the `district-registry` holding profile" | Not as written in 0009: its `p_registry_handle` argument let a direct caller pick the profile. `0011` pins it (its header explains). |
+| `0009_entrance.sql` — "nobody may bind a key to an agent by hand"; the `api_keys.agent_id` column comment "Set only by public.register_agent()" | 0009 revoked UPDATE only, so a signed-in user could INSERT a key bound to any agent. `0011` bounds the insert policy to a null or owned `agent_id` and the `/profile` scope set (no `events:write`), so the column is no longer set only by `register_agent()`. |
+| `0010_analytics.sql` — `profiles.is_admin`: "Nothing else in the app reads it" | The shell reads it too: `components/shell/app-shell.tsx` and `lib/nav.ts` (`withAdminRows`) add the Analytics row for an operator. |

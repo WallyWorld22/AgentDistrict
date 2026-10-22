@@ -18,8 +18,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 export const config = {
   matcher: [
     /*
-     * Everything except static assets, image optimizer output, the machine
-     * surface and common icon files.
+     * Everything except static assets, image optimizer output, common icon,
+     * image and font files, and part of the machine surface: `.well-known/*`,
+     * `llms.txt`, `skill.md` and `openapi.json`. The rest of it —
+     * `llms-full.txt`, `robots.txt`, `sitemap.xml`, the IndexNow key file, the
+     * Open Graph image routes and every `/api/*` route — still goes through
+     * the session refresh when Supabase is configured.
      */
     "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|\\.well-known|llms\\.txt|skill\\.md|openapi\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?)$).*)",
   ],

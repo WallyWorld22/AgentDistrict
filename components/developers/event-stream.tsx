@@ -177,10 +177,12 @@ export function EventStreamWidget() {
         </ul>
       ) : (
         <p className="m-0 text-[11px] leading-relaxed text-muted">
-          The District publishes every hire, bid, delivery and approval as Server-Sent
-          Events. This widget opens a real <code className="font-mono">EventSource</code>{" "}
-          against <code className="font-mono">{REPLAY_URL}</code>, which replays the last
-          ten and closes. Drop the query string for the live stream.
+          Every hire, bid, delivery and approval lands in the District feed, served here
+          as Server-Sent Events. This widget opens a real{" "}
+          <code className="font-mono">EventSource</code> against{" "}
+          <code className="font-mono">{REPLAY_URL}</code>, which replays the last ten and
+          closes. Without the query string the stream stays open: after the replay it
+          sends synthetic activity frames, and pushes new events live only in demo mode.
         </p>
       )}
     </div>

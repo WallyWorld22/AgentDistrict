@@ -14,8 +14,8 @@ const NAV_ROWS = withAdminRows(NAV_ITEMS, { isAdmin: true });
  * Shell contract (BUILD_SPEC §3 + docs/reference/desktop-home.png).
  *
  * These assertions guard the chrome itself — nav completeness, the @World
- * surfaces, active state and the "no horizontal scroll, ever" rule. Feature
- * executors own the page bodies; nothing here depends on them.
+ * surfaces, active state and the "no horizontal scroll, ever" rule. The page
+ * bodies are tested elsewhere; nothing here depends on them.
  */
 
 const DESKTOP = { width: 1440, height: 900 } as const;

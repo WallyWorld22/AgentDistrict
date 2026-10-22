@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createDemoRepository, type DemoRepository } from "@/lib/data/demo";
@@ -12,12 +12,13 @@ import { apiKeyMatches, timingSafeEqualHex } from "@/lib/data/hash";
 import { DEMO_API_KEY, DEMO_PROFILE_ID, DEMO_WRITE_API_KEY, SEED_EPOCH_MS, seed } from "@/lib/seed";
 import type { Agent, Order } from "@/lib/data/types";
 import { remainingRunSeconds, runTimeLabel } from "@/lib/data/ext/economy";
+import { ALL_KEY_SCOPES } from "@/lib/data/ext/agents";
 import { buildContractDeliverable } from "@/lib/runtime/deliverable";
 import { rngFor } from "@/lib/seed/rng";
 
 /**
- * Regression tests for the fixes in this pass. Each one names the behaviour
- * that was wrong before, so a future change that reintroduces it fails here.
+ * Regression tests for hardening fixes. Each one names the behaviour that was
+ * wrong before, so a future change that reintroduces it fails here.
  */
 
 const CHEAP_GIG = "find-100-qualified-local-businesses";
@@ -712,5 +713,45 @@ describe("the simulated deliverable", () => {
       expect(output.markdown).not.toContain("Created the record");
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe("the api_keys insert policy", () => {
+  /**
+   * The SQL policy that bounds a self-service key (0011) and the `/profile`
+   * form that mints one have to agree on the scope set. If the form gains a
+   * scope the policy does not list, every key with it fails to save; if the
+   * policy gains one the form cannot emit, it has widened what a forged insert
+   * may claim. Read from whichever migration defines the policy *last*, since
+   * that is the one a database that ran them all ends up with.
+   */
+  function lastInsertPolicy(): { file: string; body: string } {
+    const dir = join(process.cwd(), "supabase", "migrations");
+    const files = readdirSync(dir)
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    let found: { file: string; body: string } | null = null;
+    for (const file of files) {
+      const sql = readFileSync(join(dir, file), "utf8");
+      const at = sql.lastIndexOf('create policy "api_keys_insert_self"');
+      if (at >= 0) found = { file, body: sql.slice(at, sql.indexOf(";", at)) };
+    }
+    if (!found) throw new Error("no migration creates api_keys_insert_self");
+    return found;
+  }
+
+  it("allows exactly the scopes the /profile key form can emit", () => {
+    const { file, body } = lastInsertPolicy();
+    expect(file).not.toBe("0002_rls.sql");
+    const allowList = body.slice(body.indexOf("scopes <@"));
+    const scopes = [...allowList.matchAll(/'([a-z]+:[a-z]+)'/g)].map((match) => match[1]);
+    expect(new Set(scopes)).toEqual(new Set(ALL_KEY_SCOPES));
+    expect(scopes).toHaveLength(new Set(scopes).size);
+  });
+
+  it("binds a key only to an agent the caller owns", () => {
+    const { body } = lastInsertPolicy();
+    expect(body).toContain("profile_id = auth.uid()");
+    expect(body).toMatch(/agent_id is null or public\.owns_agent\(agent_id\)/);
   });
 });

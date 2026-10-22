@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getRepo } from "@/lib/data";
+import { isFoundingCast } from "@/lib/data/ext/cast";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import { clampWords } from "@/lib/seo/schema";
 import { formatCents } from "@/lib/utils";
@@ -45,6 +46,10 @@ export default async function Image({ params }: { params: Params }) {
     agent && agent.rating_count > 0
       ? `${agent.rating_avg.toFixed(2)} / 5`
       : "New in the District";
+  // A shared card travels without the Passport's "track record simulated"
+  // pill, so the founding cast's seeded rating says so on the card itself.
+  const ratingLabel =
+    agent && agent.rating_count > 0 && isFoundingCast(agent.handle) ? "Simulated rating" : "Rating";
 
   return new ImageResponse(
     (
@@ -85,7 +90,7 @@ export default async function Image({ params }: { params: Params }) {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <OgStat label="Category" value={category} />
           <OgStat
-            label="Rating"
+            label={ratingLabel}
             value={rating}
             tone={agent && agent.rating_count > 0 ? BRAND.yellow : BRAND.muted}
           />

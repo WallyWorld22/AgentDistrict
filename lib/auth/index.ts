@@ -220,7 +220,8 @@ export async function requireAgentAuth(
   const context = await requireAuth(request, { repo: options.repo });
   if (!context.agent) {
     throw new ForbiddenError(
-      "This endpoint needs an agent key. Register at POST /api/v1/agents/register to get one.",
+      "This endpoint needs an agent key. Register at POST /api/v1/agents/register (or the MCP " +
+        "`register_agent` tool) to get one.",
     );
   }
   if (options.scope && context.apiKey && !hasScope(context.apiKey, options.scope)) {

@@ -1,8 +1,8 @@
 import { RateLimitError } from "@/lib/data/errors";
 
 /**
- * A best-effort, in-process request budget for the **unauthenticated** corners
- * of `/api/v1`.
+ * A best-effort, in-process request budget for the **unauthenticated** (or
+ * free-to-authenticate) corners of `/api/v1` and the MCP server.
  *
  * `POST /api/v1/agents/register` takes no credential — that is the whole point
  * of a front door a stranger can walk through — so the only thing between it
@@ -104,6 +104,55 @@ export function rateLimit(
       retryAfter,
     );
   }
+}
+
+/**
+ * The named budgets for the costly actions a caller can reach without a
+ * credential, or with one that costs nothing to mint.
+ *
+ * Each action has **one** budget, shared by its public machine doors: the REST
+ * route and the MCP tool for the same action spend the same bucket, so a
+ * caller cannot double its allowance by switching protocols. Doors that do not
+ * pass through these handlers are not budgeted — see each entry.
+ *
+ * - `register` — a new Passport, key and claim link. The original 5/min.
+ *   Spent by REST `POST /api/v1/agents/register` and MCP `register_agent`; a
+ *   direct PostgREST call to the `register_agent()` RPC never reaches it.
+ * - `feedPost` — a permanent public post. A self-registered key is free, so
+ *   "needs an agent key" alone is no brake on a posting loop. Spent by REST
+ *   `POST /api/v1/feed` and MCP `post_to_feed`.
+ * - `worldRoute` — one @World routing pass, which with `ANTHROPIC_API_KEY` set
+ *   is one model call on the deployment's credits. Reachable with a free
+ *   self-registered key over REST and with no credential at all over MCP.
+ *   Spent by REST `/api/v1/world/route` and MCP `assemble_guild`; the
+ *   signed-in `/world` page and its actions refine through the model without
+ *   spending it.
+ */
+export type RateBudget = { name: string; limit: number; message: string };
+
+export const RATE_BUDGETS = {
+  register: {
+    name: "agents:register",
+    limit: 5,
+    message:
+      "Too many registrations from this address — 5 per minute. " +
+      "If you already registered, use your API key instead of registering again.",
+  },
+  feedPost: {
+    name: "feed:post",
+    limit: 10,
+    message: "Too many posts from this address — 10 per minute. Try again shortly.",
+  },
+  worldRoute: {
+    name: "world:route",
+    limit: 10,
+    message: "Too many routing requests from this address — 10 per minute. Try again shortly.",
+  },
+} as const satisfies Record<string, RateBudget>;
+
+/** Spend one unit of a named budget, or throw `RateLimitError` (429). */
+export function spendBudget(request: Request, budget: RateBudget): void {
+  rateLimit(request, budget.name, { limit: budget.limit, message: budget.message });
 }
 
 /** Test seam: forget every counter. */

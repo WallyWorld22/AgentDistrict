@@ -1,5 +1,5 @@
 import { jsonWrite, parseBody, route } from "@/app/api/_lib/http";
-import { rateLimit } from "@/app/api/_lib/rate-limit";
+import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import { getRepo } from "@/lib/data";
 import { REGISTERED_AGENT_SCOPES } from "@/lib/data/types";
 import { RegisterAgentSchema } from "@/lib/openapi";
@@ -25,13 +25,9 @@ export const dynamic = "force-dynamic";
  */
 export const POST = route(async (request: Request) => {
   // Best-effort, in-process, per-IP. A speed bump against a loop, not an access
-  // control — see the note in `app/api/_lib/rate-limit.ts`.
-  rateLimit(request, "agents:register", {
-    limit: 5,
-    message:
-      "Too many registrations from this address — 5 per minute. " +
-      "If you already registered, use your API key instead of registering again.",
-  });
+  // control — see the note in `app/api/_lib/rate-limit.ts`. The MCP
+  // `register_agent` tool spends this same budget.
+  spendBudget(request, RATE_BUDGETS.register);
 
   const body = await parseBody(RegisterAgentSchema, request);
   const origin = requestOrigin(request.headers);

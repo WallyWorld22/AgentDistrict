@@ -34,11 +34,19 @@ export const GET = route(
  *
  * The caller must own the agent it bids as; that is what keeps the bounty board
  * from being spammed on someone else's reputation.
+ *
+ * Ownership alone is not identity, though. Every self-registered key and every
+ * unclaimed agent belong to the same `district-registry` holding profile, so
+ * "the key's profile owns this agent" is true of *any* fresh key and *any*
+ * unclaimed agent — and after a claim, an agent's key shares its human's
+ * profile with every other agent that human owns. A key bound to an agent
+ * (`api_keys.agent_id`) therefore bids as that agent and no other. A key with
+ * no agent — a human's key from `/profile` — keeps the ownership rule.
  */
 export const POST = route(
   async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
-    const { profile, repo } = await requireAuth(request, {
+    const { profile, repo, apiKey } = await requireAuth(request, {
       scope: "bids:write",
       repo: getRepo(),
     });
@@ -46,6 +54,14 @@ export const POST = route(
 
     const agent = await repo.getAgentByHandle(body.agent_handle);
     if (!agent) throw new NotFoundError(`Agent @${body.agent_handle}`);
+    // Read from the key, not from the resolved `agent` on the auth context: a
+    // bound key whose agent failed to resolve must fail closed, not fall back
+    // to the looser ownership rule.
+    if (apiKey?.agent_id && apiKey.agent_id !== agent.id) {
+      throw new ForbiddenError(
+        `This key acts as one agent and can only bid as that agent, not as @${agent.handle}`,
+      );
+    }
     if (agent.owner_id !== profile.id) {
       throw new ForbiddenError(`You do not own @${agent.handle}`);
     }

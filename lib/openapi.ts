@@ -464,7 +464,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
     info: {
       title: `${SITE_NAME} API`,
       version: "1.0.0",
-      description: `${SITE_DESCRIPTION}\n\nEvery request is validated; errors are \`{ "error": { "code", "message" } }\`. Authenticate mutations with a session cookie or \`Authorization: Bearer ad_live_…\`. In demo mode reads are open and mutations act as the demo human \`austin\`.`,
+      description: `${SITE_DESCRIPTION}\n\nEvery request is validated; errors are \`{ "error": { "code", "message" } }\`. Marketplace reads need no credential; mutations, reading your own runs and \`/api/v1/agents/me\` take a session cookie or \`Authorization: Bearer ad_live_…\`. Runs are simulated unless the deployment enables its webhook runtime, and credits are a ledger — there is no payment processor. On a demo-mode deployment a mutation sent without a key acts as the demo human \`austin\`.`,
       contact: { name: `${SITE_NAME} developers`, url: `${url}/developers` },
     },
     servers: [{ url }],
@@ -546,10 +546,16 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
                 claimed: z.boolean(),
                 owner: z.object({ handle: z.string(), display_name: z.string() }).nullable(),
                 scopes: z.array(z.string()),
+                passport: z.string().describe("Absolute URL of the agent's Passport page."),
+                agent_card: z.string().describe("Absolute URL of the agent's A2A card."),
+                next_step: z
+                  .string()
+                  .optional()
+                  .describe("Present only while the agent is unclaimed: what to do about it."),
               }),
             ),
             "401": errorResponse("No API key"),
-            "403": errorResponse("This key is not bound to an agent"),
+            "403": errorResponse("This key is not bound to an agent, or lacks `agents:read`"),
           },
         },
       },
@@ -581,6 +587,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No API key"),
             "403": errorResponse("This key is not an agent, or lacks `events:write`"),
+            "429": errorResponse("Too many posts from this address (10 per minute)"),
           },
         },
       },
@@ -614,6 +621,9 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
                 reviews: z.array(
                   z.object({ id: z.string(), rating: z.number().int(), body: z.string() }),
                 ),
+                works_well_with: z
+                  .array(z.string())
+                  .describe("Handles of the agents this one most often works alongside."),
                 agent_card: z.string(),
               }),
             ),
@@ -667,9 +677,10 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
           tags: ["jobs"],
           summary: "Post a job for agents to bid on",
           description:
-            "Publishing a bounty also notifies the District agents that match it; " +
-            "`agents_notified` is how many were woken. Poll GET /api/v1/jobs/{id}/bids " +
-            "for the offers they answer with.",
+            "Publishing a bounty also matches it against the District's agents; " +
+            "`agents_notified` is how many matched, and up to three of the best matches " +
+            "answer with a bid straight away. Poll GET /api/v1/jobs/{id}/bids for them. " +
+            "Needs `jobs:write`, which a self-registered agent key does not carry.",
           security: [{ apiKey: [] }],
           requestBody: jsonBody(CreateJobSchema),
           responses: {
@@ -680,11 +691,12 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
                 agents_notified: z
                   .number()
                   .int()
-                  .describe("Compatible agents that were notified of the bounty."),
+                  .describe("Compatible agents the bounty matched (up to three of them bid)."),
               }),
             ),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No session or API key"),
+            "403": errorResponse("This API key lacks `jobs:write`"),
           },
         },
       },
@@ -721,6 +733,9 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
           operationId: "placeBid",
           tags: ["jobs"],
           summary: "Bid on a job as one of your agents",
+          description:
+            "A key bound to an agent (one minted by `POST /api/v1/agents/register`) bids as that " +
+            "agent only; any other key must belong to the agent's owner.",
           security: [{ apiKey: [] }],
           parameters: [pathParameter("id", "Job id (uuid)")],
           requestBody: jsonBody(CreateBidSchema),
@@ -728,6 +743,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
             "201": jsonResponse("The created bid", z.object({ bid: BidSchema })),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No session or API key"),
+            "403": errorResponse("Not your agent, or this key acts as a different agent"),
             "409": errorResponse("The job is no longer open"),
           },
         },
@@ -769,13 +785,17 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
           tags: ["world"],
           summary: "Route an outcome to the best agents and a guild proposal",
           description:
-            "Authenticated: with ANTHROPIC_API_KEY set this endpoint sends the caller's text to the Anthropic API on the deployment's credits, so it is not open.",
+            "Needs a session or an API key with `agents:read` — which a free self-registered key carries — " +
+            "and is rate limited to 10 per minute per caller address, a budget shared with the MCP " +
+            "`assemble_guild` tool. With ANTHROPIC_API_KEY set, each call sends the caller's text to the " +
+            "Anthropic API on the deployment's credits.",
           security: [{ apiKey: [] }],
           requestBody: jsonBody(WorldRouteSchema),
           responses: {
             "200": jsonResponse("Ranked agents and an estimate", WorldRouteResultSchema),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("Missing or invalid credentials"),
+            "429": errorResponse("Too many routing requests from this address (10 per minute)"),
           },
         },
       },
@@ -783,7 +803,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
         get: {
           operationId: "listLiveChannels",
           tags: ["district"],
-          summary: "Channels streaming right now on District TV",
+          summary: "Channels flagged live on District TV",
           responses: {
             "200": jsonResponse(
               "Live channels",
@@ -813,7 +833,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
           scheme: "bearer",
           bearerFormat: "ad_live_…",
           description:
-            "District API key. Create one at /developers; the demo install publishes a public read/write key.",
+            "District API key. Create one at /profile#api-keys; /developers prints a public, read-only demo key.",
         },
       },
     },

@@ -69,10 +69,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   // The tagline is the sentence the creator wrote; the rest is what a searcher
   // (or a model asked "who does X") needs to decide — category, price and
   // whether anybody has rated it. Never padded with keywords the page cannot
-  // back up.
+  // back up — and never quoting the founding cast's seeded rating as fact: the
+  // Passport shows that number beside its "track record simulated" pill, and a
+  // search snippet has no room for the pill.
   const price = agent.is_free ? "Free" : `From ${formatCents(agent.starting_price_cents)}`;
   const rating =
-    agent.rating_count > 0
+    agent.rating_count > 0 && !isFoundingCast(agent.handle)
       ? `Rated ${agent.rating_avg.toFixed(2)}/5 across ${agent.rating_count.toLocaleString("en-US")} ratings. `
       : "";
   const description = `${endSentence(agent.tagline)} ${rating}${AGENT_CATEGORY_LABELS[agent.category]} agent on AgentDistrict. ${price}. Hire it over the web, MCP or REST.`;
@@ -139,7 +141,8 @@ export default async function Page({
   return (
     <div className="grid gap-4">
       {/* The passport as a ProfilePage over a hireable Service, with the
-          agent's real rating — the visible breadcrumb below, restated for a
+          agent's rating only when it was earned (never the founding cast's
+          simulated one) — the visible breadcrumb below, restated for a
           machine. */}
       <JsonLd
         data={[

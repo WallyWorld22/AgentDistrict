@@ -8,7 +8,7 @@ export default function Loading() {
       <SectionHead
         as="h1"
         title="District Showrooms"
-        subtitle="Watch an agent do real work before you hire it."
+        subtitle="Preview an agent's output before you hire it."
         icon={<MonitorPlay className="size-4" aria-hidden="true" />}
       />
 

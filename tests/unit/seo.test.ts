@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { getRepo } from "@/lib/data";
+import { isFoundingCast } from "@/lib/data/ext/cast";
 import { DOC_PAGES } from "@/lib/docs";
+import { AGENT_HANDLES } from "@/lib/seed";
 import { AUTH_ROUTES, NAV_ITEMS } from "@/lib/nav";
 import { serializeJsonLd } from "@/components/seo/json-ld";
 import { INDEXNOW_KEY, indexNowTarget, normalizeUrls } from "@/lib/seo/indexnow";
@@ -18,6 +20,7 @@ import {
   deliveryLeadTime,
   docBreadcrumbTrail,
   docSchema,
+  earnedAggregateRating,
   endSentence,
   gigBreadcrumbTrail,
   gigSchema,
@@ -206,7 +209,7 @@ describe("JSON-LD payloads", () => {
     expect(action["query-input"]).toBe("required name=search_term_string");
   });
 
-  it("a passport is a ProfilePage over a Service with the agent's real rating", async () => {
+  it("a passport is a ProfilePage over a hireable Service", async () => {
     const agent = await getRepo().getAgentByHandle(KNOWN_AGENT);
     expect(agent).not.toBeNull();
 
@@ -221,12 +224,6 @@ describe("JSON-LD payloads", () => {
     expect(parsed.mainEntity["@type"]).toBe("Service");
     expect(parsed.mainEntity.alternateName).toBe(`@${KNOWN_AGENT}`);
 
-    // The rating is the agent's own, not a number invented for the markup.
-    expect(parsed.mainEntity.aggregateRating.ratingValue).toBeCloseTo(agent!.rating_avg, 2);
-    expect(parsed.mainEntity.aggregateRating.ratingCount).toBe(agent!.rating_count);
-    // `reviewCount` would claim written reviews the District does not have.
-    expect(parsed.mainEntity.aggregateRating.reviewCount).toBeUndefined();
-
     expect(parsed.mainEntity.offers["@type"]).toBe("Offer");
     expect(parsed.mainEntity.offers.priceCurrency).toBe("USD");
     expect(parsed.mainEntity.offers.price).toBe(
@@ -234,11 +231,114 @@ describe("JSON-LD payloads", () => {
     );
   });
 
+  /*
+   * The founding cast's track record is seeded — @scout claims 1,842 ratings
+   * over a handful of review rows — and the Passport discloses that beside the
+   * number. A rating snippet carries no disclosure, so none of it may reach the
+   * structured data: not on a Passport, not on any of the cast's gigs.
+   */
+  it("a founding-cast passport carries no aggregateRating", async () => {
+    const agent = await getRepo().getAgentByHandle(KNOWN_AGENT);
+    expect(agent).not.toBeNull();
+    expect(isFoundingCast(agent!.handle)).toBe(true);
+    // The seed really does carry a rating, so its absence below is the rule
+    // at work and not an empty row.
+    expect(agent!.rating_count).toBeGreaterThan(0);
+
+    const parsed = JSON.parse(serializeJsonLd(agentProfileSchema(agent!, ORIGIN))) as Record<
+      string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      any
+    >;
+    expect(parsed.mainEntity.aggregateRating).toBeUndefined();
+  });
+
+  it("no founding-cast passport or gig emits any rating or review markup", async () => {
+    const repo = getRepo();
+    const markup = /aggregateRating|AggregateRating|ratingValue|ratingCount|reviewCount|"Review"/;
+
+    for (const handle of AGENT_HANDLES) {
+      const agent = await repo.getAgentByHandle(handle);
+      expect(agent, handle).not.toBeNull();
+      expect(serializeJsonLd(agentProfileSchema(agent!, ORIGIN)), `@${handle}`).not.toMatch(
+        markup,
+      );
+    }
+
+    const gigs = await repo.listGigs({ limit: 500 });
+    expect(gigs.length).toBeGreaterThan(0);
+    for (const gig of gigs) {
+      expect(isFoundingCast(gig.agent.handle), gig.slug).toBe(true);
+      expect(serializeJsonLd(gigSchema(gig, ORIGIN)), gig.slug).not.toMatch(markup);
+    }
+  });
+
+  /*
+   * Anyone who registered starts at zero, and the only write to their count is
+   * the one that lands with a `reviews` row — so their rating is earned and
+   * keeps its markup, still only once somebody has left one.
+   */
+  it("an agent that registered keeps the rating it earned", async () => {
+    const { agent } = await getRepo().registerAgent({
+      handle: "seo-earned-rating",
+      name: "SeoEarned",
+      tagline: "Walked in and got rated.",
+      category: "research",
+      skills: ["checking"],
+    });
+    expect(isFoundingCast(agent.handle)).toBe(false);
+    expect(agent.rating_count).toBe(0);
+
+    const unrated = JSON.parse(serializeJsonLd(agentProfileSchema(agent, ORIGIN))) as {
+      mainEntity: { aggregateRating?: unknown };
+    };
+    expect(unrated.mainEntity.aggregateRating).toBeUndefined();
+
+    const rated = JSON.parse(
+      serializeJsonLd(agentProfileSchema({ ...agent, rating_avg: 4.5, rating_count: 2 }, ORIGIN)),
+    ) as { mainEntity: { aggregateRating?: Record<string, unknown> } };
+    expect(rated.mainEntity.aggregateRating).toMatchObject({
+      "@type": "AggregateRating",
+      ratingValue: 4.5,
+      ratingCount: 2,
+    });
+    // `reviewCount` would claim written reviews the District does not have.
+    expect(rated.mainEntity.aggregateRating!.reviewCount).toBeUndefined();
+  });
+
   it("omits aggregateRating entirely for an agent nobody has rated", () => {
     expect(aggregateRating(0, 0)).toBeUndefined();
     expect(aggregateRating(4.9, 0)).toBeUndefined();
     expect(aggregateRating(Number.NaN, 12)).toBeUndefined();
     expect(aggregateRating(4.955, 12)).toMatchObject({ ratingValue: 4.96, ratingCount: 12 });
+
+    // The founding cast gets none whatever its numbers say; anyone else gets
+    // the same answer `aggregateRating` gives.
+    expect(earnedAggregateRating(KNOWN_AGENT, 4.96, 1842)).toBeUndefined();
+    expect(earnedAggregateRating("@Scout", 4.96, 1842)).toBeUndefined();
+    expect(earnedAggregateRating("vault-keeper", 4.955, 12)).toMatchObject({
+      ratingValue: 4.96,
+      ratingCount: 12,
+    });
+    expect(earnedAggregateRating("vault-keeper", 4.9, 0)).toBeUndefined();
+  });
+
+  it("a founding-cast passport's meta description quotes no simulated rating", async () => {
+    const agent = await getRepo().getAgentByHandle(KNOWN_AGENT);
+    const { generateMetadata } = await import("@/app/(app)/agents/[handle]/page");
+    const metadata = await generateMetadata({ params: Promise.resolve({ handle: KNOWN_AGENT }) });
+
+    const descriptions = [
+      metadata.description,
+      metadata.openGraph?.description,
+      metadata.twitter?.description,
+    ];
+    for (const description of descriptions) {
+      expect(typeof description).toBe("string");
+      expect(description).not.toMatch(/\brated\b|\bratings\b|\/5\b/i);
+      expect(description).not.toContain(agent!.rating_count.toLocaleString("en-US"));
+      expect(description).not.toContain(agent!.rating_avg.toFixed(2));
+    }
   });
 
   it("a gig is a Product with an Offer priced from its basic package", async () => {
@@ -260,11 +360,13 @@ describe("JSON-LD payloads", () => {
     expect(parsed.offers.price).toBe((basic.price_cents / 100).toFixed(2));
 
     expect(parsed.brand.name).toBe(gig!.agent.name);
-    expect(parsed.aggregateRating.ratingCount).toBe(gig!.rating_count);
+    // @scout's gig: its rating is part of the seeded track record.
+    expect(gig!.rating_count).toBeGreaterThan(0);
+    expect(parsed.aggregateRating).toBeUndefined();
   });
 
   /*
-   * 8 of the 38 seeded gigs deliver in under a minute. Reporting all of them
+   * Several seeded gigs deliver in under a minute. Reporting all of them
    * as "1 MIN" would overstate the one number the District sells hardest.
    */
   it("reports a gig's delivery time in the unit it really is", () => {

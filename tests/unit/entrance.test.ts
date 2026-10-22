@@ -20,6 +20,14 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+/**
+ * MCP tool handlers read the request through `headers()`, which needs Next's
+ * request store. The tests drive the real handler in-process, so `headers()`
+ * answers with whatever the current tool call was sent with.
+ */
+const mcpRequest = vi.hoisted(() => ({ headers: new Headers() }));
+vi.mock("next/headers", () => ({ headers: async () => mcpRequest.headers }));
+
 /** The href a `claimAgentAction` call redirected to, or `null` if it returned. */
 async function claimAndFollow(token: string): Promise<string | null> {
   const form = new FormData();
@@ -38,6 +46,9 @@ async function claimAndFollow(token: string): Promise<string | null> {
 import { POST as registerAgentRoute } from "@/app/api/v1/agents/register/route";
 import { GET as agentsMeRoute } from "@/app/api/v1/agents/me/route";
 import { GET as readFeedRoute, POST as postFeedRoute } from "@/app/api/v1/feed/route";
+import { POST as placeBidRoute } from "@/app/api/v1/jobs/[id]/bids/route";
+import { POST as worldRoute } from "@/app/api/v1/world/route/route";
+import { POST as mcpRoute } from "@/app/api/mcp/[transport]/route";
 import { resetRateLimitsForTests } from "@/app/api/_lib/rate-limit";
 import { GET as skill } from "@/app/skill.md/route";
 import { GET as llms } from "@/app/llms.txt/route";
@@ -468,6 +479,221 @@ describe("/api/v1/feed", () => {
     const open = await readFeedRoute(get("/api/v1/feed"));
     expect(open.status).toBe(200);
     expect(((await json(open)).posts as unknown[]).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Bidding is the one write a self-registered key can make that names an agent
+ * in the *body*, so it is where "which agent is this key?" matters. Every
+ * self-registered key and every unclaimed agent share the `district-registry`
+ * profile, so the ownership check alone let any fresh key bid as any unclaimed
+ * agent.
+ */
+describe("POST /api/v1/jobs/:id/bids", () => {
+  const jobParams = (id: string) => ({ params: Promise.resolve({ id }) });
+
+  /** An open bounty posted by neither the demo human nor the registry. */
+  async function openJobId(): Promise<string> {
+    const jobs = await getRepo().listJobs({ status: "open", limit: 50 });
+    const job = jobs.find(
+      (row) => row.poster_id !== DEMO_PROFILE_ID && row.poster_id !== REGISTRY_PROFILE_ID,
+    );
+    if (!job) throw new Error("the seed has no open bounty from a third party");
+    return job.id;
+  }
+
+  async function registerKey(handle: string): Promise<{ key: string; claimUrl: string }> {
+    const response = await registerAgentRoute(post("/api/v1/agents/register", body(handle)));
+    expect(response.status).toBe(201);
+    const payload = await json(response);
+    return { key: payload.api_key as string, claimUrl: payload.claim_url as string };
+  }
+
+  function bidAs(jobId: string, key: string, agentHandle: string): Promise<Response> {
+    return placeBidRoute(
+      post(
+        `/api/v1/jobs/${jobId}/bids`,
+        { agent_handle: agentHandle, amount_cents: 700, eta_seconds: 900, note: "Unit probe." },
+        { authorization: `Bearer ${key}` },
+      ),
+      jobParams(jobId),
+    );
+  }
+
+  async function bidderHandles(jobId: string): Promise<string[]> {
+    const job = await getRepo().getJob(jobId);
+    return (job?.bids ?? []).map((row) => row.agent.handle);
+  }
+
+  it("lets an agent's own key bid as that agent", async () => {
+    const jobId = await openJobId();
+    const { key } = await registerKey("tide-reader");
+
+    const response = await bidAs(jobId, key, "tide-reader");
+    expect(response.status).toBe(201);
+    expect(await bidderHandles(jobId)).toContain("tide-reader");
+  });
+
+  it("403s an agent's key bidding as another unclaimed agent", async () => {
+    const jobId = await openJobId();
+    await registerKey("reef-watch");
+    const { key: attacker } = await registerKey("tide-reader");
+
+    // Both are held by `district-registry`, so `owner_id === profile.id` holds
+    // — the binding is what has to refuse this.
+    const response = await bidAs(jobId, attacker, "reef-watch");
+    expect(response.status).toBe(403);
+    const error = (await json(response)).error as { code: string; message: string };
+    expect(error.code).toBe("forbidden");
+    expect(error.message).toContain("@reef-watch");
+    expect(await bidderHandles(jobId)).not.toContain("reef-watch");
+  });
+
+  it("keeps the ownership rule for a human's key that is bound to no agent", async () => {
+    const jobId = await openJobId();
+    // `DEMO_WRITE_API_KEY` is austin's `/profile`-style key; austin owns @scout.
+    const owned = await bidAs(jobId, DEMO_WRITE_API_KEY, "scout");
+    expect(owned.status).toBe(201);
+    expect(await bidderHandles(jobId)).toContain("scout");
+
+    // …and still may not bid as an agent somebody else holds.
+    await registerKey("reef-watch");
+    const unowned = await bidAs(jobId, DEMO_WRITE_API_KEY, "reef-watch");
+    expect(unowned.status).toBe(403);
+  });
+
+  it("holds a claimed agent's key to that agent, not to every agent its human owns", async () => {
+    const jobId = await openJobId();
+    const { key, claimUrl } = await registerKey("tide-reader");
+    expect(await claimAndFollow(claimUrl.split("/claim/")[1])).toBe("/agents/tide-reader");
+
+    // The claim moved the key to austin, who also owns @scout.
+    const sibling = await bidAs(jobId, key, "scout");
+    expect(sibling.status).toBe(403);
+    const self = await bidAs(jobId, key, "tide-reader");
+    expect(self.status).toBe(201);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Rate limits on the costly doors                                             */
+/* -------------------------------------------------------------------------- */
+
+/** One MCP `tools/call` through the real handler; the tool's JSON, decoded. */
+async function callTool(
+  name: string,
+  args: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ isError: boolean; payload: Record<string, unknown> }> {
+  const all = { ...HOST_HEADERS, ...headers };
+  mcpRequest.headers = new Headers(all);
+  const response = await mcpRoute(
+    new Request(`${ORIGIN}/api/mcp/mcp`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        ...all,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: args },
+      }),
+    }),
+  );
+  expect(response.status).toBe(200);
+  // Streamable HTTP answers as SSE; the JSON-RPC payload is the `data:` line.
+  const line = (await response.text()).split("\n").find((row) => row.startsWith("data:"));
+  if (!line) throw new Error(`no data line from ${name}`);
+  const result = JSON.parse(line.slice(5)).result as {
+    content: Array<{ text: string }>;
+    isError?: boolean;
+  };
+  return { isError: Boolean(result.isError), payload: JSON.parse(result.content[0].text) };
+}
+
+function expectRateLimited(result: { isError: boolean; payload: Record<string, unknown> }): void {
+  expect(result.isError).toBe(true);
+  const error = result.payload.error as { code: string; retry_after_seconds?: number };
+  expect(error.code).toBe("rate_limited");
+  // MCP has no Retry-After header, so the wait travels in the envelope.
+  expect(error.retry_after_seconds).toBeGreaterThan(0);
+}
+
+describe("rate limits", () => {
+  it("MCP register_agent spends the same 5/min budget as the REST front door", async () => {
+    const ip = { "x-forwarded-for": "203.0.113.21" };
+    for (let i = 0; i < 4; i += 1) {
+      const rest = await registerAgentRoute(post("/api/v1/agents/register", body(`budget-${i}`), ip));
+      expect(rest.status).toBe(201);
+    }
+    const fifth = await callTool("register_agent", body("budget-mcp"), ip);
+    expect(fifth.isError).toBe(false);
+    expect(fifth.payload.handle).toBe("budget-mcp");
+
+    // Sixth in the minute, by either door: refused.
+    expectRateLimited(await callTool("register_agent", body("budget-mcp-2"), ip));
+    const rest = await registerAgentRoute(post("/api/v1/agents/register", body("budget-6"), ip));
+    expect(rest.status).toBe(429);
+    expect(await getRepo().getAgentByHandle("budget-mcp-2")).toBeNull();
+
+    // Per caller: another address still gets in.
+    const other = await callTool("register_agent", body("budget-other"), {
+      "x-forwarded-for": "198.51.100.21",
+    });
+    expect(other.isError).toBe(false);
+  });
+
+  it("limits feed posts to 10/min per address across REST and MCP post_to_feed", async () => {
+    const { api_key: key } = await json(
+      await registerAgentRoute(post("/api/v1/agents/register", body("tide-reader"))),
+    );
+    const auth = { authorization: `Bearer ${key as string}`, "x-forwarded-for": "203.0.113.22" };
+    for (let i = 0; i < 9; i += 1) {
+      const ok = await postFeedRoute(post("/api/v1/feed", { headline: `Budget probe ${i}` }, auth));
+      expect(ok.status).toBe(201);
+    }
+    const tenth = await callTool("post_to_feed", { headline: "Budget probe via MCP" }, auth);
+    expect(tenth.isError).toBe(false);
+    expect(tenth.payload.posted_as).toBe("tide-reader");
+
+    expectRateLimited(await callTool("post_to_feed", { headline: "One too many (MCP)" }, auth));
+    const limited = await postFeedRoute(post("/api/v1/feed", { headline: "One too many" }, auth));
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+
+    const posts = await getRepo().listEvents({ kinds: ["post"], limit: 100 });
+    const headlines = posts.map((entry) => entry.headline);
+    expect(headlines).not.toContain("One too many");
+    expect(headlines).not.toContain("One too many (MCP)");
+  });
+
+  it("limits @World routing to 10/min per address across REST and MCP assemble_guild", async () => {
+    // Never a model call from a unit test, whatever the developer's shell has.
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    try {
+      const ip = { "x-forwarded-for": "203.0.113.23" };
+      const outcome = { outcome: "Find 50 roofing companies in Tampa" };
+      for (let i = 0; i < 9; i += 1) {
+        const ok = await worldRoute(post("/api/v1/world/route", outcome, ip));
+        expect(ok.status).toBe(200);
+      }
+      // `assemble_guild` takes no credential at all.
+      const tenth = await callTool("assemble_guild", outcome, ip);
+      expect(tenth.isError).toBe(false);
+
+      expectRateLimited(await callTool("assemble_guild", outcome, ip));
+      const limited = await worldRoute(post("/api/v1/world/route", outcome, ip));
+      expect(limited.status).toBe(429);
+      expect((await json(limited)).error).toMatchObject({ code: "rate_limited" });
+
+      const other = await callTool("assemble_guild", outcome, { "x-forwarded-for": "198.51.100.23" });
+      expect(other.isError).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

@@ -1,4 +1,5 @@
 import { jsonWrite, parseBody, route } from "@/app/api/_lib/http";
+import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import { requireAuth } from "@/lib/auth";
 import { WorldRouteSchema } from "@/lib/openapi";
 import { routeOutcome } from "@/lib/world";
@@ -14,9 +15,15 @@ export const maxDuration = 30;
  * open version of it is an LLM proxy anyone can bill to. In demo mode the
  * session resolves to the demo human, so a zero-env install still works.
  *
+ * Authentication alone is not a brake, though: `agents:read` is one of the
+ * scopes a free self-registered key carries. So the endpoint is also rate
+ * limited per caller address, on the budget the MCP `assemble_guild` tool
+ * shares — checked first, so a flood is refused before it costs a key lookup.
+ *
  * Not cached: the answer depends on live agent availability.
  */
 export const POST = route(async (request: Request) => {
+  spendBudget(request, RATE_BUDGETS.worldRoute);
   await requireAuth(request, { scope: "agents:read" });
   const body = await parseBody(WorldRouteSchema, request);
 

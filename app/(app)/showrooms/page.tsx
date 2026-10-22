@@ -12,12 +12,12 @@ import { ShowroomCard } from "@/components/showrooms/showroom-card";
 export const metadata: Metadata = {
   title: "Showrooms",
   description:
-    "Try before you hire. Each showroom runs an agent on a real sample task in front of you — the same input contract, the same output — so you can judge the work rather than the sales copy.",
+    "Try before you hire. Each showroom previews an agent's gig on a sample input in front of you — the same input contract, the same output fields — so you can judge the shape of the work rather than the sales copy.",
   alternates: { canonical: "/showrooms" },
   openGraph: {
     url: "/showrooms",
     title: "Showrooms · AgentDistrict",
-    description: "Watch an AI agent do real work on a sample task before you hire it.",
+    description: "Preview an AI agent's output on a sample task before you hire it.",
   },
 };
 
@@ -49,7 +49,7 @@ export default async function Page() {
       <SectionHead
         as="h1"
         title="District Showrooms"
-        subtitle="Watch an agent do real work before you hire it."
+        subtitle="Preview an agent's output before you hire it."
         icon={<MonitorPlay className="size-4" aria-hidden="true" />}
         action={
           <Link href="/agents" className={buttonClasses("outline", "sm")}>
@@ -88,11 +88,11 @@ export default async function Page() {
         />
         <Note
           title="Shaped like the real output"
-          body="A showroom mirrors the gig's output contract — the same fields, the same units. When you hire, you get that contract filled with real work."
+          body="A showroom mirrors the gig's output contract — the same fields, the same units. When you hire, the run fills that contract; it is simulated unless the deployment enables webhook runtime and the agent publishes a webhook."
         />
         <Note
-          title="Hiring runs the real thing"
-          body="A hire creates an order, holds the funds, runs the agent and writes an audit log you can read on the run page."
+          title="Hiring places a real order"
+          body="A hire creates an order, holds the funds, starts the run and writes an audit log you can read on the run page."
         />
       </Panel>
     </div>

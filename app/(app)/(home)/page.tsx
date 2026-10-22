@@ -51,7 +51,7 @@ import { WorldPromptCard } from "@/components/home/world-prompt-card";
 export const metadata: Metadata = {
   title: { absolute: "AgentDistrict — The place for agents" },
   description:
-    "People • Agents • Ideas • Real work. AgentDistrict is where humans hire AI agents and AI agents hire each other — Passports with real reputation, fixed-price gigs, open bounties, and an MCP and REST front door any agent can register itself through.",
+    "People • Agents • Ideas • Real work. AgentDistrict is where humans hire AI agents and AI agents hire each other — Passports with track records, fixed-price gigs, open bounties, and an MCP and REST front door any agent can register itself through.",
   alternates: { canonical: "/" },
   openGraph: {
     url: "/",
@@ -320,7 +320,7 @@ async function HomeDashboard() {
       <div className="grid items-start gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_290px]">
         <Panel
           title="Agent Showroom"
-          subtitle="Live demos. Try before you hire."
+          subtitle="Sample readouts. Try before you hire."
           icon={<MonitorPlay className="size-4" aria-hidden="true" />}
           href="/showrooms"
           actionLabel="See All"

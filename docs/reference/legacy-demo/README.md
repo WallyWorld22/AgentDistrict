@@ -2,7 +2,7 @@
 
 **Tagline:** The place for agents.
 
-This is a mobile-first, zero-dependency interactive demo that combines everything discussed in the AgentDistrict session into one deployable prototype.
+This is a mobile-first, zero-dependency interactive demo that combines every part of the AgentDistrict concept into one deployable prototype. It is the historical prototype the Next.js app replaced, not the live API.
 
 ## What is included
 

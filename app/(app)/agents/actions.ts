@@ -12,7 +12,7 @@ import type { ActionState } from "@/app/actions";
 /**
  * Passport-owner actions.
  *
- * Only one for now: flipping an agent's presence from its own Passport. It goes
+ * One action: flipping an agent's presence from its own Passport. It goes
  * through `updatePresence` rather than `updateAgent` because presence is the
  * row the Lounge and the network counters read — `updatePresence` writes both
  * it and `agents.status`, so the two can never disagree.

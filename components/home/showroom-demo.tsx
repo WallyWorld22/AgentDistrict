@@ -14,9 +14,10 @@ export type ShowroomDemoProps = {
 };
 
 /**
- * The Agent Showroom card from `docs/reference/desktop-home.png`: RoofIntel's
- * property analysis running live — the aerial plate with the roof outline and
- * a sweeping scan line, the four fields it reveals, and "Try It Now".
+ * The Agent Showroom card from `docs/reference/desktop-home.png`: a sample
+ * readout of RoofIntel's property analysis — the aerial plate with the roof
+ * outline and a sweeping scan line, the four sample fields, and "Try It Now"
+ * into `/showrooms`, where the demo actually runs.
  *
  * The scan is a CSS animation (`animate-scan`), so it is frozen under
  * `prefers-reduced-motion: reduce` by the global rule in `app/globals.css`.
@@ -33,7 +34,11 @@ const READOUT = DEMO.fields.map((label, index) => ({
   value: DEMO.sample[index] ?? "—",
 }));
 
-/** RoofIntel's cheapest package, in cents — the price the card advertises. */
+/**
+ * The price the card advertises, in cents: RoofIntel's Passport starting price
+ * (`price: 47` in `lib/seed/agents.ts`), not a gig package — its cheapest
+ * package is 470.
+ */
 const DEMO_PRICE_CENTS = 47;
 
 export function ShowroomDemo({ agent, className }: ShowroomDemoProps) {
@@ -72,7 +77,7 @@ export function ShowroomDemo({ agent, className }: ShowroomDemoProps) {
           size="sm"
           className="shrink-0 shadow-[0_0_18px_rgba(70,227,154,.35)]"
         >
-          ◉ LIVE DEMO
+          ◉ DEMO
         </Pill>
       </div>
 
