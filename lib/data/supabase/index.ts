@@ -2099,8 +2099,18 @@ export class SupabaseRepository implements Repository {
         .limit(60),
       toChatMessage,
     );
+    // A channel can run more than one race, and `.maybeSingle()` on the bare
+    // filter is a 406 the moment it does (PGRST116). Order, then take one: the
+    // pick `ChannelDetail.competition` defines, the same as the demo adapter's.
     const competition = await this.one(
-      client.from("competitions").select("*").eq("channel_id", channel.id).maybeSingle(),
+      client
+        .from("competitions")
+        .select("*")
+        .eq("channel_id", channel.id)
+        .order("ends_at", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
       toCompetition,
     );
 

@@ -1,4 +1,5 @@
 import type {
+  Channel,
   ChannelKind,
   Competition,
   CompetitionWithEntries,
@@ -392,6 +393,30 @@ export function ambientChatLine(
     author: AMBIENT_CHAT_AUTHORS[seed % AMBIENT_CHAT_AUTHORS.length],
     body: AMBIENT_CHAT_LINES[(seed >>> 8) % AMBIENT_CHAT_LINES.length],
   };
+}
+
+/**
+ * A channel page's "More like this" row: same kind first, then live, then
+ * followers; never the channel itself.
+ *
+ * Generic over the row so the hosts `listChannels()` already returns ride
+ * along to the tiles. The page used to re-fetch each tile's full channel detail
+ * (hosts, chat and race) just to draw its hosts.
+ */
+export function relatedChannels<T extends Channel>(
+  channel: Pick<Channel, "slug" | "kind">,
+  everyChannel: T[],
+  limit = 4,
+): T[] {
+  return everyChannel
+    .filter((entry) => entry.slug !== channel.slug)
+    .sort(
+      (a, b) =>
+        Number(b.kind === channel.kind) - Number(a.kind === channel.kind) ||
+        Number(b.is_live) - Number(a.is_live) ||
+        b.followers - a.followers,
+    )
+    .slice(0, limit);
 }
 
 /** The "Autonomous studio runtime" explainer tiles from the legacy TV page. */

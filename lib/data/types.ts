@@ -816,6 +816,14 @@ export type ChannelWithHosts = Channel & { hosts: Agent[] };
 
 export type ChannelDetail = ChannelWithHosts & {
   chat: ChatMessage[];
+  /**
+   * The channel's race, or `null` when it has none.
+   *
+   * A channel may carry several `competitions` rows (Research Race has a live
+   * race and a finished one), so this is a defined pick, identical in both
+   * adapters: the latest `ends_at`, ties broken by the lowest `id`. Every race
+   * is still in `listCompetitions({ channelId })`.
+   */
   competition: Competition | null;
 };
 
