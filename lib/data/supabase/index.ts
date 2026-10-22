@@ -24,6 +24,7 @@ import {
 } from "../hash";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
+import { computeLeagueStandings, unknownFighter } from "../league";
 
 /**
  * How many rows the trending sort re-ranks in memory. The score is computed,
@@ -34,12 +35,16 @@ import { compareTrendingGigs, trendingAgentScore } from "../trending";
 const TRENDING_POOL = 240;
 import { sha1Hex } from "@/lib/seed/uuid";
 import {
+  LEAGUE_FIGHTER_COLUMNS,
   asRow,
   asRows,
   toAgent,
   toAgentClaim,
   toApiKey,
   toBid,
+  toBout,
+  toBoutResult,
+  toLeagueFighterRow,
   toChannel,
   toChatMessage,
   toCompetition,
@@ -76,6 +81,10 @@ import type {
   RegisteredAgent,
   Bid,
   BidWithAgent,
+  Bout,
+  BoutFilter,
+  BoutResult,
+  BoutWithResult,
   Channel,
   ChannelDetail,
   ChannelFilter,
@@ -102,6 +111,8 @@ import type {
   JobFilter,
   JobWithBidCount,
   JobWithBids,
+  LeagueFighter,
+  LeagueStanding,
   ListOptions,
   LoungeMessage,
   MarketFilter,
@@ -2181,6 +2192,113 @@ export class SupabaseRepository implements Repository {
     );
     if (!message) throw new UpstreamError("Chat message was not written");
     return message;
+  }
+
+  /* ------------------------------------------- the Fight League (fiction) */
+
+  /** Bouts matching `filter`, in schedule order (`scheduled_at`, then `id`). */
+  private async boutRows(filter: BoutFilter & { status?: Bout["status"] } = {}): Promise<Bout[]> {
+    const client = await this.client();
+    let query = client
+      .from("bouts")
+      .select("*")
+      .order("scheduled_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (filter.channelId) query = query.eq("channel_id", filter.channelId);
+    if (filter.season !== undefined) query = query.eq("season", filter.season);
+    if (filter.status) query = query.eq("status", filter.status);
+    return this.many(query, toBout);
+  }
+
+  private async boutResultsFor(boutIds: UUID[]): Promise<BoutResult[]> {
+    if (boutIds.length === 0) return [];
+    const client = await this.client();
+    return this.many(client.from("bout_results").select("*").in("bout_id", boutIds), toBoutResult);
+  }
+
+  /**
+   * Fighters as the league shows them. Selects the identity columns by name,
+   * so the league path never even receives a rating (see `LeagueFighter`).
+   */
+  private async leagueFighters(bouts: Bout[]): Promise<Map<UUID, LeagueFighter>> {
+    const ids = [...new Set(bouts.flatMap((bout) => [bout.fighter_a, bout.fighter_b]))];
+    if (ids.length === 0) return new Map();
+    const client = await this.client();
+    const rows = await this.many(
+      client.from("agents").select(LEAGUE_FIGHTER_COLUMNS).in("id", ids),
+      toLeagueFighterRow,
+    );
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
+  private async withResults(bouts: Bout[]): Promise<BoutWithResult[]> {
+    const [results, fighters] = await Promise.all([
+      this.boutResultsFor(bouts.map((bout) => bout.id)),
+      this.leagueFighters(bouts),
+    ]);
+    const resultByBout = new Map(results.map((row) => [row.bout_id, row]));
+    return bouts.map((bout) => ({
+      ...bout,
+      fighterA: fighters.get(bout.fighter_a) ?? unknownFighter(bout.fighter_a),
+      fighterB: fighters.get(bout.fighter_b) ?? unknownFighter(bout.fighter_b),
+      result: resultByBout.get(bout.id) ?? null,
+    }));
+  }
+
+  async listBouts(filter: BoutFilter = {}): Promise<BoutWithResult[]> {
+    return this.withResults(await this.boutRows(filter));
+  }
+
+  async getBout(id: UUID): Promise<BoutWithResult | null> {
+    const client = await this.client();
+    const bout = await this.one(
+      client.from("bouts").select("*").eq("id", id).maybeSingle(),
+      toBout,
+    );
+    if (!bout) return null;
+    const [withResult] = await this.withResults([bout]);
+    return withResult;
+  }
+
+  /**
+   * One `decide_bout()` call per bout that is due by this server's clock.
+   *
+   * The clock here only chooses which bouts to *ask* about; the function
+   * re-checks `scheduled_at <= now()` against the database's own clock and
+   * refuses otherwise, so a skewed app server can neither decide a bout early
+   * nor fail the page — a bout the database says is not due yet is skipped
+   * and comes up again on the next read. A concurrent caller that got there
+   * first is not an error either: the RPC hands back the result it recorded.
+   */
+  async decideDueBouts(channelId: UUID): Promise<BoutResult[]> {
+    const nowMs = Date.now();
+    const due = (await this.boutRows({ channelId, status: "scheduled" })).filter(
+      (bout) => Date.parse(bout.scheduled_at) <= nowMs,
+    );
+    if (due.length === 0) return [];
+
+    const client = await this.client();
+    const results: BoutResult[] = [];
+    for (const bout of due) {
+      const { data, error } = await client.rpc("decide_bout", { p_bout_id: bout.id });
+      if (error) {
+        if (/cannot be decided before then/i.test(error.message ?? "")) continue;
+        throw new UpstreamError(error.message);
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new UpstreamError(`decide_bout returned no result for ${bout.id}`);
+      results.push(toBoutResult(asRow(row)));
+    }
+    return results;
+  }
+
+  async leagueStandings(filter: BoutFilter = {}): Promise<LeagueStanding[]> {
+    const bouts = await this.boutRows(filter);
+    const [results, fighters] = await Promise.all([
+      this.boutResultsFor(bouts.map((bout) => bout.id)),
+      this.leagueFighters(bouts),
+    ]);
+    return computeLeagueStandings(bouts, results, fighters);
   }
 
   /* ---------------------------------------------------------------- lounge */

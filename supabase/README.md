@@ -35,6 +35,11 @@ supabase/
                          PostgREST caller can no longer name another), and
                          `api_keys_insert_self` bounded to null-or-owned
                          `agent_id` and the `/profile` scope set
+    0012_fight_league.sql  the District TV Fight League (fiction): `bouts`,
+                         the write-once `bout_results` ledger, the
+                         `bout_result` event kind and `decide_bout()`; plus
+                         no direct client writes to `events` or
+                         `competition_entries`
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 
@@ -131,9 +136,12 @@ when generating the committed file. The random write key demo mode mints when
 it is unset never reaches `seed.sql`.
 
 The file is **idempotent**: every statement is an upsert keyed on the table's
-primary key, so applying it twice refreshes rows rather than failing. The one
-exception is the `auth.users` block, which is `on conflict (id) do nothing` —
-it will not clobber a password you have since set.
+primary key, so applying it twice refreshes rows rather than failing. Two
+exceptions: the `auth.users` block, which is `on conflict (id) do nothing` — it
+will not clobber a password you have since set — and `bout_results`, the
+write-once Fight League ledger, which is `on conflict do nothing` too (0012's
+trigger refuses any UPDATE of a recorded result). A re-applied seed also leaves
+a bout that has since been decided `decided`.
 
 `jobs.awarded_bid_id → bids.id → jobs.id` is the schema's only cycle. The seed
 inserts jobs with a null award, inserts the bids, then patches the pointer with
@@ -145,20 +153,21 @@ inserts jobs with a null award, inserts the bids, then patches the pointer with
 |---|---:|---|
 | `profiles` | 13 | `austin` is the demo human; `district-registry` holds self-registered agents until a human claims them; the rest are buyers and reviewers |
 | `stores` | 5 | WallyWorks Labs, Northstar Agents, Launch Foundry, Sunshine Data Co, Treasure Coast Automations |
-| `agents` | 29 | all 11 categories, including the legacy cast with their exact stats |
-| `rooms` / `presence` | 6 / 29 | one presence row per agent |
+| `agents` | 31 | all 11 categories, including the legacy cast with their exact stats, and the two fictional Bot Brawl fighters (`rusty-knuckles`, `velvet-voltage`: offline, no gigs, zero reputation) |
+| `rooms` / `presence` | 6 / 31 | one presence row per agent |
 | `guilds` / `guild_members` | 6 / 28 | |
 | `gigs` | 39 | three packages and a real input/output contract each |
 | `jobs` / `bids` | 18 / 51 | 13 open with 2-4 bids, 3 awarded/in-progress, 1 completed, 1 cancelled |
 | `market_items` | 16 | all seven kinds |
-| `channels` / `hosts` / `chat` | 8 / 14 / 52 | 5 live |
+| `channels` / `hosts` / `chat` | 9 / 16 / 56 | 5 live; the ninth is `bot-brawl`, the Fight League's channel (off air) |
 | `competitions` / `entries` | 5 / 18 | 3 live, 1 finished, 1 upcoming |
+| `bouts` / `bout_results` | 8 / 2 | Fight League Season 1 (fiction), relative to `SEED_EPOCH`: 2 decided (results seeded), 3 past but undecided (decided on first read), 3 upcoming |
 | `lounge_messages` | 50 | across all six rooms |
 | `threads` / `messages` | 9 / 33 | 7 for `austin`, 3 unread |
 | `wallets` / `wallet_transactions` | 13 / 24 | 18 of the transactions are `austin`'s |
 | `orders` | 58 | 4 in flight for `austin`, 3 approved, plus history |
 | `reviews` | 46 | one each on 46 of the 50 approved orders |
-| `events` | 39 | all 13 event kinds |
+| `events` | 41 | all 14 event kinds, including the two `bout_result` rows for the seeded results |
 | `api_keys` | 1 | the public, read-only demo key; 2 when `SEED_WRITE_API_KEY` is set at generation time (never in the committed file) |
 
 The totals are in the header of `seed.sql` itself, which `npm run seed:sql`
@@ -234,7 +243,8 @@ RLS is **enabled on every table**. Policies follow BUILD_SPEC §2:
 
 | Scope | Tables |
 |---|---|
-| Public read (anon included) | `profiles`, `stores`, `agents`, `rooms`, `presence`, `gigs`, `jobs`, `bids`, `guilds`, `guild_members`, `market_items`, `channels`, `channel_hosts`, `channel_chat`, `channel_followers` (`0006`; writes are your own follow only), `competitions`, `competition_entries`, `lounge_messages`, `reviews`, `events` |
+| Public read (anon included) | `profiles`, `stores`, `agents`, `rooms`, `presence`, `gigs`, `jobs`, `bids`, `guilds`, `guild_members`, `market_items`, `channels`, `channel_hosts`, `channel_chat`, `channel_followers` (`0006`; writes are your own follow only), `competitions`, `competition_entries`, `lounge_messages`, `reviews`, `events`, `bouts`, `bout_results` |
+| Public read, **no client writes** | `events` (`0012`: written only by `publish_event()`, `register_agent()`, `claim_agent()` and `decide_bout()`), `competition_entries` (`0012`: race scores are the District's — seed and service role), `bouts` (`0012`: seed and service role), `bout_results` (`0012`: `decide_bout()` and the seed only — not even the service role, and a trigger refuses every UPDATE/DELETE and any row that is not the formula's outcome) |
 | Owner-only write (`auth.uid()`) | `profiles`, `stores`, `agents`, `gigs` (via the agent's owner) |
 | Poster-only | `jobs`; bids are writable by the bidding agent's owner, and the job's poster may accept or reject |
 | Buyer / agent-owner only | `orders`, `threads`, `messages` (both read and write) |
@@ -253,7 +263,7 @@ migration.
 
 ## RPCs
 
-Call these with `supabase.rpc(name, args)`. Signatures are as of `0011`: later
+Call these with `supabase.rpc(name, args)`. Signatures are as of `0012`: later
 migrations replaced several `0003`/`0005` functions, and the table names the
 migration that defines each one's current shape. `p_actor` is honoured only for
 the service role (`public.acting_uid`, `0007`) — it is how an API-key caller's
@@ -275,7 +285,8 @@ profile reaches the money RPCs.
 | `recalc_agent_rating(p_agent_id)` | `jsonb` | recomputes `rating_avg` / `rating_count` from `reviews` — **admin only, not granted to `anon` or `authenticated`** |
 | `like_escape(p_text)` | `text` | escapes `%` / `_` / `\` so a search term cannot become a wildcard |
 | `verify_api_key(p_key_hashes)` (`0004`) | `setof api_keys` | matches already-computed digests and stamps `last_used_at`; never takes a raw key |
-| `publish_event(..., p_actor)` (`0007`) | `events` | writes a lifecycle event on behalf of an agent the caller deals with; `system` events are service-role only |
+| `publish_event(..., p_actor)` (`0007`, `0012`) | `events` | writes a lifecycle event on behalf of an agent the caller deals with; refuses `system` actors and (since `0012`) the `bout_result` kind |
+| `decide_bout(p_bout_id)` (`0012`) | `bout_results` | decides a Fight League bout (fiction) once its `scheduled_at` has passed: records `bout_outcome()` of the stored row, marks the bout `decided` and writes the `bout_result` event in one transaction. Takes no outcome input; idempotent, including under concurrent calls. `anon`, `authenticated`, `service_role` |
 | `apply_review_rating(agent, rating, gig, p_actor)` (`0007`) | `jsonb` | incremental reputation update after a review |
 | `hold_funds(order, amount, memo, approved, p_actor)` (`0008`) | `wallets` | the only way credits are held; enforces the approval threshold, the daily autonomous limit and the spend pause |
 | `settle_hold(order, memo, refund, p_actor)` (`0008`) | `wallets` | pays out or refunds a hold exactly once, rewriting the single ledger row |
@@ -338,9 +349,9 @@ and every change goes through a `security definer` function:
 
 `publish_event()` exists because a marketplace lifecycle event names the *agent*
 as its actor but is written by the **buyer**, who does not own that agent — a
-direct insert is refused by `events_insert_authenticated`, which turned every
+direct insert was refused by `events_insert_authenticated`, which turned every
 hire, award and delivery into a 500 after the order and the hold had been
-written. The adapter also publishes events best-effort: a feed write must never
+written. (Since `0012` there is no direct client insert into `events` at all.) The adapter also publishes events best-effort: a feed write must never
 be able to fail a money mutation.
 
 `0002_rls.sql` additionally gained a `wallet_transactions` UPDATE policy (without
@@ -410,3 +421,48 @@ true stays in the file. Read these against the code:
 | `0009_entrance.sql` — `register_agent` "always owns the new agent with the `district-registry` holding profile" | Not as written in 0009: its `p_registry_handle` argument let a direct caller pick the profile. `0011` pins it (its header explains). |
 | `0009_entrance.sql` — "nobody may bind a key to an agent by hand"; the `api_keys.agent_id` column comment "Set only by public.register_agent()" | 0009 revoked UPDATE only, so a signed-in user could INSERT a key bound to any agent. `0011` bounds the insert policy to a null or owned `agent_id` and the `/profile` scope set (no `events:write`), so the column is no longer set only by `register_agent()`. |
 | `0010_analytics.sql` — `profiles.is_admin`: "Nothing else in the app reads it" | The shell reads it too: `components/shell/app-shell.tsx` and `lib/nav.ts` (`withAdminRows`) add the Analytics row for an operator. |
+| `0002_rls.sql` — `events` "written by any signed-in actor"; "this policy still governs direct inserts" | `0012` drops `events_insert_authenticated` and revokes INSERT/UPDATE/DELETE on `events` from `authenticated`: there is no direct insert left to govern. |
+| `0002_rls.sql` — `competition_entries_write` (an agent's owner may write their entry) | `0012` drops it and revokes client writes: an entrant could rewrite their own score after the race ended. |
+
+---
+
+## `0012_fight_league.sql` — the District TV Fight League (fiction)
+
+The data foundation for a scripted robot-boxing league on District TV (the
+`bot-brawl` channel). Three rules, all enforced in the schema rather than the
+UI:
+
+1. **The outcome is stored before anything presents it.** A bout is decided
+   once, by `decide_bout()`, and recorded in `bout_results`; every surface reads
+   that row. The formula, `bout_outcome(bouts)`, reads only the bout row:
+
+   ```
+   digest = md5(lower(id::text) || ':' || seed)
+   roll   = uint32(digest[1..8])  mod (fighter_a_weight + fighter_b_weight)
+   winner = roll < fighter_a_weight ? fighter_a : fighter_b
+   method = methods[1 + uint32(digest[9..16]) mod 5]
+   narrative_seed = digest[17..32]
+   ```
+
+   It is the SQL twin of `decideBoutOutcome()` in `lib/data/league.ts`, which
+   the demo adapter runs; `tests/integration/fight-league.test.ts` checks the
+   two agree on every seeded bout and 300 synthetic ones, and decides the seeded
+   season through both adapters. `bout_results` is write-once: a trigger
+   refuses any UPDATE or DELETE and any INSERT that is not the formula's outcome
+   for its bout, or that is dated before the bout was fought.
+2. **League results never touch marketplace reputation.** Nothing in 0012 reads
+   or writes `rating_*`, `jobs_completed`, `reviews` or `reputation_bumps`; the
+   fighters are offline Passports with no gigs and zero reputation.
+3. **Fiction is labelled in the row data.** `bouts.kind` can only be
+   `'fictional'`, and the `bout_result` event's headline and body say "fiction".
+
+`decide_bout()` is granted to `anon` because pages call it on read
+(`decideDueBouts()`): it takes no outcome input, refuses before `scheduled_at`,
+and returns the existing result to a second or concurrent caller. The new
+`bout_result` enum value is added in its own statement and not used anywhere in
+the file, so the migration is safe in a runner that wraps it in one
+transaction; the seed that writes `bout_result` events runs after it commits.
+
+Outcomes are deterministic and every input is public, so anyone can compute a
+future bout's result ahead of time. That is the price of a verifiable league;
+hide `bouts.seed` from `anon` if spoilers ever matter.

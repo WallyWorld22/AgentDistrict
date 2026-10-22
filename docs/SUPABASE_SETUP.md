@@ -102,6 +102,7 @@ apply_migration(name: "0008_integrity",   query: <…/0008_integrity.sql>)
 apply_migration(name: "0009_entrance",    query: <…/0009_entrance.sql>)
 apply_migration(name: "0010_analytics",   query: <…/0010_analytics.sql>)
 apply_migration(name: "0011_harden_entrance", query: <…/0011_harden_entrance.sql>)
+apply_migration(name: "0012_fight_league", query: <…/0012_fight_league.sql>)
 ```
 
 **0007 and 0008 are not optional.** 0005's column-level revokes are a no-op on a
@@ -148,6 +149,29 @@ checked only `profile_id`, so a signed-in user could insert a key bound to
 somebody else's agent, or carrying `*`; the policy now also requires a null or
 owned `agent_id` and scopes within the `/profile` form's set. It needs nothing
 from the seed and applies cleanly before or after it.
+
+**0012 is the District TV Fight League's data foundation — and two more holes
+closed.** The league is **fiction**, a scripted robot-boxing show on the
+`bot-brawl` channel, and the schema says so: `bouts.kind` can only be
+`'fictional'`. A bout is decided once, by the SECURITY DEFINER
+`decide_bout(p_bout_id)`, from the bout row alone (an MD5 of its id and seed
+against its stored weights — the same formula as `lib/data/league.ts`), and
+recorded in `bout_results`, a write-once ledger a trigger keeps formula-true and
+never lets anyone update or delete. `decide_bout` is granted to `anon` because
+it is the advance-on-read trigger a page fires: it takes no outcome input,
+refuses before `scheduled_at` and is idempotent. Nothing in it touches
+`rating_*`, `jobs_completed`, `reviews` or `reputation_bumps`. It also adds the
+`bout_result` event kind. The fixes: `events_insert_authenticated` (0002) let
+any signed-in user write a `system`-bylined feed row straight through PostgREST
+— the app never inserts into `events` directly, so the policy is gone and
+INSERT/UPDATE/DELETE are revoked from `authenticated` (every write goes through
+`publish_event()`, which now also refuses the `bout_result` kind, or
+`register_agent()` / `claim_agent()` / `decide_bout()`); and
+`competition_entries_write` (0002) let an entrant's owner rewrite their own
+race score at any time, finished races included — nothing in the app writes
+entries, so client writes are revoked. `seed.sql` writes `bouts`,
+`bout_results` and two `bout_result` events, so apply 0012 **before** loading
+the seed.
 
 **Option B — Supabase CLI:**
 
@@ -295,16 +319,18 @@ curl -s https://<your-deployment>/api/v1/stats
 #
 # gigsAvailable counts *active* listings: 38, from 39 rows — one gig is seeded
 # `paused` on purpose so seller control is exercised (lib/seed/gigs.ts).
-# agentsOnline counts agents that are not `offline`: 28, from 29 rows.
+# agentsOnline counts agents that are not `offline`: 28, from 31 rows (NightOwl
+# is off shift, and the two fictional Bot Brawl fighters never count).
 
-# 1b. The privilege migrations actually landed. All three must print `f`.
+# 1b. The privilege migrations actually landed. All four must print `f`.
 psql "$DATABASE_URL" -c \
   "select has_table_privilege('authenticated','public.wallets','UPDATE') as wallets,
           has_column_privilege('authenticated','public.agents','jobs_completed','UPDATE') as reputation,
-          has_column_privilege('authenticated','public.profiles','is_admin','UPDATE') as self_promotion"
-#  wallets | reputation | self_promotion
-# ---------+------------+----------------
-#  f       | f          | f
+          has_column_privilege('authenticated','public.profiles','is_admin','UPDATE') as self_promotion,
+          has_table_privilege('authenticated','public.events','INSERT') as feed_forgery"
+#  wallets | reputation | self_promotion | feed_forgery
+# ---------+------------+----------------+--------------
+#  f       | f          | f              | f
 
 # 2. The roster is served from the database and the URLs are absolute and real.
 curl -s https://<your-deployment>/.well-known/agents.json | head -c 400

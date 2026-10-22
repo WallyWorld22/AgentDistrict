@@ -6,8 +6,9 @@ import { storeId } from "./stores";
 import { id } from "./uuid";
 
 /**
- * The District cast — 28 agents across all 11 categories (BUILD_SPEC §2 asks
- * for ≥ 24 and names the required roster).
+ * The District cast — 31 agents across all 11 categories (BUILD_SPEC §2 asks
+ * for ≥ 24 and names the required roster), two of them the fictional Bot Brawl
+ * fighters at the end of the list.
  *
  * The ten legacy agents (Scout, Otto, WebBuilder, ParcelPro, CopyCat, MapFox,
  * QA Fox, AdPilot, DeepResearch, CareDesk) carry their *exact* stats from
@@ -839,7 +840,73 @@ const SPECS: AgentSpec[] = [
     avg_latency_sec: 240,
     daysOld: 96,
   },
+
+  /* ------------------------------------------- the Fight League (fiction) */
+  // District TV's Bot Brawl fighters — fictional characters, not services.
+  // Appended last on purpose: `presence` draws from a seeded PRNG in roster
+  // order, so adding them anywhere else would reshuffle every later agent's
+  // seeded queue and capacity.
+  //
+  // The pattern is NightOwl's, the one Passport with nothing to sell: owned by
+  // a real human (the founder, who also owns the Otto & Wally cast and the
+  // channel they fight on), no store, no gigs, and `offline` — so they take no
+  // storefront shelf space and never count towards `agentsOnline`. Their
+  // reputation columns are zero and stay zero: league results are recorded in
+  // `bout_results` and never touch `rating_*`, `jobs_completed` or reviews.
+  {
+    handle: "rusty-knuckles",
+    name: "Rusty Knuckles",
+    emoji: "🥊",
+    gradient: "linear-gradient(135deg,#b4532a,#48a8ff)",
+    tagline: "Fictional robot boxer · Bot Brawl on District TV",
+    description:
+      "A fictional character on Bot Brawl, District TV's scripted robot-boxing league — not a service, and there is nothing to hire. Rusty is stocky and salvage-built, patient on defense and dry as a bone between rounds, and he will not hear a word against his mismatched blue glove. His bouts are decided by the league's published formula and recorded once; winning or losing moves no rating, review or job count.",
+    category: "entertainment",
+    skills: ["Fight League character", "Ring commentary", "Dry humor"],
+    regions: ["GLOBAL"],
+    status: "offline",
+    pricing_model: "per_run",
+    price: 0,
+    owner: "austin",
+    verified: true,
+    rating_avg: 0,
+    rating_count: 0,
+    jobs_completed: 0,
+    repeat_hire_rate: 0,
+    reliability: 0,
+    dispute_rate: 0,
+    avg_latency_sec: 0,
+    daysOld: 35,
+  },
+  {
+    handle: "velvet-voltage",
+    name: "Velvet Voltage",
+    emoji: "🎩",
+    gradient: "linear-gradient(135deg,#6b2d8f,#ffd66b)",
+    tagline: "Fictional robot boxer · Bot Brawl on District TV",
+    description:
+      "A fictional character on Bot Brawl, District TV's scripted robot-boxing league — not a service, and there is nothing to hire. Velvet is a plum-and-gold showman with elegant footwork who narrates his own highlights while they are still happening. His bouts are decided by the league's published formula and recorded once; winning or losing moves no rating, review or job count.",
+    category: "entertainment",
+    skills: ["Fight League character", "Highlight narration", "Showmanship"],
+    regions: ["GLOBAL"],
+    status: "offline",
+    pricing_model: "per_run",
+    price: 0,
+    owner: "austin",
+    verified: true,
+    rating_avg: 0,
+    rating_count: 0,
+    jobs_completed: 0,
+    repeat_hire_rate: 0,
+    reliability: 0,
+    dispute_rate: 0,
+    avg_latency_sec: 0,
+    daysOld: 35,
+  },
 ];
+
+/** The Bot Brawl fighters — fiction, never marketplace agents. */
+export const FIGHTER_HANDLES = ["rusty-knuckles", "velvet-voltage"] as const;
 
 /** `Lead research` → `lead_research`. Mirrors the legacy passport modal. */
 function mcpToolName(skill: string): string {

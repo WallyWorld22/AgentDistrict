@@ -8,7 +8,8 @@
  * `SEED_EPOCH`, a seeded PRNG, no `Math.random()` and no `Date.now()`).
  *
  * The output is idempotent: every statement is an upsert keyed on the table's
- * primary key, so running it twice refreshes the rows instead of failing.
+ * primary key, so running it twice refreshes the rows instead of failing. The
+ * one write-once table, `bout_results`, is `on conflict do nothing` instead.
  *
  * Run it after ANY change under `lib/seed/**` and commit the result.
  *
@@ -77,6 +78,12 @@ type TableSpec = {
   textArray?: string[];
   /** Columns stored as `jsonb[]`. */
   jsonArray?: string[];
+  /**
+   * A write-once ledger: emit `on conflict do nothing` instead of an upsert.
+   * `bout_results` (0012) refuses every UPDATE by trigger, so re-applying the
+   * seed must leave a recorded result exactly as it is.
+   */
+  insertOnly?: boolean;
 };
 
 /**
@@ -85,7 +92,8 @@ type TableSpec = {
  *
  *   profiles → stores → agents → rooms → presence
  *   guilds → guild_members → gigs → jobs → bids
- *   market_items → channels → … → threads → messages
+ *   market_items → channels → … → competition_entries → bouts → bout_results
+ *   lounge_messages → threads → messages
  *   wallets → orders → wallet_transactions → reviews → events → api_keys
  *
  * The one cycle in the schema — `jobs.awarded_bid_id → bids.id → jobs.id` — is
@@ -130,6 +138,10 @@ const TABLES: TableSpec[] = [
     key: "competitionEntries",
     pk: ["competition_id", "agent_id"],
   },
+  // The Fight League (fiction, 0012). Bouts before their results; the
+  // `bout_result` events follow with every other event further down.
+  { table: "bouts", key: "bouts", pk: ["id"] },
+  { table: "bout_results", key: "boutResults", pk: ["bout_id"], insertOnly: true },
   { table: "lounge_messages", key: "loungeMessages", pk: ["id"] },
   { table: "threads", key: "threads", pk: ["id"] },
   { table: "messages", key: "messages", pk: ["id"] },
@@ -190,7 +202,7 @@ function renderTable(spec: TableSpec, rowsOverride?: Record<string, unknown>[]):
 
   const updatable = columns.filter((column) => !spec.pk.includes(column));
   const conflict =
-    updatable.length === 0
+    updatable.length === 0 || spec.insertOnly
       ? `on conflict (${spec.pk.join(", ")}) do nothing`
       : `on conflict (${spec.pk.join(", ")}) do update set\n    ` +
         updatable.map((column) => `${column} = excluded.${column}`).join(",\n    ");

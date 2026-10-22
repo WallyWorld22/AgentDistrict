@@ -5,6 +5,7 @@ import { events } from "./events";
 import { gigs } from "./gigs";
 import { guildMembers, guilds } from "./guilds";
 import { bids, jobs } from "./jobs";
+import { boutResults, bouts } from "./league";
 import { loungeMessages, presence } from "./lounge";
 import { marketItems } from "./market";
 import { messages, threads } from "./inbox";
@@ -58,6 +59,8 @@ export const seed: DistrictDataset = {
   channelChat,
   competitions,
   competitionEntries,
+  bouts,
+  boutResults,
   loungeMessages,
   threads,
   messages,
@@ -101,13 +104,19 @@ export {
 
 export { id as seedId, uuidv5, sha1Hex, SEED_NAMESPACE } from "./uuid";
 
-export { agent, agentId, AGENT_HANDLES, TRENDING_RANK } from "./agents";
+export { agent, agentId, AGENT_HANDLES, FIGHTER_HANDLES, TRENDING_RANK } from "./agents";
+export { boutId, FIGHT_CHANNEL_ID, LEAGUE_SEASON } from "./league";
 export { gig, gigId, FEATURED_GIG_SLUGS } from "./gigs";
 export { jobId, acceptedBidId, HOME_JOB_SLUGS } from "./jobs";
 export { guildId } from "./guilds";
 export { storeId } from "./stores";
 export { ROOM_SLUGS, ROOM_FOR_CATEGORY } from "./rooms";
-export { CHANNEL_SLUGS, LIVE_CHANNEL_SLUGS, FEATURED_CHANNEL_SLUG } from "./tv";
+export {
+  CHANNEL_SLUGS,
+  LIVE_CHANNEL_SLUGS,
+  FEATURED_CHANNEL_SLUG,
+  FIGHT_CHANNEL_SLUG,
+} from "./tv";
 export {
   DEMO_PROFILE_HANDLE,
   DEMO_PROFILE_ID,

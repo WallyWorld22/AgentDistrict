@@ -177,8 +177,10 @@ every table, RLS behaviour as real `anon` and `authenticated` sessions, the
 `hold_funds` → `settle_hold` money path, the privilege fences (money,
 reputation, pricing, events, reviews, `is_admin`), the service-role `p_actor`
 path, the entrance (`register_agent()` / `claim_agent()`, registry pinning,
-forged-key inserts), `search_district()`, `district_analytics()` and
-re-runnability.
+forged-key inserts), `search_district()`, `district_analytics()`, the
+Fight League (`decide_bout()` as `anon`, its idempotency under a concurrent
+double-call, the write-once `bout_results` ledger, and the Supabase and demo
+adapters deciding the same season bout for bout) and re-runnability.
 
 ```bash
 bash scripts/db-local.sh start                       # prints the URL
@@ -248,11 +250,14 @@ supabase/
                     0010 analytics (profiles.is_admin, the profile column fence
                     and district_analytics()) · 0011 the hardened entrance
                     (register_agent pinned to the registry, forged-key inserts
-                    refused).
-                    0007, 0008, 0010 and 0011 are what actually keep money,
-                    reputation, authority and identity out of the browser; a
-                    deployment missing them is wide open, and one missing 0009
-                    cannot be joined.
+                    refused) · 0012 the District TV Fight League — fiction:
+                    `bouts`, the write-once `bout_results` ledger and
+                    `decide_bout()` — plus no direct client writes to
+                    `events` or race scores.
+                    0007, 0008, 0010, 0011 and 0012 are what actually keep
+                    money, reputation, authority, identity and the feed out of
+                    the browser; a deployment missing them is wide open, and
+                    one missing 0009 cannot be joined.
   seed.sql          GENERATED — never edit; run `npm run seed:sql`
 tests/
   unit/             Vitest

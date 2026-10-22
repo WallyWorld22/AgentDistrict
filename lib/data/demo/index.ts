@@ -27,6 +27,15 @@ import {
 } from "../hash";
 import { districtNow } from "../clock";
 import { countInto, emptySeries } from "../analytics";
+import {
+  boutLoserId,
+  boutResultEvent,
+  compareBoutSchedule,
+  computeLeagueStandings,
+  decideBoutOutcome,
+  toLeagueFighter,
+  unknownFighter,
+} from "../league";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import type {
@@ -40,6 +49,10 @@ import type {
   RegisteredAgent,
   Bid,
   BidWithAgent,
+  Bout,
+  BoutFilter,
+  BoutResult,
+  BoutWithResult,
   Channel,
   ChannelDetail,
   ChannelFilter,
@@ -67,6 +80,8 @@ import type {
   JobFilter,
   JobWithBidCount,
   JobWithBids,
+  LeagueFighter,
+  LeagueStanding,
   ListOptions,
   LoungeMessage,
   MarketFilter,
@@ -476,6 +491,11 @@ export class DemoRepository implements Repository {
   }
 
   async publishEvent(input: PublishEventInput): Promise<DistrictEvent> {
+    // As `publish_event()` refuses it since 0012: a league result is recorded
+    // by deciding the bout, never published as free-standing copy.
+    if (input.kind === "bout_result") {
+      throw new ForbiddenError("Fight League results are recorded by deciding the bout, not published");
+    }
     const event: DistrictEvent = {
       id: this.id(),
       kind: input.kind,
@@ -1838,6 +1858,108 @@ export class DemoRepository implements Repository {
     };
     this.db.channelChat.push(message);
     return message;
+  }
+
+  /* ------------------------------------------- the Fight League (fiction) */
+
+  /** Identity only — the league never hands out an `Agent` (see `LeagueFighter`). */
+  private leagueFighter(agentId: UUID): LeagueFighter {
+    const agent = this.agentById(agentId);
+    return agent ? toLeagueFighter(agent) : unknownFighter(agentId);
+  }
+
+  private boutWithResult(bout: Bout): BoutWithResult {
+    return {
+      ...bout,
+      fighterA: this.leagueFighter(bout.fighter_a),
+      fighterB: this.leagueFighter(bout.fighter_b),
+      result: this.db.boutResults.find((row) => row.bout_id === bout.id) ?? null,
+    };
+  }
+
+  private boutsMatching(filter: BoutFilter = {}): Bout[] {
+    return this.db.bouts
+      .filter((bout) => (filter.channelId ? bout.channel_id === filter.channelId : true))
+      .filter((bout) => (filter.season !== undefined ? bout.season === filter.season : true))
+      .sort(compareBoutSchedule);
+  }
+
+  async listBouts(filter: BoutFilter = {}): Promise<BoutWithResult[]> {
+    return this.boutsMatching(filter).map((bout) => this.boutWithResult(bout));
+  }
+
+  async getBout(id: UUID): Promise<BoutWithResult | null> {
+    const bout = this.db.bouts.find((row) => row.id === id);
+    return bout ? this.boutWithResult(bout) : null;
+  }
+
+  /**
+   * `decide_bout()` in memory, for every bout on the channel that is due. The
+   * result is `decideBoutOutcome()` of the stored row — the function the SQL
+   * twin mirrors — and the bout is decided at most once: an existing ledger
+   * row is returned as it stands, with no second event.
+   */
+  async decideDueBouts(channelId: UUID): Promise<BoutResult[]> {
+    const nowMs = this.now();
+    const due = this.boutsMatching({ channelId }).filter(
+      (bout) => bout.status === "scheduled" && Date.parse(bout.scheduled_at) <= nowMs,
+    );
+    return due.map((bout) => this.decideBout(bout));
+  }
+
+  private decideBout(bout: Bout): BoutResult {
+    const recorded = this.db.boutResults.find((row) => row.bout_id === bout.id);
+    if (recorded) {
+      bout.status = "decided";
+      return recorded;
+    }
+
+    const result: BoutResult = {
+      bout_id: bout.id,
+      ...decideBoutOutcome(bout),
+      decided_at: this.nowIso(),
+    };
+    this.db.boutResults.push(result);
+    bout.status = "decided";
+
+    const channel = this.db.channels.find((row) => row.id === bout.channel_id);
+    const input = boutResultEvent({
+      bout,
+      result,
+      winnerName: this.leagueFighter(result.winner_id).name,
+      loserName: this.leagueFighter(boutLoserId(bout, result.winner_id)).name,
+      channel: { slug: channel?.slug ?? "", title: channel?.title ?? "District TV" },
+    });
+    const event: DistrictEvent = {
+      id: this.id(),
+      kind: input.kind,
+      actor_type: input.actor_type,
+      actor_id: null,
+      actor_name: input.actor_name,
+      headline: input.headline,
+      body: input.body,
+      cta_label: input.cta_label ?? null,
+      cta_href: input.cta_href ?? null,
+      created_at: result.decided_at,
+    };
+    this.db.events.unshift(event);
+    for (const listener of this.listeners) listener(event);
+    return result;
+  }
+
+  async leagueStandings(filter: BoutFilter = {}): Promise<LeagueStanding[]> {
+    const bouts = this.boutsMatching(filter);
+    const ids = new Set(bouts.map((bout) => bout.id));
+    const fighters = new Map<UUID, LeagueFighter>();
+    for (const bout of bouts) {
+      fighters.set(bout.fighter_a, this.leagueFighter(bout.fighter_a));
+      fighters.set(bout.fighter_b, this.leagueFighter(bout.fighter_b));
+    }
+    return computeLeagueStandings(
+      bouts,
+      this.db.boutResults.filter((row) => ids.has(row.bout_id)),
+      fighters,
+    );
   }
 
   /* ---------------------------------------------------------------- lounge */

@@ -187,6 +187,13 @@ export const EVENT_KINDS = [
    * what makes the District feed something an outside agent can join.
    */
   "post",
+  /**
+   * A District TV Fight League bout was decided (0012). FICTION: the league is
+   * a scripted robot-boxing show, and only `decide_bout()` — never a client —
+   * writes this kind, in the same transaction that records the result. The
+   * row's own headline and body say it is fiction.
+   */
+  "bout_result",
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
@@ -205,7 +212,37 @@ export const EVENT_KIND_LABELS: Record<EventKind, string> = {
   guild_formed: "GUILD FORMED",
   gig_published: "GIG PUBLISHED",
   post: "POSTED",
+  bout_result: "FIGHT LEAGUE · FICTION",
 };
+
+/* ------------------------------------------------ the Fight League (fiction) */
+
+/**
+ * `bouts.kind`. The one value there is: a District TV Fight League bout is
+ * fiction, and the row says so in its own data, not only in the UI.
+ */
+export const BOUT_KINDS = ["fictional"] as const;
+export type BoutKind = (typeof BOUT_KINDS)[number];
+
+export const BOUT_STATUSES = ["scheduled", "decided"] as const;
+export type BoutStatus = (typeof BOUT_STATUSES)[number];
+
+/**
+ * How a bout ends — `bout_results.method`.
+ *
+ * **The order is part of the league formula** (`decideBoutOutcome` in
+ * `lib/data/league.ts`, and the identical array in 0012's `bout_outcome()`):
+ * the method is picked by index. Never reorder or extend this list without a
+ * migration that does the same to the SQL, or the two adapters stop agreeing.
+ */
+export const BOUT_METHODS = [
+  "unanimous decision",
+  "split decision",
+  "majority decision",
+  "knockout",
+  "technical knockout",
+] as const;
+export type BoutMethod = (typeof BOUT_METHODS)[number];
 
 /** The kinds of deliverable `lib/runtime` can produce (BUILD_SPEC §6). */
 export const OUTPUT_FORMATS = ["csv", "markdown", "json", "table", "links"] as const;
@@ -594,6 +631,47 @@ export type CompetitionEntry = {
   accuracy: number;
 };
 
+/**
+ * `bouts` (0012) — one bout of the District TV Fight League.
+ *
+ * **Fiction.** The league is a scripted robot-boxing show. A bout's outcome is
+ * a pure function of this row (`decideBoutOutcome`), decided once by
+ * `decide_bout()` after `scheduled_at` and recorded in `bout_results`. Nothing
+ * about it ever reads or writes marketplace reputation — no rating, review or
+ * job count moves when a fighter wins.
+ */
+export type Bout = {
+  id: UUID;
+  channel_id: UUID;
+  season: number;
+  fighter_a: UUID;
+  fighter_b: UUID;
+  /** 1..100. Fighter A's share of the odds is `a / (a + b)`. */
+  fighter_a_weight: number;
+  /** 1..100. */
+  fighter_b_weight: number;
+  scheduled_at: ISODateString;
+  /** The determinism input. ASCII `[A-Za-z0-9._:-]{1,64}`, enforced by a check. */
+  seed: string;
+  kind: BoutKind;
+  status: BoutStatus;
+  created_at: ISODateString;
+};
+
+/**
+ * `bout_results` (0012) — the write-once ledger. One row per decided bout,
+ * written by `decide_bout()` (or the seed) and never updated or deleted; a
+ * trigger refuses any row that is not the formula's outcome for its bout.
+ */
+export type BoutResult = {
+  bout_id: UUID;
+  winner_id: UUID;
+  method: BoutMethod;
+  /** 16 lowercase hex characters from the same digest — input for the recap copy. */
+  narrative_seed: string;
+  decided_at: ISODateString;
+};
+
 /** `threads` — an inbox conversation between a profile and an agent. */
 export type Thread = {
   id: UUID;
@@ -834,6 +912,38 @@ export type CompetitionWithEntries = Competition & {
   channel: Channel | null;
 };
 
+/**
+ * A fighter as the Fight League shows one: identity only.
+ *
+ * Deliberately **not** `Agent`. The league must never read marketplace
+ * reputation, so the shapes it returns carry no `rating_avg`, `rating_count`,
+ * `jobs_completed` or price — a league table cannot print a number it was
+ * never handed.
+ */
+export type LeagueFighter = Pick<
+  Agent,
+  "id" | "handle" | "name" | "avatar_emoji" | "avatar_gradient"
+>;
+
+/** `listBouts()` / `getBout()` — a bout with its fighters and, once decided, its result. */
+export type BoutWithResult = Bout & {
+  fighterA: LeagueFighter;
+  fighterB: LeagueFighter;
+  result: BoutResult | null;
+};
+
+/**
+ * One row of `leagueStandings()`. `wins` and `losses` are counted from
+ * `bout_results` and nothing else; `decided` is their sum. A fighter on the
+ * card whose bouts are all still scheduled reads 0–0.
+ */
+export type LeagueStanding = {
+  fighter: LeagueFighter;
+  wins: number;
+  losses: number;
+  decided: number;
+};
+
 export type RoomWithCounts = Room & {
   presenceCount: number;
   openSlots: number;
@@ -972,6 +1082,12 @@ export type EventFilter = ListOptions & {
 export type CompetitionFilter = ListOptions & {
   status?: CompetitionStatus;
   channelId?: UUID;
+};
+
+/** `listBouts()` and `leagueStandings()` — both filters optional and combinable. */
+export type BoutFilter = {
+  channelId?: UUID;
+  season?: number;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -1241,6 +1357,8 @@ export type DistrictDataset = {
   channelChat: ChatMessage[];
   competitions: Competition[];
   competitionEntries: CompetitionEntry[];
+  bouts: Bout[];
+  boutResults: BoutResult[];
   loungeMessages: LoungeMessage[];
   threads: Thread[];
   messages: Message[];

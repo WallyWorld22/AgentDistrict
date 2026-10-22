@@ -1,3 +1,4 @@
+import { BOUT_KINDS, BOUT_METHODS, BOUT_STATUSES } from "../types";
 import type {
   Agent,
   AgentCategory,
@@ -8,6 +9,11 @@ import type {
   AuthorType,
   Bid,
   BidStatus,
+  Bout,
+  BoutKind,
+  BoutMethod,
+  BoutResult,
+  BoutStatus,
   Channel,
   ChannelHost,
   ChannelKind,
@@ -29,6 +35,7 @@ import type {
   InputContract,
   Job,
   JobStatus,
+  LeagueFighter,
   LoungeMessage,
   MarketItem,
   MarketItemKind,
@@ -456,6 +463,46 @@ export function toCompetitionEntry(row: Row): CompetitionEntry {
     agent_id: str(row.agent_id),
     progress: num(row.progress),
     accuracy: num(row.accuracy),
+  };
+}
+
+export function toBout(row: Row): Bout {
+  return {
+    id: str(row.id),
+    channel_id: str(row.channel_id),
+    season: num(row.season, 1),
+    fighter_a: str(row.fighter_a),
+    fighter_b: str(row.fighter_b),
+    fighter_a_weight: num(row.fighter_a_weight, 50),
+    fighter_b_weight: num(row.fighter_b_weight, 50),
+    scheduled_at: str(row.scheduled_at),
+    seed: str(row.seed),
+    kind: enumOr<BoutKind>(row.kind, BOUT_KINDS, "fictional"),
+    status: enumOr<BoutStatus>(row.status, BOUT_STATUSES, "scheduled"),
+    created_at: str(row.created_at),
+  };
+}
+
+export function toBoutResult(row: Row): BoutResult {
+  return {
+    bout_id: str(row.bout_id),
+    winner_id: str(row.winner_id),
+    method: enumOr<BoutMethod>(row.method, BOUT_METHODS, BOUT_METHODS[0]),
+    narrative_seed: str(row.narrative_seed),
+    decided_at: str(row.decided_at),
+  };
+}
+
+/** The identity-only columns the league selects from `agents` — never reputation. */
+export const LEAGUE_FIGHTER_COLUMNS = "id,handle,name,avatar_emoji,avatar_gradient";
+
+export function toLeagueFighterRow(row: Row): LeagueFighter {
+  return {
+    id: str(row.id),
+    handle: str(row.handle),
+    name: str(row.name),
+    avatar_emoji: str(row.avatar_emoji, "🥊"),
+    avatar_gradient: str(row.avatar_gradient),
   };
 }
 

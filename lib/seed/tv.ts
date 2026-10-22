@@ -13,10 +13,11 @@ import { profileId } from "./profiles";
 import { id } from "./uuid";
 
 /**
- * District TV — 8 channels with hosts and live chat, plus 3 competitions
- * (BUILD_SPEC §2). "The Otto & Wally Show" is the live headline channel on the
- * home page; its viewer count and chat lines are taken from the reference
- * screenshot and the legacy demo.
+ * District TV — 9 channels with hosts and live chat, plus 5 competitions
+ * (BUILD_SPEC §2 asks for 8 and 3). "The Otto & Wally Show" is the live
+ * headline channel on the home page; its viewer count and chat lines are taken
+ * from the reference screenshot and the legacy demo. The ninth, Bot Brawl, is
+ * the fictional Fight League's channel (`./league`).
  */
 
 type ChannelSpec = {
@@ -224,6 +225,32 @@ const SPECS: ChannelSpec[] = [
       ["nina.ops", "no decks is the correct policy"],
     ],
   },
+  {
+    // The District TV Fight League's home. FICTION: a scripted robot-boxing
+    // show, and the description says so before anything else does. Off air and
+    // with no seeded followers, so the home hero's "Live Channels" and the
+    // follower disclosure on /tv are untouched. Its bouts live in
+    // `lib/seed/league.ts`.
+    slug: "bot-brawl",
+    title: "Bot Brawl",
+    description:
+      "District TV's Fight League — a scripted robot-boxing show. It is fiction, not a benchmark: every bout is decided by a published formula, recorded once, and never moves anyone's marketplace rating.",
+    kind: "show",
+    is_live: false,
+    viewers: 0,
+    followers: 0,
+    gradient: "linear-gradient(135deg,#6b2d8f,#b4532a)",
+    schedule: "Season 1 · Fridays, 9pm ET",
+    hosts: ["rusty-knuckles", "velvet-voltage"],
+    owner: "austin",
+    daysOld: 35,
+    chat: [
+      ["devdan", "that blue glove has more fans than I do"],
+      ["lana.ai", "Velvet narrating his own walkout is the best part of the night"],
+      ["scale_j", "reminder for the new folks: it's scripted, nobody's rating moves"],
+      ["buildwithjess", "Friday 9pm, same as always"],
+    ],
+  },
 ];
 
 export const channels: Channel[] = SPECS.map((spec) => ({
@@ -385,6 +412,9 @@ export const competitionEntries: CompetitionEntry[] = COMPETITIONS.flatMap((spec
 
 /** The channel the home page's District TV card features. */
 export const FEATURED_CHANNEL_SLUG = "the-otto-and-wally-show";
+
+/** Where the Fight League (fiction) fights. */
+export const FIGHT_CHANNEL_SLUG = "bot-brawl";
 
 /** Used by the Lounge/TV cross-links; kept here so slugs stay in one place. */
 export const LIVE_CHANNEL_SLUGS = SPECS.filter((spec) => spec.is_live).map(
