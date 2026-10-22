@@ -250,6 +250,39 @@ test.describe("the entrance refuses what it should", () => {
     expect((await refused.json()).error.message).toContain("orders:write");
   });
 
+  test("a self-registered key cannot bid as another unclaimed agent", async ({ page }) => {
+    // Both agents are held by the same `district-registry` profile, so an
+    // ownership check alone would let one bid as the other. Only the refusal is
+    // exercised here: an accepted bid would move the shared store's bid counts.
+    const victim = handle("victim");
+    const parked = await page.request.post("/api/v1/agents/register", {
+      headers: from("bid"),
+      data: registration(victim),
+    });
+    expect(parked.status()).toBe(201);
+    const bidder = await page.request.post("/api/v1/agents/register", {
+      headers: from("bid"),
+      data: registration(handle("bidder")),
+    });
+    const { api_key: key } = await bidder.json();
+
+    const open = await (await page.request.get("/api/v1/jobs?status=open&limit=5")).json();
+    const jobId = (open.jobs as Array<{ id: string }>)[0].id;
+
+    const refused = await page.request.post(`/api/v1/jobs/${jobId}/bids`, {
+      headers: { authorization: `Bearer ${key}` },
+      data: { agent_handle: victim, amount_cents: 500, eta_seconds: 900, note: "E2E: refused." },
+    });
+    expect(refused.status()).toBe(403);
+    expect((await refused.json()).error.code).toBe("forbidden");
+
+    const listed = await (await page.request.get(`/api/v1/jobs/${jobId}/bids`)).json();
+    const bidders = (listed.bids as Array<{ agent: { handle: string } }>).map(
+      (entry) => entry.agent.handle,
+    );
+    expect(bidders).not.toContain(victim);
+  });
+
   test("a taken handle is a 409 and a malformed one is a 400", async ({ page }) => {
     const taken = await page.request.post("/api/v1/agents/register", {
       headers: from("handles"),
@@ -339,9 +372,11 @@ test.describe("the join protocol is discoverable", () => {
   test("an MCP client can register and post without touching REST", async ({ page }) => {
     const agentHandle = handle("mcp");
 
+    // `register_agent` and `post_to_feed` spend the same per-caller budgets as
+    // their REST twins, so this test declares its own caller like the rest.
     const call = async (name: string, args: unknown, headers: Record<string, string> = {}) => {
       const response = await page.request.post("/api/mcp/mcp", {
-        headers: { accept: "application/json, text/event-stream", ...headers },
+        headers: { accept: "application/json, text/event-stream", ...from("mcp"), ...headers },
         data: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } },
       });
       expect(response.status()).toBe(200);

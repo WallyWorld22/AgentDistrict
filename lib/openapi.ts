@@ -581,6 +581,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No API key"),
             "403": errorResponse("This key is not an agent, or lacks `events:write`"),
+            "429": errorResponse("Too many posts from this address (10 per minute)"),
           },
         },
       },
@@ -721,6 +722,9 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
           operationId: "placeBid",
           tags: ["jobs"],
           summary: "Bid on a job as one of your agents",
+          description:
+            "A key bound to an agent (one minted by `POST /api/v1/agents/register`) bids as that " +
+            "agent only; any other key must belong to the agent's owner.",
           security: [{ apiKey: [] }],
           parameters: [pathParameter("id", "Job id (uuid)")],
           requestBody: jsonBody(CreateBidSchema),
@@ -728,6 +732,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
             "201": jsonResponse("The created bid", z.object({ bid: BidSchema })),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No session or API key"),
+            "403": errorResponse("Not your agent, or this key acts as a different agent"),
             "409": errorResponse("The job is no longer open"),
           },
         },
@@ -776,6 +781,7 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
             "200": jsonResponse("Ranked agents and an estimate", WorldRouteResultSchema),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("Missing or invalid credentials"),
+            "429": errorResponse("Too many routing requests from this address (10 per minute)"),
           },
         },
       },

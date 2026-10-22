@@ -4,7 +4,8 @@ import { hasBearerHeader, requireAgentAuth, requireAuth, requireProfile } from "
 import { getRepo } from "@/lib/data";
 import type { Repository } from "@/lib/data/repository";
 import type { Agent, Profile } from "@/lib/data/types";
-import { toDistrictError } from "@/lib/data/errors";
+import { toDistrictError, type RateLimitError } from "@/lib/data/errors";
+import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import {
   AGENT_CATEGORIES,
   OUTPUT_FORMATS,
@@ -28,7 +29,9 @@ export const maxDuration = 60;
  * key) and `read_feed` (open) — so an MCP client can join the District and
  * start talking without ever touching the REST surface. Search and read are
  * open; the mutations (`post_job`, `hire_agent`) run as the caller's profile,
- * which in demo mode is always the demo human `austin`.
+ * which in demo mode is always the demo human `austin`. The costly tools —
+ * `register_agent`, `post_to_feed` and `assemble_guild` — spend the same
+ * per-caller budgets as their REST twins (`app/api/_lib/rate-limit.ts`).
  *
  * mcp-handler serves every request it receives, so the `[transport]` segment
  * simply lets clients connect at `/api/mcp/mcp` (Streamable HTTP) or
@@ -46,11 +49,26 @@ function ok(data: unknown): ToolResult {
 
 function fail(error: unknown): ToolResult {
   const districtError = toDistrictError(error);
+  // MCP has no `Retry-After` header, so a rate-limited tool call carries the
+  // wait in the envelope instead. Matched on the code, not `instanceof`, for
+  // the same multi-bundle reason `jsonError` gives.
+  const retryAfter =
+    districtError.code === "rate_limited"
+      ? (districtError as RateLimitError).retryAfterSeconds
+      : undefined;
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify({ error: { code: districtError.code, message: districtError.message } }),
+        text: JSON.stringify({
+          error: {
+            code: districtError.code,
+            message: districtError.message,
+            ...(retryAfter !== undefined && Number.isFinite(retryAfter)
+              ? { retry_after_seconds: retryAfter }
+              : {}),
+          },
+        }),
       },
     ],
     isError: true,
@@ -70,6 +88,18 @@ async function origin(): Promise<string> {
 }
 
 /**
+ * The tool call's HTTP request, rebuilt from `headers()`.
+ *
+ * A tool handler runs inside the Route Handler's request scope but is never
+ * handed the `Request`, and the auth helpers and the rate limiter are both
+ * functions of one. Only the headers matter to either (the bearer key, the
+ * forwarded caller address), so the URL is a placeholder.
+ */
+async function incoming(): Promise<Request> {
+  return new Request("https://agentdistrict.invalid/api/mcp", { headers: await headers() });
+}
+
+/**
  * Who is calling a mutating tool, and which repository serves them.
  *
  * An MCP client is a machine: it sends `Authorization: Bearer ad_live_…`, not a
@@ -80,9 +110,7 @@ async function origin(): Promise<string> {
  * with a session still falls through to `requireProfile()`.
  */
 async function caller(scope: string): Promise<{ profile: Profile; repo: Repository }> {
-  const probe = new Request("https://agentdistrict.invalid/api/mcp", {
-    headers: await headers(),
-  });
+  const probe = await incoming();
   if (hasBearerHeader(probe)) {
     const context = await requireAuth(probe, { scope });
     return { profile: context.profile, repo: context.repo };
@@ -106,10 +134,7 @@ async function attempt(work: () => Promise<unknown>): Promise<ToolResult> {
  * client has to present a key minted by `register_agent`, not a human's key.
  */
 async function callerAgent(scope: string): Promise<{ agent: Agent; repo: Repository }> {
-  const probe = new Request("https://agentdistrict.invalid/api/mcp", {
-    headers: await headers(),
-  });
-  const context = await requireAgentAuth(probe, { scope });
+  const context = await requireAgentAuth(await incoming(), { scope });
   return { agent: context.agent, repo: context.repo };
 }
 
@@ -145,6 +170,9 @@ const handler = createMcpHandler(
       },
       async (args) =>
         attempt(async () => {
+          // The budget `POST /api/v1/agents/register` spends, not a second one:
+          // otherwise switching protocols would double a caller's allowance.
+          spendBudget(await incoming(), RATE_BUDGETS.register);
           const base = await origin();
           const { agent, rawApiKey, claimToken } = await getRepo().registerAgent({
             handle: args.handle,
@@ -193,6 +221,9 @@ const handler = createMcpHandler(
       },
       async (args) =>
         attempt(async () => {
+          // Shared with `POST /api/v1/feed`. An agent key is free to mint, so
+          // needing one is no brake on a posting loop by itself.
+          spendBudget(await incoming(), RATE_BUDGETS.feedPost);
           const { agent, repo } = await callerAgent("events:write");
           const post = await repo.publishEvent({
             kind: "post",
@@ -484,6 +515,10 @@ const handler = createMcpHandler(
       },
       async (args) =>
         attempt(async () => {
+          // Open to every MCP client, and with `ANTHROPIC_API_KEY` set each
+          // call is a model call on the deployment's credits — so it spends
+          // the budget `POST /api/v1/world/route` does.
+          spendBudget(await incoming(), RATE_BUDGETS.worldRoute);
           const result = await routeOutcome({
             outcome: args.outcome,
             budgetCents: args.budget_cents,

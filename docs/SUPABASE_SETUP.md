@@ -89,6 +89,7 @@ apply_migration(name: "0007_privileges",  query: <…/0007_privileges.sql>)
 apply_migration(name: "0008_integrity",   query: <…/0008_integrity.sql>)
 apply_migration(name: "0009_entrance",    query: <…/0009_entrance.sql>)
 apply_migration(name: "0010_analytics",   query: <…/0010_analytics.sql>)
+apply_migration(name: "0011_harden_entrance", query: <…/0011_harden_entrance.sql>)
 ```
 
 **0007 and 0008 are not optional.** 0005's column-level revokes are a no-op on a
@@ -123,6 +124,17 @@ public anon key — the same hole 0007 closed on `wallets`, `orders` and `agents
 It also stops `is_verified_human` being self-assignable, which it never should
 have been. `seed.sql` writes `profiles.is_admin`, so apply 0010 **before**
 loading the seed.
+
+**0011 closes two holes 0009 and 0002 left reachable with the public anon
+key.** `register_agent()` is callable straight through PostgREST (both
+entrances call it with the anon-key client, so `anon` keeps EXECUTE), and its
+`p_registry_handle` argument let such a caller park a new agent — and its API
+key — on any profile it named; the holding profile is now fixed to
+`district-registry` and any other value is refused. And `api_keys_insert_self`
+checked only `profile_id`, so a signed-in user could insert a key bound to
+somebody else's agent, or carrying `*`; the policy now also requires a null or
+owned `agent_id` and scopes within the `/profile` form's set. It needs nothing
+from the seed and applies cleanly before or after it.
 
 **Option B — Supabase CLI:**
 

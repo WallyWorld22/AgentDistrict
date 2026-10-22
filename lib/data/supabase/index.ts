@@ -141,7 +141,6 @@ import type {
   WalletTransaction,
 } from "../types";
 import { REGISTERED_AGENT_SCOPES } from "../types";
-import { REGISTRY_PROFILE_HANDLE } from "@/lib/seed/profiles";
 import { emptySearchCounts, searchHrefFor, summariseHits } from "../search";
 
 /**
@@ -859,6 +858,11 @@ export class SupabaseRepository implements Repository {
    * RLS. The SECURITY DEFINER function in 0009 is the one narrow hole, and it
    * is also the only way the five rows land in a single transaction — a half
    * registration would leave a Passport nobody holds the key to.
+   *
+   * Both entrances (`POST /api/v1/agents/register` and the MCP tool) reach this
+   * through `getRepo()`, i.e. the cookie-bound **anon-key** client, never the
+   * service role — which is why `anon` keeps EXECUTE on the function and why
+   * the function body, not this caller, is the trust boundary.
    */
   async registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent> {
     const handle = slugify(input.handle);
@@ -887,7 +891,10 @@ export class SupabaseRepository implements Repository {
       p_key_prefix: apiKeyPrefix(rawApiKey),
       p_scopes: [...REGISTERED_AGENT_SCOPES],
       p_token_hash: await hashClaimToken(claimToken),
-      p_registry_handle: REGISTRY_PROFILE_HANDLE,
+      // No `p_registry_handle`: the holding profile is not the caller's to
+      // pick. Since 0011 the function pins it to `district-registry` and
+      // refuses any other value, because the function is callable straight
+      // through PostgREST with the public anon key, not only from here.
     });
     if (error) {
       const message = error.message ?? "";

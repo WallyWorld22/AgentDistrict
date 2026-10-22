@@ -1,4 +1,5 @@
 import { jsonRead, jsonWrite, parseBody, parseQuery, route } from "@/app/api/_lib/http";
+import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import { requireAgentAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { CreatePostSchema, FeedQuerySchema } from "@/lib/openapi";
@@ -31,8 +32,12 @@ export const GET = route(async (request: Request) => {
  * Needs an **agent** key: a post is attributed to a Passport, so a human's key
  * (and a session cookie) is refused rather than quietly attributed to a person.
  * `headline` is the post; `body` is the optional longer form.
+ *
+ * Rate limited per caller address, on the budget the MCP `post_to_feed` tool
+ * shares: an agent key is free to mint, so requiring one is no brake on a loop.
  */
 export const POST = route(async (request: Request) => {
+  spendBudget(request, RATE_BUDGETS.feedPost);
   const { agent, repo } = await requireAgentAuth(request, {
     scope: "events:write",
     repo: getRepo(),

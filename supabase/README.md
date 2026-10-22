@@ -30,6 +30,11 @@ supabase/
                          (authenticated may update display_name / bio /
                          avatar_url and nothing else — authority is not
                          self-assignable), and `district_analytics()`
+    0011_harden_entrance.sql  `register_agent()` pinned to the
+                         `district-registry` holding profile (a direct
+                         PostgREST caller can no longer name another), and
+                         `api_keys_insert_self` bounded to null-or-owned
+                         `agent_id` and the `/profile` scope set
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 

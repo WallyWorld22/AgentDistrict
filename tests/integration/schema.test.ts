@@ -1041,6 +1041,156 @@ suite("supabase schema against a real Postgres", () => {
     }
   });
 
+  /* ----------------------------------------- 0011: the hardened entrance */
+
+  /** `register_agent()` as anon with the app's 18 arguments, returning the agent. */
+  async function registerAsAnon(handle: string, keyHash: string, tokenHash: string) {
+    await client.query("set local role anon");
+    const { rows } = await client.query<{ id: string; owner_id: string }>(
+      `select id, owner_id from public.register_agent(
+         p_handle => $1, p_name => 'Probe', p_tagline => 'Registry pinning probe.',
+         p_description => '', p_avatar_emoji => '🤖',
+         p_avatar_gradient => 'linear-gradient(135deg,#297dff,#7559ff)',
+         p_category => 'research', p_skills => array['probing']::text[],
+         p_regions => array['US']::text[], p_room_slug => 'research-pit',
+         p_pricing_model => 'per_run', p_starting_price_cents => 0,
+         p_endpoints => '{}'::jsonb, p_mcp_tools => '{}'::text[],
+         p_key_hash => $2, p_key_prefix => 'ad_live_prbe',
+         p_scopes => array['agents:read','bids:write']::text[], p_token_hash => $3
+       )`,
+      [handle, keyHash, tokenHash],
+    );
+    return rows[0];
+  }
+
+  it("pins register_agent() to the District registry, whatever the caller names", async () => {
+    await client.query("begin");
+    try {
+      // Straight through PostgREST with the anon key, naming a real person's
+      // profile: before 0011 this bound the agent *and its key* to `austin`.
+      await client.query("set local role anon");
+      await client.query("savepoint hijack");
+      await expect(
+        client.query(
+          `select public.register_agent(
+             'hijack-probe', 'Hijack', 'Wants to live on someone else''s profile.', '',
+             '🤖', 'linear-gradient(135deg,#297dff,#7559ff)',
+             'research', array['probing']::text[], array['US']::text[],
+             'research-pit', 'per_run', 0, '{}'::jsonb, '{}'::text[],
+             $1, 'ad_live_hjck', array['agents:read','bids:write']::text[], $2, 'austin'
+           )`,
+          [`sha256$${"e".repeat(64)}`, "f".repeat(64)],
+        ),
+      ).rejects.toThrow(/only be held by the District registry/);
+      await client.query("rollback to savepoint hijack");
+
+      await client.query("set local role postgres");
+      const leaked = await client.query<{ count: string }>(
+        "select count(*)::text as count from public.agents where handle = 'hijack-probe'",
+      );
+      expect(Number(leaked.rows[0].count)).toBe(0);
+
+      // The app's own call shape — no `p_registry_handle` at all — still works,
+      // and still lands on the registry.
+      const agent = await registerAsAnon(
+        "pinned-probe",
+        `sha256$${"1".repeat(64)}`,
+        "2".repeat(64),
+      );
+      await client.query("set local role postgres");
+      const registry = await client.query<{ id: string }>(
+        "select id from public.profiles where handle = 'district-registry'",
+      );
+      expect(agent.owner_id).toBe(registry.rows[0].id);
+      const key = await client.query<{ profile_id: string }>(
+        "select profile_id from public.api_keys where agent_id = $1",
+        [agent.id],
+      );
+      expect(key.rows.map((row) => row.profile_id)).toEqual([registry.rows[0].id]);
+    } finally {
+      await client.query("rollback");
+    }
+
+    // The front door is still open to the roles the app calls it as: both
+    // entrances use the anon-key client, never the service role.
+    const signature =
+      "public.register_agent(text, text, text, text, text, text, text, text[], text[], " +
+      "text, text, integer, jsonb, text[], text, text, text[], text, text)";
+    const grants = await client.query<{ anon: boolean; authenticated: boolean }>(
+      `select has_function_privilege('anon', $1, 'EXECUTE') as anon,
+              has_function_privilege('authenticated', $1, 'EXECUTE') as authenticated`,
+      [signature],
+    );
+    expect(grants.rows[0]).toEqual({ anon: true, authenticated: true });
+  });
+
+  it("refuses a signed-in user who forges an agent-bound or over-scoped key", async () => {
+    let n = 0;
+    const insertKey = (profile: string, agentId: string | null, scopes: (string | null)[]) => {
+      n += 1;
+      return client.query(
+        `insert into public.api_keys (profile_id, label, key_hash, key_prefix, scopes, agent_id)
+         values ($1, 'forge probe', $2, 'ad_live_frge', $3::text[], $4) returning id`,
+        [profile, `sha256$${String(n).padStart(64, "9")}`, scopes, agentId],
+      );
+    };
+    const refused = async (label: string, work: () => Promise<unknown>) => {
+      await client.query(`savepoint forge_${label}`);
+      await expect(work()).rejects.toThrow(/row-level security/);
+      await client.query(`rollback to savepoint forge_${label}`);
+    };
+
+    await client.query("begin");
+    try {
+      // An unclaimed agent, held by the registry — the shape the forge targets.
+      const stranger = await registerAsAnon(
+        "forge-target",
+        `sha256$${"3".repeat(64)}`,
+        "4".repeat(64),
+      );
+
+      await client.query("set local role postgres");
+      const own = await client.query<{ id: string }>(
+        "select id from public.agents where owner_id = $1 order by handle limit 1",
+        [DEMO_PROFILE_ID],
+      );
+      const theirs = await client.query<{ id: string }>(
+        "select id from public.agents where owner_id = $1 order by handle limit 1",
+        [profileId("agentmax")],
+      );
+      expect(own.rows).toHaveLength(1);
+      expect(theirs.rows).toHaveLength(1);
+
+      await client.query("set local role authenticated");
+      await client.query("select set_config('request.jwt.claim.sub', $1, true)", [
+        DEMO_PROFILE_ID,
+      ]);
+
+      // What `/profile` mints: no agent, scopes from the form. Still allowed.
+      const plain = await insertKey(DEMO_PROFILE_ID, null, [
+        "agents:read", "gigs:read", "jobs:read", "jobs:write", "orders:read",
+        "orders:write", "bids:write", "stats:read", "events:read",
+      ]);
+      expect(plain.rows).toHaveLength(1);
+      // Bound to an agent you own: allowed.
+      const bound = await insertKey(DEMO_PROFILE_ID, own.rows[0].id, ["bids:write"]);
+      expect(bound.rows).toHaveLength(1);
+
+      // Bound to an agent you do not own — an unclaimed one, or another
+      // creator's — would be a key that bids and posts as that agent.
+      await refused("unclaimed", () => insertKey(DEMO_PROFILE_ID, stranger.id, ["bids:write"]));
+      await refused("theirs", () => insertKey(DEMO_PROFILE_ID, theirs.rows[0].id, ["bids:write"]));
+      // Scopes the form cannot emit.
+      await refused("wildcard", () => insertKey(DEMO_PROFILE_ID, null, ["*"]));
+      await refused("post", () => insertKey(DEMO_PROFILE_ID, null, ["agents:read", "events:write"]));
+      await refused("null", () => insertKey(DEMO_PROFILE_ID, null, [null]));
+      // And, as before, a key on somebody else's profile.
+      await refused("profile", () => insertKey(profileId("agentmax"), null, ["agents:read"]));
+    } finally {
+      await client.query("rollback");
+    }
+  });
+
   it("answers search_district() across every kind it documents", async () => {
     const { rows } = await client.query<{ kind: string; slug: string }>(
       "select kind, slug from public.search_district($1, $2)",
