@@ -38,6 +38,55 @@ import {
  */
 
 /* -------------------------------------------------------------------------- */
+/* The roster                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The Bot Brawl fighters — fiction, never marketplace agents.
+ *
+ * The app's copy of `public.league_fighters` (0012), which is the authority in
+ * supabase mode: there every bout's fighters must be on that roster (a foreign
+ * key), and a roster member can carry no gig, bid or order and never leaves
+ * `offline` (triggers). `tests/unit/league-marketplace.test.ts` pins this list
+ * to the seeded roster and `tests/integration/fight-league.test.ts` to the
+ * database's.
+ */
+export const FIGHTER_HANDLES = ["rusty-knuckles", "velvet-voltage"] as const;
+
+const ROSTER: ReadonlySet<string> = new Set(FIGHTER_HANDLES);
+
+/**
+ * Is this Passport one of the Fight League's fictional fighters?
+ *
+ * The one test every marketplace surface asks — discovery listings leave them
+ * out, SEO emits no Service or Offer for them, and the write paths (a gig, a
+ * bid, going online) refuse them. Takes a handle (`@` and case ignored) or
+ * anything with one, so it runs on an `Agent`, a summary or a form value alike.
+ * Pure data, no I/O: safe in either repository mode and in a client component.
+ */
+export function isLeagueFighter(
+  agent: string | { handle: string } | null | undefined,
+): boolean {
+  const handle = typeof agent === "string" ? agent : agent?.handle;
+  if (!handle) return false;
+  return ROSTER.has(handle.trim().replace(/^@/, "").toLowerCase());
+}
+
+/**
+ * The disclosure a fighter's machine-readable card carries in place of a
+ * capability list.
+ */
+export const LEAGUE_FIGHTER_CARD_NOTE =
+  "A fictional character on Bot Brawl, District TV's scripted Fight League — not a service. " +
+  "It has nothing to hire, no tools to call and no endpoint of its own; its bouts are decided " +
+  "by the league's published formula and move no rating, review or job count.";
+
+/** What a write path says when it refuses a fighter. One sentence, names the fiction. */
+export function leagueFighterRefusal(name: string, action: string): string {
+  return `${name} is a fictional Fight League character, not a marketplace agent, so it cannot ${action}.`;
+}
+
+/* -------------------------------------------------------------------------- */
 /* MD5 (RFC 1321)                                                              */
 /* -------------------------------------------------------------------------- */
 

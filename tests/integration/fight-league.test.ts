@@ -4,10 +4,15 @@ import path from "node:path";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDemoRepository } from "@/lib/data/demo";
-import { decideBoutOutcome, type BoutFormulaInput } from "@/lib/data/league";
+import {
+  FIGHTER_HANDLES,
+  decideBoutOutcome,
+  isLeagueFighter,
+  type BoutFormulaInput,
+} from "@/lib/data/league";
 import type { Repository } from "@/lib/data/repository";
 import { SupabaseRepository } from "@/lib/data/supabase";
-import type { BoutResult } from "@/lib/data/types";
+import type { AgentSort, BoutResult } from "@/lib/data/types";
 import {
   DEMO_PROFILE_ID,
   FIGHT_CHANNEL_ID,
@@ -90,9 +95,9 @@ async function apply(sql: string, label: string): Promise<void> {
 }
 
 /**
- * `supabase/seed.sql` as a 0011 database can hold it: the two league tables'
- * sections and the `bout_result` feed rows taken out, everything else as
- * generated. That is the District production already has when 0012 lands.
+ * `supabase/seed.sql` as a 0011 database can hold it: the three league
+ * tables' sections (roster, bouts, results) and the `bout_result` feed rows
+ * taken out, everything else as generated. That is the District production already has when 0012 lands.
  */
 function seedWithoutLeague(sql: string): string {
   const out: string[] = [];
@@ -104,7 +109,7 @@ function seedWithoutLeague(sql: string): string {
   for (const line of sql.split("\n")) {
     const heading = /^-- ([a-z_]+) \(\d+ rows?\)$/.exec(line);
     if (heading) section = heading[1];
-    if (section === "bouts" || section === "bout_results") continue;
+    if (section === "league_fighters" || section === "bouts" || section === "bout_results") continue;
 
     if (section === "events" && line.startsWith("insert into public.events ")) {
       insert = line;
@@ -128,7 +133,7 @@ function seedWithoutLeague(sql: string): string {
     out.push(line);
   }
   const statements = out.filter((line) => !line.startsWith("--"));
-  if (statements.some((line) => /bout_result|public\.bouts/.test(line))) {
+  if (statements.some((line) => /bout_result|public\.bouts|league_fighters/.test(line))) {
     throw new Error("league rows left in the 0011-shaped seed");
   }
   return out.join("\n");
@@ -232,10 +237,11 @@ suite("the Fight League (0012) on a real Postgres", () => {
 
     const rls = await db.query<{ relname: string; relrowsecurity: boolean }>(
       `select relname, relrowsecurity from pg_class
-        where relnamespace = 'public'::regnamespace and relname in ('bouts', 'bout_results')`,
+        where relnamespace = 'public'::regnamespace
+          and relname in ('league_fighters', 'bouts', 'bout_results')`,
     );
     expect(rls.rows.every((row) => row.relrowsecurity)).toBe(true);
-    expect(rls.rows).toHaveLength(2);
+    expect(rls.rows).toHaveLength(3);
 
     const policies = await db.query<{ policyname: string }>(
       `select policyname from pg_policies
@@ -535,6 +541,405 @@ suite("the Fight League (0012) on a real Postgres", () => {
       formula_anon: false,
       formula_auth: false,
     });
+  });
+
+  /* ------------------------------------------------------------ the roster */
+
+  it("enrols exactly the fighters isLeagueFighter knows, and only the owner can enrol", async () => {
+    const { rows } = await db.query<{ handle: string }>(
+      `select a.handle from public.league_fighters f
+         join public.agents a on a.id = f.agent_id order by a.handle`,
+    );
+    expect(rows.map((row) => row.handle)).toEqual([...FIGHTER_HANDLES].sort());
+    for (const row of rows) expect(isLeagueFighter(row.handle)).toBe(true);
+
+    await db.query("begin");
+    try {
+      // Even the owner cannot enrol a marketplace agent: Scout sells, NightOwl
+      // is offline but has a track record.
+      for (const handle of ["scout", "nightowl"]) {
+        await refused(/is a marketplace agent .* cannot be enrolled as a fictional fighter/, () =>
+          db.query("insert into public.league_fighters (agent_id) values ($1)", [agentId(handle)]),
+        );
+      }
+      // Enrolment is never re-pointed or re-dated, and a fighter with bouts
+      // cannot be struck off.
+      await refused(/enrol-only/, () =>
+        db.query("update public.league_fighters set agent_id = $1 where agent_id = $2", [
+          agentId("scout"),
+          RUSTY,
+        ]),
+      );
+      await refused(/enrol-only/, () =>
+        db.query("update public.league_fighters set created_at = now() where agent_id = $1", [RUSTY]),
+      );
+      await refused(/foreign key/, () =>
+        db.query("delete from public.league_fighters where agent_id = $1", [RUSTY]),
+      );
+    } finally {
+      await db.query("rollback");
+    }
+
+    // No client, and not the service role, can write the roster at all.
+    for (const role of ["anon", "authenticated", "service_role"] as const) {
+      await as(
+        role,
+        async () => {
+          await refused(/permission denied/, () =>
+            db.query("insert into public.league_fighters (agent_id) values ($1)", [agentId("scout")]),
+          );
+          await refused(/permission denied/, () =>
+            db.query("update public.league_fighters set created_at = now()"),
+          );
+          await refused(/permission denied/, () => db.query("delete from public.league_fighters"));
+          expect(await count("select count(*)::text as count from public.league_fighters")).toBe(
+            FIGHTER_HANDLES.length,
+          );
+        },
+        role === "authenticated" ? DEMO_PROFILE_ID : undefined,
+      );
+    }
+  });
+
+  it("refuses a bout between real agents — as the owner and as the service role", async () => {
+    const SCOUT = agentId("scout");
+    const OTTO = agentId("otto");
+    const schedule = (a: string, b: string, probe: string) =>
+      db.query(
+        `insert into public.bouts (channel_id, season, fighter_a, fighter_b, scheduled_at, seed)
+         values ($1, 1, $2, $3, now() + interval '1 day', $4)`,
+        [FIGHT_CHANNEL_ID, a, b, probe],
+      );
+
+    for (const role of ["postgres", "service_role"] as const) {
+      await db.query("begin");
+      try {
+        await db.query(`set local role ${role}`);
+        // "Scout vs Otto": neither corner is on the roster.
+        await refused(/bouts_fighter_a_fkey/, () => schedule(SCOUT, OTTO, "probe:real-vs-real"));
+        // Half a fiction is no fiction: one real corner is refused too.
+        await refused(/bouts_fighter_b_fkey/, () => schedule(RUSTY, SCOUT, "probe:half"));
+        await refused(/bouts_fighter_a_fkey/, () => schedule(OTTO, VELVET, "probe:other-half"));
+        // Nor can an undecided bout be re-pointed at a real agent.
+        await refused(/bouts_fighter_a_fkey/, () =>
+          db.query("update public.bouts set fighter_a = $1 where id = $2", [SCOUT, boutId(7)]),
+        );
+        // A result can only name a roster member (and the service role cannot
+        // write one at all).
+        await refused(role === "postgres" ? /formula/ : /permission denied/, () =>
+          db.query(
+            `insert into public.bout_results (bout_id, winner_id, method, narrative_seed)
+             values ($1, $2, 'knockout', '0000000000000000')`,
+            [boutId(7), SCOUT],
+          ),
+        );
+        // The card the service role is there to schedule still schedules.
+        await schedule(RUSTY, VELVET, `probe:legit-${role}`);
+        expect(
+          await count("select count(*)::text as count from public.bouts where seed = $1", [
+            `probe:legit-${role}`,
+          ]),
+        ).toBe(1);
+      } finally {
+        await db.query("rollback");
+      }
+    }
+    expect(
+      await count(
+        "select count(*)::text as count from public.bouts where fighter_a = any($1::uuid[]) or fighter_b = any($1::uuid[])",
+        [[SCOUT, OTTO]],
+      ),
+    ).toBe(0);
+  });
+
+  /* --------------------------------------------- the ledger's remaining doors */
+
+  it("refuses TRUNCATE of the ledger and of the card, which no row trigger would see", async () => {
+    const results = await count("select count(*)::text as count from public.bout_results");
+    const bouts = await count("select count(*)::text as count from public.bouts");
+
+    await db.query("begin");
+    try {
+      await refused(/bout_results is part of the Fight League record and cannot be truncated/, () =>
+        db.query("truncate public.bout_results"),
+      );
+      await refused(/is part of the Fight League record and cannot be truncated/, () =>
+        db.query("truncate public.bouts, public.bout_results"),
+      );
+      await refused(/is part of the Fight League record and cannot be truncated/, () =>
+        db.query("truncate public.bouts cascade"),
+      );
+      // Cascading from the roster reaches both tables, and is refused there.
+      await refused(/is part of the Fight League record and cannot be truncated/, () =>
+        db.query("truncate public.league_fighters cascade"),
+      );
+      const triggers = await db.query<{ tgname: string }>(
+        `select tgname from pg_trigger
+          where tgrelid in ('public.bouts'::regclass, 'public.bout_results'::regclass)
+            and tgtype & 32 = 32 order by tgname`,
+      );
+      expect(triggers.rows.map((row) => row.tgname)).toEqual([
+        "bout_results_no_truncate",
+        "bouts_no_truncate",
+      ]);
+
+      // The service role holds TRUNCATE on `bouts` (it is granted ALL to
+      // schedule the card): every spelling of it is refused.
+      await db.query("set local role service_role");
+      for (const statement of [
+        "truncate public.bouts",
+        "truncate public.bouts cascade",
+        "truncate public.bouts, public.bout_results",
+        "truncate public.bout_results",
+      ]) {
+        await refused(/truncated|permission denied|referenced in a foreign key/, () =>
+          db.query(statement),
+        );
+      }
+    } finally {
+      await db.query("rollback");
+    }
+    expect(await count("select count(*)::text as count from public.bout_results")).toBe(results);
+    expect(await count("select count(*)::text as count from public.bouts")).toBe(bouts);
+  });
+
+  it("refuses a formula-correct result dated after the moment it is recorded", async () => {
+    // Bout 7 is due and undecided: its formula outcome is a valid row today…
+    const bout = seed.bouts.find((row) => row.id === boutId(7))!;
+    const outcome = decideBoutOutcome(bout);
+    const record = (decidedAt: string) =>
+      db.query(
+        `insert into public.bout_results (bout_id, winner_id, method, narrative_seed, decided_at)
+         values ($1, $2, $3, $4, ${decidedAt})`,
+        [bout.id, outcome.winner_id, outcome.method, outcome.narrative_seed],
+      );
+
+    await db.query("begin");
+    try {
+      // …but not stamped next month, nor a second ahead of the clock. The
+      // owner is refused: this is the trigger, not a privilege.
+      await refused(/cannot be dated in the future/, () => record("now() + interval '30 days'"));
+      await refused(/cannot be dated in the future/, () => record("now() + interval '1 second'"));
+      // An upcoming bout's result, future-dated to "after the bout", is the
+      // shape the guard exists for: refused, for the future date alone.
+      await db.query("update public.bouts set scheduled_at = now() + interval '7 days' where id = $1", [
+        bout.id,
+      ]);
+      await refused(/cannot be dated in the future/, () => record("now() + interval '8 days'"));
+      await refused(/before it is fought/, () => record("now()"));
+    } finally {
+      await db.query("rollback");
+    }
+
+    // Stamped now — what decide_bout() writes — it records.
+    await db.query("begin");
+    try {
+      await record("now()");
+      expect(
+        await count("select count(*)::text as count from public.bout_results where bout_id = $1", [
+          bout.id,
+        ]),
+      ).toBe(1);
+    } finally {
+      await db.query("rollback");
+    }
+  });
+
+  it("answers a decided bout from the ledger without taking the bout's row lock", async () => {
+    // What this backend holds on `bouts` after a call, inside its transaction.
+    const boutLocks = async () =>
+      (
+        await db.query<{ mode: string }>(
+          `select mode from pg_locks
+            where pid = pg_backend_pid() and locktype = 'relation'
+              and relation = 'public.bouts'::regclass`,
+        )
+      ).rows.map((row) => row.mode);
+
+    const events = () =>
+      count("select count(*)::text as count from public.events where kind = 'bout_result'");
+    await as("anon", async () => {
+      const before = await events();
+      const decided = await db.query("select * from public.decide_bout($1)", [boutId(1)]);
+      expect(decided.rows[0].winner_id).toBe(seed.boutResults[0].winner_id);
+      // A plain read: ACCESS SHARE, never the ROW SHARE a FOR UPDATE takes,
+      // and nothing written.
+      expect(await boutLocks()).not.toContain("RowShareLock");
+      expect(await events()).toBe(before);
+    });
+    // The undecided path still locks (the positive control for the probe).
+    await as("anon", async () => {
+      await db.query("select * from public.decide_bout($1)", [boutId(6)]);
+      expect(await boutLocks()).toContain("RowShareLock");
+    });
+
+    // And behaviourally: with another transaction holding both bouts' row
+    // locks, the decided one answers at once and the undecided one waits.
+    const holder = await pool.connect();
+    const caller = await pool.connect();
+    try {
+      await holder.query("begin");
+      await holder.query("select id from public.bouts where id = any($1::uuid[]) for update", [
+        [boutId(2), boutId(7)],
+      ]);
+
+      await caller.query("begin");
+      await caller.query("set local role anon");
+      await caller.query("set local lock_timeout = '400ms'");
+      const repeat = await caller.query("select * from public.decide_bout($1)", [boutId(2)]);
+      expect(repeat.rows[0].winner_id).toBe(seed.boutResults[1].winner_id);
+      await expect(caller.query("select * from public.decide_bout($1)", [boutId(7)])).rejects.toThrow(
+        /lock timeout/,
+      );
+    } finally {
+      await caller.query("rollback").catch(() => undefined);
+      await holder.query("rollback").catch(() => undefined);
+      caller.release();
+      holder.release();
+    }
+    expect(
+      await count("select count(*)::text as count from public.bout_results where bout_id = $1", [boutId(7)]),
+    ).toBe(0);
+  });
+
+  /* ---------------------------------------- fiction stays out of the marketplace */
+
+  it("refuses any gig, bid or order naming a fighter, whoever writes it", async () => {
+    const job = seed.jobs.find((row) => row.status === "open" && row.poster_id !== DEMO_PROFILE_ID)!;
+    const buyer = seed.profiles.find((row) => row.id !== DEMO_PROFILE_ID)!.id;
+    const gig = (agent: string, slug: string) =>
+      db.query(
+        `insert into public.gigs (agent_id, slug, title, category)
+         values ($1, $2, 'I will box for you', 'entertainment')`,
+        [agent, slug],
+      );
+    const bid = (agent: string) =>
+      db.query(
+        `insert into public.bids (job_id, agent_id, amount_cents, eta_seconds, note)
+         values ($1, $2, 100, 60, 'A fighter bidding')`,
+        [job.id, agent],
+      );
+    const order = (agent: string) =>
+      db.query(
+        `insert into public.orders (buyer_id, agent_id, brief, amount_cents)
+         values ($1, $2, 'Box for me', 100)`,
+        [buyer, agent],
+      );
+
+    // The demo owner, through RLS — which would let him: he owns both.
+    await as(
+      "authenticated",
+      async () => {
+        await refused(/fictional Fight League character.*no gigs row may name it/, () =>
+          gig(RUSTY, "rusty-gig-auth"),
+        );
+        await refused(/fictional Fight League character.*no bids row may name it/, () => bid(VELVET));
+      },
+      DEMO_PROFILE_ID,
+    );
+    // The service role and the owner, past RLS entirely.
+    for (const role of ["service_role", "postgres"] as const) {
+      await db.query("begin");
+      try {
+        await db.query(`set local role ${role}`);
+        await refused(/no gigs row may name it/, () => gig(VELVET, `velvet-gig-${role}`));
+        await refused(/no bids row may name it/, () => bid(RUSTY));
+        await refused(/no orders row may name it/, () => order(RUSTY));
+        // Re-pointing an existing row at a fighter is the same row.
+        await refused(/no gigs row may name it/, () =>
+          db.query("update public.gigs set agent_id = $1 where id = $2", [RUSTY, seed.gigs[0].id]),
+        );
+        await refused(/no orders row may name it/, () =>
+          db.query("update public.orders set agent_id = $1 where id = $2", [VELVET, seed.orders[0].id]),
+        );
+        // Everyone else is untouched by the guard.
+        await gig(agentId("scout"), `scout-probe-${role}`);
+      } finally {
+        await db.query("rollback");
+      }
+    }
+    for (const table of ["gigs", "bids", "orders"]) {
+      expect(
+        await count(`select count(*)::text as count from public.${table} where agent_id = any($1::uuid[])`, [
+          [RUSTY, VELVET],
+        ]),
+        table,
+      ).toBe(0);
+    }
+  });
+
+  it("keeps fighters offline in agents and in presence, whoever writes the status", async () => {
+    for (const role of ["authenticated", "service_role", "postgres"] as const) {
+      await as(
+        role === "postgres" ? "service_role" : role,
+        async () => {
+          if (role === "postgres") await db.query("set local role postgres");
+          for (const status of ["available", "live", "working"]) {
+            await refused(/stays offline and never takes work/, () =>
+              db.query(`update public.agents set status = $1 where id = $2`, [status, RUSTY]),
+            );
+            await refused(/stays offline and never takes work/, () =>
+              db.query(`update public.presence set status = $1 where agent_id = $2`, [status, VELVET]),
+            );
+          }
+          // Offline is what they are, so writing it passes.
+          await db.query("update public.agents set status = 'offline' where id = $1", [RUSTY]);
+          // A real agent's owner still flips presence freely.
+          await db.query("update public.agents set status = 'available' where id = $1", [agentId("scout")]);
+        },
+        role === "authenticated" ? DEMO_PROFILE_ID : undefined,
+      );
+    }
+    // A fresh presence row for a fighter cannot be seated online either.
+    await db.query("begin");
+    try {
+      await db.query("delete from public.presence where agent_id = $1", [RUSTY]);
+      await refused(/stays offline/, () =>
+        db.query(
+          `insert into public.presence (agent_id, room_slug, status) values ($1, 'creator-loft', 'available')`,
+          [RUSTY],
+        ),
+      );
+      await db.query(
+        `insert into public.presence (agent_id, room_slug, status) values ($1, 'creator-loft', 'offline')`,
+        [RUSTY],
+      );
+    } finally {
+      await db.query("rollback");
+    }
+    const statuses = await db.query<{ agent: string; seat: string }>(
+      `select a.status::text as agent, p.status::text as seat
+         from public.agents a join public.presence p on p.agent_id = a.id
+        where a.id = any($1::uuid[])`,
+      [[RUSTY, VELVET]],
+    );
+    expect(statuses.rows).toEqual([
+      { agent: "offline", seat: "offline" },
+      { agent: "offline", seat: "offline" },
+    ]);
+  });
+
+  it("leaves the fighters out of hire discovery through the real Supabase adapter", async () => {
+    // `listAgents({ excludeLeagueFighters })` as anon over PostgREST: the SQL
+    // path (`not.in`, before the range) and the search_agents RPC path.
+    const everyone = await supabase.listAgents({ limit: 200, sort: "newest" });
+    expect(everyone.map((agent) => agent.handle)).toEqual(expect.arrayContaining([...FIGHTER_HANDLES]));
+
+    for (const sort of ["trending", "rating", "price", "newest"] as AgentSort[]) {
+      const listed = await supabase.listAgents({ sort, limit: 200, excludeLeagueFighters: true });
+      expect(listed.filter((agent) => isLeagueFighter(agent)), sort).toEqual([]);
+      expect(listed, sort).toHaveLength(everyone.length - FIGHTER_HANDLES.length);
+      const page = await supabase.listAgents({ sort, limit: 5, excludeLeagueFighters: true });
+      expect(page, sort).toHaveLength(5);
+      expect(page.filter((agent) => isLeagueFighter(agent)), sort).toEqual([]);
+    }
+    const searched = await supabase.listAgents({ q: "fictional robot boxer", excludeLeagueFighters: true });
+    expect(searched.filter((agent) => isLeagueFighter(agent))).toEqual([]);
+    const unfiltered = await supabase.listAgents({ q: "fictional robot boxer" });
+    expect(unfiltered.map((agent) => agent.handle)).toEqual(expect.arrayContaining([...FIGHTER_HANDLES]));
+
+    // Existence is untouched: the Passport still resolves.
+    expect((await supabase.getAgentByHandle("rusty-knuckles"))!.handle).toBe("rusty-knuckles");
   });
 
   /* ------------------------------------------------------ integrity fixes */

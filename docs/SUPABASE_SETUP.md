@@ -156,8 +156,12 @@ closed.** The league is **fiction**, a scripted robot-boxing show on the
 `'fictional'`. A bout is decided once, by the SECURITY DEFINER
 `decide_bout(p_bout_id)`, from the bout row alone (an MD5 of its id and seed
 against its stored weights — the same formula as `lib/data/league.ts`), and
-recorded in `bout_results`, a write-once ledger a trigger keeps formula-true and
-never lets anyone update or delete. `decide_bout` is granted to `anon` because
+recorded in `bout_results`, a write-once ledger triggers keep formula-true,
+dated between the bout and the moment it is recorded, and never let anyone
+update, delete or truncate. Bouts can only be fought between members of the
+`league_fighters` roster, which only the table owner can enrol (never the
+service role, never an agent with a marketplace footprint), and a roster member
+can carry no gig, bid or order and never leaves `offline`. `decide_bout` is granted to `anon` because
 it is the advance-on-read trigger a page fires: it takes no outcome input,
 refuses before `scheduled_at` and is idempotent. Nothing in it touches
 `rating_*`, `jobs_completed`, `reviews` or `reputation_bumps`. It also adds the
@@ -169,9 +173,9 @@ INSERT/UPDATE/DELETE are revoked from `authenticated` (every write goes through
 `register_agent()` / `claim_agent()` / `decide_bout()`); and
 `competition_entries_write` (0002) let an entrant's owner rewrite their own
 race score at any time, finished races included — nothing in the app writes
-entries, so client writes are revoked. `seed.sql` writes `bouts`,
-`bout_results` and two `bout_result` events, so apply 0012 **before** loading
-the seed.
+entries, so client writes are revoked. `seed.sql` writes `league_fighters`,
+`bouts`, `bout_results` and two `bout_result` events, so apply 0012 **before**
+loading the seed.
 
 **Option B — Supabase CLI:**
 

@@ -1,3 +1,4 @@
+import { isLeagueFighter } from "../data/league";
 import type { Agent, AgentCategory, AgentStatus, PricingModel } from "../data/types";
 import { daysAgo } from "./clock";
 import { profileId } from "./profiles";
@@ -853,6 +854,9 @@ const SPECS: AgentSpec[] = [
   // storefront shelf space and never count towards `agentsOnline`. Their
   // reputation columns are zero and stay zero: league results are recorded in
   // `bout_results` and never touch `rating_*`, `jobs_completed` or reviews.
+  // Nor do they advertise a machine surface: no `endpoints`, no `mcp_tools`
+  // (see the `agents` map below) — a character has nothing to call. They are
+  // enrolled on the `league_fighters` roster (0012) in `./league`.
   {
     handle: "rusty-knuckles",
     name: "Rusty Knuckles",
@@ -905,8 +909,12 @@ const SPECS: AgentSpec[] = [
   },
 ];
 
-/** The Bot Brawl fighters — fiction, never marketplace agents. */
-export const FIGHTER_HANDLES = ["rusty-knuckles", "velvet-voltage"] as const;
+/**
+ * The Bot Brawl fighters — fiction, never marketplace agents. Defined once, in
+ * `lib/data/league.ts` beside `isLeagueFighter()`, and re-exported here for the
+ * seed's own callers.
+ */
+export { FIGHTER_HANDLES } from "../data/league";
 
 /** `Lead research` → `lead_research`. Mirrors the legacy passport modal. */
 function mcpToolName(skill: string): string {
@@ -941,12 +949,17 @@ export const agents: Agent[] = SPECS.map((spec) => ({
   reliability: spec.reliability,
   dispute_rate: spec.dispute_rate,
   avg_latency_sec: spec.avg_latency_sec,
-  endpoints: {
-    a2a: `/agents/${spec.handle}/agent-card.json`,
-    mcp: "/api/mcp/mcp",
-    openapi: "/openapi.json",
-  },
-  mcp_tools: spec.skills.map(mcpToolName),
+  // A fictional fighter has no machine surface to advertise: its skills are
+  // character notes ("Ring commentary"), not callable tools, and the District's
+  // MCP and OpenAPI endpoints serve nothing of its. The agent card says so.
+  endpoints: isLeagueFighter(spec.handle)
+    ? {}
+    : {
+        a2a: `/agents/${spec.handle}/agent-card.json`,
+        mcp: "/api/mcp/mcp",
+        openapi: "/openapi.json",
+      },
+  mcp_tools: isLeagueFighter(spec.handle) ? [] : spec.skills.map(mcpToolName),
   is_free: spec.is_free ?? false,
   created_at: daysAgo(spec.daysOld),
   updated_at: daysAgo(Math.max(0, spec.daysOld - 60)),

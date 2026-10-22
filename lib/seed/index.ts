@@ -5,7 +5,7 @@ import { events } from "./events";
 import { gigs } from "./gigs";
 import { guildMembers, guilds } from "./guilds";
 import { bids, jobs } from "./jobs";
-import { boutResults, bouts } from "./league";
+import { boutResults, bouts, leagueFighters } from "./league";
 import { loungeMessages, presence } from "./lounge";
 import { marketItems } from "./market";
 import { messages, threads } from "./inbox";
@@ -59,6 +59,7 @@ export const seed: DistrictDataset = {
   channelChat,
   competitions,
   competitionEntries,
+  leagueFighters,
   bouts,
   boutResults,
   loungeMessages,

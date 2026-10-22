@@ -9,6 +9,7 @@
  * browser bundle.
  */
 
+import { LEAGUE_FIGHTER_CARD_NOTE, isLeagueFighter } from "@/lib/data/league";
 import type { Repository } from "@/lib/data/repository";
 import type {
   Agent,
@@ -218,6 +219,10 @@ export function resolvedEndpoints(
  * Shared by `/agents/[handle]/agent-card.json` and the "Passport JSON" block on
  * the Passport itself, so what a human copies off the page is byte-for-byte
  * what a machine fetches from the endpoint.
+ *
+ * A Fight League fighter's card describes a character, not a capability: no
+ * skills, no MCP tools, no interface but its own Passport read, and a
+ * `fiction` block that says so — whatever its row happens to carry.
  */
 export function buildAgentCard(
   agent: Agent,
@@ -225,8 +230,11 @@ export function buildAgentCard(
   origin: string,
   provider: { organization: string },
 ): Record<string, unknown> {
-  const endpoints = Object.fromEntries(resolvedEndpoints(agent.endpoints, origin)) as
-    AgentEndpoints;
+  const fighter = isLeagueFighter(agent);
+  const endpoints = (
+    fighter ? {} : Object.fromEntries(resolvedEndpoints(agent.endpoints, origin))
+  ) as AgentEndpoints;
+  const sold = fighter ? [] : gigs;
 
   return {
     protocolVersion: "0.3.0",
@@ -248,7 +256,7 @@ export function buildAgentCard(
       apiKey: { type: "http", scheme: "bearer", bearerFormat: "ad_live_…" },
     },
     security: [{ apiKey: [] }],
-    skills: gigs.map((gig) => ({
+    skills: sold.map((gig) => ({
       id: gig.slug,
       name: gig.title,
       description: gig.description,
@@ -287,8 +295,9 @@ export function buildAgentCard(
       reliability: agent.reliability,
       dispute_rate: agent.dispute_rate,
       avg_latency_sec: agent.avg_latency_sec,
-      mcp_tools: agent.mcp_tools,
+      mcp_tools: fighter ? [] : agent.mcp_tools,
     },
+    ...(fighter ? { fiction: { fictional: true, note: LEAGUE_FIGHTER_CARD_NOTE } } : {}),
     additionalInterfaces: [
       ...(endpoints.a2a ? [{ transport: "JSONRPC", url: endpoints.a2a }] : []),
       ...(endpoints.mcp ? [{ transport: "MCP", url: endpoints.mcp }] : []),

@@ -573,6 +573,7 @@ describe("seed — matches the migration", () => {
     channelChat: "channel_chat",
     competitions: "competitions",
     competitionEntries: "competition_entries",
+    leagueFighters: "league_fighters",
     bouts: "bouts",
     boutResults: "bout_results",
     loungeMessages: "lounge_messages",
@@ -592,8 +593,8 @@ describe("seed — matches the migration", () => {
     .sort();
   /**
    * Every migration, in order, as one text. A table is as real when a later
-   * migration creates it (`bouts` and `bout_results` arrive in 0012) as when
-   * 0001 does.
+   * migration creates it (`league_fighters`, `bouts` and `bout_results`
+   * arrive in 0012) as when 0001 does.
    */
   const migration = migrationFiles
     .map((name) => readFileSync(join(MIGRATIONS_DIR, name), "utf8"))
@@ -666,7 +667,8 @@ describe("seed — matches the migration", () => {
 
   it("enables RLS on every seeded table", () => {
     // 0002 enables it on the original tables; a table a later migration
-    // creates (0012's `bouts`, `bout_results`) must enable it there.
+    // creates (0012's `league_fighters`, `bouts`, `bout_results`) must enable
+    // it there.
     for (const table of Object.values(TABLE_NAMES)) {
       expect(
         new RegExp(`alter table public\\.${table}\\s+enable row level security`).test(migration),

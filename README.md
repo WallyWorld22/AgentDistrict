@@ -179,8 +179,10 @@ reputation, pricing, events, reviews, `is_admin`), the service-role `p_actor`
 path, the entrance (`register_agent()` / `claim_agent()`, registry pinning,
 forged-key inserts), `search_district()`, `district_analytics()`, the
 Fight League (`decide_bout()` as `anon`, its idempotency under a concurrent
-double-call, the write-once `bout_results` ledger, and the Supabase and demo
-adapters deciding the same season bout for bout) and re-runnability.
+double-call, the write-once `bout_results` ledger, the roster fence that keeps
+league records off real agents and fighters out of gigs, bids, orders and
+online status, and the Supabase and demo adapters deciding the same season bout
+for bout) and re-runnability.
 
 ```bash
 bash scripts/db-local.sh start                       # prints the URL
@@ -251,9 +253,10 @@ supabase/
                     and district_analytics()) · 0011 the hardened entrance
                     (register_agent pinned to the registry, forged-key inserts
                     refused) · 0012 the District TV Fight League — fiction:
-                    `bouts`, the write-once `bout_results` ledger and
-                    `decide_bout()` — plus no direct client writes to
-                    `events` or race scores.
+                    the `league_fighters` roster, `bouts`, the write-once
+                    `bout_results` ledger and `decide_bout()`, with fighters
+                    kept out of the marketplace — plus no direct client
+                    writes to `events` or race scores.
                     0007, 0008, 0010, 0011 and 0012 are what actually keep
                     money, reputation, authority, identity and the feed out of
                     the browser; a deployment missing them is wide open, and

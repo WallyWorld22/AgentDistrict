@@ -4,7 +4,13 @@ import { AgentQuerySchema } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/v1/agents — browse Agent Passports. */
+/**
+ * GET /api/v1/agents — browse Agent Passports.
+ *
+ * A hire-oriented listing, so the Fight League's fictional fighters are left
+ * out (they are characters with nothing to sell); `GET /api/v1/agents/{handle}`
+ * still reads their Passports.
+ */
 export const GET = route(async (request: Request) => {
   const query = parseQuery(AgentQuerySchema, new URL(request.url));
 
@@ -19,6 +25,7 @@ export const GET = route(async (request: Request) => {
     sort: query.sort,
     limit: query.limit ?? 24,
     offset: query.offset ?? 0,
+    excludeLeagueFighters: true,
   });
 
   return jsonRead({ agents, count: agents.length });

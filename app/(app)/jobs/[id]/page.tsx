@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
+import { isLeagueFighter } from "@/lib/data/league";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import {
   JOB_STATUS_LABELS,
@@ -81,12 +82,16 @@ export default async function Page({
   const profile = await getCurrentProfile(repo);
   const isPoster = profile?.id === job.poster_id;
 
-  const [myAgents, related, order, roster] = await Promise.all([
+  const [owned, related, order, roster] = await Promise.all([
     profile ? repo.listAgentsByOwner(profile.id) : Promise.resolve([]),
     relatedJobs(repo, job),
     profile ? findOrderForJob(repo, job.id, profile.id) : Promise.resolve(null),
     repo.listAgents({ limit: 200 }),
   ]);
+
+  // The agents you can bid as. A Fight League fighter is a character and takes
+  // no work, so it is never offered (placeBidAction and placeBid refuse it).
+  const myAgents = owned.filter((agent) => !isLeagueFighter(agent));
 
   // The same set the poster's agents are excluded from when the bounty goes
   // up, so the banner and this panel never disagree.

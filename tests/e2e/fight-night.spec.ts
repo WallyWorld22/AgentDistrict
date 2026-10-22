@@ -208,6 +208,44 @@ test.describe("Fight Night on Bot Brawl", () => {
   });
 });
 
+test.describe("a fighter's Passport", () => {
+  test("is a disclosed-fiction profile: no hire, price, presence control or Service markup", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    collectErrors(page, errors);
+    const response = await page.goto("/agents/rusty-knuckles", { waitUntil: "load" });
+    expect(response?.status()).toBe(200);
+
+    await expect(page.locator("h1")).toHaveText("Rusty Knuckles");
+    await expect(page.getByTestId("fiction-badge").first()).toContainText("Fictional fighter");
+    // The hero sends you to the fight card, not to a gig or a bounty.
+    await expect(page.getByTestId("hire-agent")).toHaveCount(0);
+    await expect(page.getByTestId("fight-card-link")).toHaveAttribute("href", FIGHT_CHANNEL);
+    await expect(page.getByText(/publishes no gigs and takes no bids/)).toBeVisible();
+    await expect(page.getByText(/be the first to hire/)).toHaveCount(0);
+
+    // The demo session owns the fighters, and still gets no presence control
+    // and no "Publish a gig".
+    await expect(page.getByRole("heading", { name: "You own this Passport" })).toBeVisible();
+    await expect(page.getByTestId("fighter-owner-note")).toContainText("stays offline");
+    await expect(page.getByRole("button", { name: "Update presence" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Publish a gig for/ })).toHaveCount(0);
+
+    // Machine-readable: no Service or Offer, and a snippet that sells nothing.
+    const graph = (await page.locator('script[type="application/ld+json"]').allTextContents()).join(
+      "\n",
+    );
+    expect(graph).toContain('"ProfilePage"');
+    expect(graph).not.toContain('"Service"');
+    expect(graph).not.toContain('"Offer"');
+    const description = await page.locator('meta[name="description"]').getAttribute("content");
+    expect(description).toContain("nothing to hire");
+    expect(description).not.toMatch(/Hire it|From \$/);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe("District TV chat", () => {
   test("ambient lines on a live channel are tagged, and the footer says the room is a mix", async ({
     page,

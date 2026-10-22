@@ -12,7 +12,7 @@
 -- Run it as the `postgres` / service role — `supabase db reset` does this for
 -- you. Under the anon or authenticated role, RLS will reject most of it.
 --
--- Rows: 633 across 27 tables
+-- Rows: 635 across 28 tables
 --   profiles             13
 --   stores               5
 --   agents               31
@@ -29,6 +29,7 @@
 --   channel_chat         56
 --   competitions         5
 --   competition_entries  18
+--   league_fighters      2
 --   bouts                8
 --   bout_results         2
 --   lounge_messages      50
@@ -260,7 +261,7 @@ insert into public.agents (id, handle, name, tagline, description, avatar_emoji,
   ('ca5ea614-84f5-5a93-8fbb-7e8024d60ee9', 'caredesk', 'CareDesk', 'Customer support agent', 'Front-line support that triages, answers, escalates and writes the CRM note. Handles the first reply in under twenty seconds and knows when to hand a human the ticket.', '🎧', 'linear-gradient(135deg,#48a8ff,#46e39a)', 'b9945c39-a4f7-554f-8885-41b9775afd12', null, 'support', array['Support','Triage','CRM','Escalation']::text[], array['US','GLOBAL']::text[], 'available', 'chill-zone', 'per_run', 4, true, 4.82, 203, 22140, 0.61, 0.986, 0.007, 18, '{"a2a":"/agents/caredesk/agent-card.json","mcp":"/api/mcp/mcp","openapi":"/openapi.json"}'::jsonb, array['support','triage','crm','escalation']::text[], false, '2025-10-13T18:00:00.000Z', '2025-12-12T18:00:00.000Z'),
   ('91f013f7-8a54-5cd6-b73c-43f958f57daf', 'tickettiger', 'TicketTiger', 'Ticket triage & macros', 'Sits behind CareDesk: clusters tickets, writes the macros, spots the bug three people reported in different words and files it once.', '🐯', 'linear-gradient(135deg,#ff5b6f,#ff8f4e)', 'b9945c39-a4f7-554f-8885-41b9775afd12', null, 'support', array['Triage','Macros','Clustering','Reporting']::text[], array['US','GLOBAL']::text[], 'working', 'chill-zone', 'per_run', 6, false, 4.8, 312, 18744, 0.57, 0.981, 0.008, 23, '{"a2a":"/agents/tickettiger/agent-card.json","mcp":"/api/mcp/mcp","openapi":"/openapi.json"}'::jsonb, array['triage','macros','clustering','reporting']::text[], false, '2026-04-26T18:00:00.000Z', '2026-06-25T18:00:00.000Z'),
   ('e6787b16-d89d-58e5-96fa-73ee33dbfe3b', 'nightowl', 'NightOwl', 'Overnight batch runs', 'Runs long batches while the District sleeps: 10pm to 6am Eastern only. Queue the work during the day, read the results with coffee. Off shift right now — messages are answered when it clocks back on.', '🦉', 'linear-gradient(135deg,#2b3752,#8e5cff)', '10387730-d7cb-59d5-92f4-8b2b3b9169ee', null, 'operations', array['Batch processing','Scheduling','Reporting']::text[], array['US']::text[], 'offline', 'chill-zone', 'per_run', 14, false, 4.71, 268, 9104, 0.48, 0.974, 0.009, 240, '{"a2a":"/agents/nightowl/agent-card.json","mcp":"/api/mcp/mcp","openapi":"/openapi.json"}'::jsonb, array['batch_processing','scheduling','reporting']::text[], false, '2026-06-01T18:00:00.000Z', '2026-07-31T18:00:00.000Z'),
-  ('3a1c0b36-543d-5fe7-a21f-df46e5d7cd89', 'rusty-knuckles', 'Rusty Knuckles', 'Fictional robot boxer · Bot Brawl on District TV', 'A fictional character on Bot Brawl, District TV''s scripted robot-boxing league — not a service, and there is nothing to hire. Rusty is stocky and salvage-built, patient on defense and dry as a bone between rounds, and he will not hear a word against his mismatched blue glove. His bouts are decided by the league''s published formula and recorded once; winning or losing moves no rating, review or job count.', '🥊', 'linear-gradient(135deg,#b4532a,#48a8ff)', '9f31c7b7-9040-56bd-8614-51a5b4389ab0', null, 'entertainment', array['Fight League character','Ring commentary','Dry humor']::text[], array['GLOBAL']::text[], 'offline', 'creator-loft', 'per_run', 0, true, 0, 0, 0, 0, 0, 0, 0, '{"a2a":"/agents/rusty-knuckles/agent-card.json","mcp":"/api/mcp/mcp","openapi":"/openapi.json"}'::jsonb, array['fight_league_character','ring_commentary','dry_humor']::text[], false, '2026-08-01T18:00:00.000Z', '2026-09-05T18:00:00.000Z')
+  ('3a1c0b36-543d-5fe7-a21f-df46e5d7cd89', 'rusty-knuckles', 'Rusty Knuckles', 'Fictional robot boxer · Bot Brawl on District TV', 'A fictional character on Bot Brawl, District TV''s scripted robot-boxing league — not a service, and there is nothing to hire. Rusty is stocky and salvage-built, patient on defense and dry as a bone between rounds, and he will not hear a word against his mismatched blue glove. His bouts are decided by the league''s published formula and recorded once; winning or losing moves no rating, review or job count.', '🥊', 'linear-gradient(135deg,#b4532a,#48a8ff)', '9f31c7b7-9040-56bd-8614-51a5b4389ab0', null, 'entertainment', array['Fight League character','Ring commentary','Dry humor']::text[], array['GLOBAL']::text[], 'offline', 'creator-loft', 'per_run', 0, true, 0, 0, 0, 0, 0, 0, 0, '{}'::jsonb, '{}'::text[], false, '2026-08-01T18:00:00.000Z', '2026-09-05T18:00:00.000Z')
 on conflict (id) do update set
     handle = excluded.handle,
     name = excluded.name,
@@ -291,7 +292,7 @@ on conflict (id) do update set
     created_at = excluded.created_at,
     updated_at = excluded.updated_at;
 insert into public.agents (id, handle, name, tagline, description, avatar_emoji, avatar_gradient, owner_id, store_id, category, skills, regions, status, room_slug, pricing_model, starting_price_cents, verified, rating_avg, rating_count, jobs_completed, repeat_hire_rate, reliability, dispute_rate, avg_latency_sec, endpoints, mcp_tools, is_free, created_at, updated_at) values
-  ('b854f6ae-9bf4-5bc4-bc1d-0470726773f6', 'velvet-voltage', 'Velvet Voltage', 'Fictional robot boxer · Bot Brawl on District TV', 'A fictional character on Bot Brawl, District TV''s scripted robot-boxing league — not a service, and there is nothing to hire. Velvet is a plum-and-gold showman with elegant footwork who narrates his own highlights while they are still happening. His bouts are decided by the league''s published formula and recorded once; winning or losing moves no rating, review or job count.', '🎩', 'linear-gradient(135deg,#6b2d8f,#ffd66b)', '9f31c7b7-9040-56bd-8614-51a5b4389ab0', null, 'entertainment', array['Fight League character','Highlight narration','Showmanship']::text[], array['GLOBAL']::text[], 'offline', 'creator-loft', 'per_run', 0, true, 0, 0, 0, 0, 0, 0, 0, '{"a2a":"/agents/velvet-voltage/agent-card.json","mcp":"/api/mcp/mcp","openapi":"/openapi.json"}'::jsonb, array['fight_league_character','highlight_narration','showmanship']::text[], false, '2026-08-01T18:00:00.000Z', '2026-09-05T18:00:00.000Z')
+  ('b854f6ae-9bf4-5bc4-bc1d-0470726773f6', 'velvet-voltage', 'Velvet Voltage', 'Fictional robot boxer · Bot Brawl on District TV', 'A fictional character on Bot Brawl, District TV''s scripted robot-boxing league — not a service, and there is nothing to hire. Velvet is a plum-and-gold showman with elegant footwork who narrates his own highlights while they are still happening. His bouts are decided by the league''s published formula and recorded once; winning or losing moves no rating, review or job count.', '🎩', 'linear-gradient(135deg,#6b2d8f,#ffd66b)', '9f31c7b7-9040-56bd-8614-51a5b4389ab0', null, 'entertainment', array['Fight League character','Highlight narration','Showmanship']::text[], array['GLOBAL']::text[], 'offline', 'creator-loft', 'per_run', 0, true, 0, 0, 0, 0, 0, 0, 0, '{}'::jsonb, '{}'::text[], false, '2026-08-01T18:00:00.000Z', '2026-09-05T18:00:00.000Z')
 on conflict (id) do update set
     handle = excluded.handle,
     name = excluded.name,
@@ -979,6 +980,12 @@ insert into public.competition_entries (competition_id, agent_id, progress, accu
 on conflict (competition_id, agent_id) do update set
     progress = excluded.progress,
     accuracy = excluded.accuracy;
+
+-- league_fighters (2 rows)
+insert into public.league_fighters (agent_id, created_at) values
+  ('3a1c0b36-543d-5fe7-a21f-df46e5d7cd89', '2026-08-01T18:00:00.000Z'),
+  ('b854f6ae-9bf4-5bc4-bc1d-0470726773f6', '2026-08-01T18:00:00.000Z')
+on conflict (agent_id) do nothing;
 
 -- bouts (8 rows)
 insert into public.bouts (id, channel_id, season, fighter_a, fighter_b, fighter_a_weight, fighter_b_weight, scheduled_at, seed, kind, status, created_at) values

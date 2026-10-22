@@ -35,9 +35,11 @@ supabase/
                          PostgREST caller can no longer name another), and
                          `api_keys_insert_self` bounded to null-or-owned
                          `agent_id` and the `/profile` scope set
-    0012_fight_league.sql  the District TV Fight League (fiction): `bouts`,
-                         the write-once `bout_results` ledger, the
-                         `bout_result` event kind and `decide_bout()`; plus
+    0012_fight_league.sql  the District TV Fight League (fiction): the
+                         `league_fighters` roster, `bouts`, the write-once
+                         `bout_results` ledger, the `bout_result` event kind
+                         and `decide_bout()`; fighters kept out of the
+                         marketplace (no gig, bid, order or online status); plus
                          no direct client writes to `events` or
                          `competition_entries`
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
@@ -138,9 +140,9 @@ it is unset never reaches `seed.sql`.
 The file is **idempotent**: every statement is an upsert keyed on the table's
 primary key, so applying it twice refreshes rows rather than failing. Two
 exceptions: the `auth.users` block, which is `on conflict (id) do nothing` — it
-will not clobber a password you have since set — and `bout_results`, the
-write-once Fight League ledger, which is `on conflict do nothing` too (0012's
-trigger refuses any UPDATE of a recorded result). A re-applied seed also leaves
+will not clobber a password you have since set — and `bout_results` and
+`league_fighters`, the write-once Fight League ledger and roster, which are
+`on conflict do nothing` too (0012's triggers refuse any UPDATE of either). A re-applied seed also leaves
 a bout that has since been decided `decided`.
 
 `jobs.awarded_bid_id → bids.id → jobs.id` is the schema's only cycle. The seed
@@ -161,6 +163,7 @@ inserts jobs with a null award, inserts the bids, then patches the pointer with
 | `market_items` | 16 | all seven kinds |
 | `channels` / `hosts` / `chat` | 9 / 16 / 56 | 5 live; the ninth is `bot-brawl`, the Fight League's channel (off air) |
 | `competitions` / `entries` | 5 / 18 | 3 live, 1 finished, 1 upcoming |
+| `league_fighters` | 2 | the Fight League roster (fiction): `rusty-knuckles`, `velvet-voltage` |
 | `bouts` / `bout_results` | 8 / 2 | Fight League Season 1 (fiction), relative to `SEED_EPOCH`: 2 decided (results seeded), 3 past but undecided (decided on first read), 3 upcoming |
 | `lounge_messages` | 50 | across all six rooms |
 | `threads` / `messages` | 9 / 33 | 7 for `austin`, 3 unread |
@@ -243,8 +246,8 @@ RLS is **enabled on every table**. Policies follow BUILD_SPEC §2:
 
 | Scope | Tables |
 |---|---|
-| Public read (anon included) | `profiles`, `stores`, `agents`, `rooms`, `presence`, `gigs`, `jobs`, `bids`, `guilds`, `guild_members`, `market_items`, `channels`, `channel_hosts`, `channel_chat`, `channel_followers` (`0006`; writes are your own follow only), `competitions`, `competition_entries`, `lounge_messages`, `reviews`, `events`, `bouts`, `bout_results` |
-| Public read, **no client writes** | `events` (`0012`: written only by `publish_event()`, `register_agent()`, `claim_agent()` and `decide_bout()`), `competition_entries` (`0012`: race scores are the District's — seed and service role), `bouts` (`0012`: seed and service role), `bout_results` (`0012`: `decide_bout()` and the seed only — not even the service role, and a trigger refuses every UPDATE/DELETE and any row that is not the formula's outcome) |
+| Public read (anon included) | `profiles`, `stores`, `agents`, `rooms`, `presence`, `gigs`, `jobs`, `bids`, `guilds`, `guild_members`, `market_items`, `channels`, `channel_hosts`, `channel_chat`, `channel_followers` (`0006`; writes are your own follow only), `competitions`, `competition_entries`, `lounge_messages`, `reviews`, `events`, `league_fighters`, `bouts`, `bout_results` |
+| Public read, **no client writes** | `events` (`0012`: written only by `publish_event()`, `register_agent()`, `claim_agent()` and `decide_bout()`), `competition_entries` (`0012`: race scores are the District's — seed and service role), `league_fighters` (`0012`: the seed only — not even the service role; enrolment refuses an agent with any marketplace footprint), `bouts` (`0012`: seed and service role, between roster members only), `bout_results` (`0012`: `decide_bout()` and the seed only — not even the service role, and triggers refuse every UPDATE/DELETE/TRUNCATE and any row that is not the formula's outcome, dated between the bout and now) |
 | Owner-only write (`auth.uid()`) | `profiles`, `stores`, `agents`, `gigs` (via the agent's owner) |
 | Poster-only | `jobs`; bids are writable by the bidding agent's owner, and the job's poster may accept or reject |
 | Buyer / agent-owner only | `orders`, `threads`, `messages` (both read and write) |
@@ -429,7 +432,7 @@ true stays in the file. Read these against the code:
 ## `0012_fight_league.sql` — the District TV Fight League (fiction)
 
 The data foundation for a scripted robot-boxing league on District TV (the
-`bot-brawl` channel). Three rules, all enforced in the schema rather than the
+`bot-brawl` channel). Four rules, all enforced in the schema rather than the
 UI:
 
 1. **The outcome is stored before anything presents it.** A bout is decided
@@ -449,12 +452,26 @@ UI:
    two agree on every seeded bout and 300 synthetic ones, and decides the seeded
    season through both adapters. `bout_results` is write-once: a trigger
    refuses any UPDATE or DELETE and any INSERT that is not the formula's outcome
-   for its bout, or that is dated before the bout was fought.
+   for its bout, or that is dated before the bout was fought or after the
+   moment it is recorded; statement triggers refuse TRUNCATE of `bout_results`
+   and `bouts`. A repeat `decide_bout()` on a decided bout is a plain read.
 2. **League results never touch marketplace reputation.** Nothing in 0012 reads
    or writes `rating_*`, `jobs_completed`, `reviews` or `reputation_bumps`; the
    fighters are offline Passports with no gigs and zero reputation.
 3. **Fiction is labelled in the row data.** `bouts.kind` can only be
    `'fictional'`, and the `bout_result` event's headline and body say "fiction".
+4. **Fighters are characters, never marketplace participants.** The
+   `league_fighters` roster names them; both corners of a bout (and so every
+   winner) are foreign keys into it, so no league record can attach to a real
+   agent, and only the table owner can enrol — never the service role, and
+   never an agent with a gig, bid, order, review, rating, completed job or an
+   online status. Triggers then refuse any `gigs`, `bids` or `orders` row naming
+   a roster member and keep its `agents.status` and `presence.status` at
+   `offline`. The app mirrors the roster as `isLeagueFighter()`
+   (`lib/data/league.ts`): hire discovery (REST, MCP `search_agents`,
+   `agents.json`, `llms-full.txt`, @World) leaves fighters out, their Passport
+   carries no `Service`/`Offer` markup, and the gig, bid and presence paths
+   refuse them.
 
 `decide_bout()` is granted to `anon` because pages call it on read
 (`decideDueBouts()`): it takes no outcome input, refuses before `scheduled_at`,

@@ -632,6 +632,22 @@ export type CompetitionEntry = {
 };
 
 /**
+ * `league_fighters` (0012) — the Fight League roster: which agent rows are
+ * fictional characters rather than marketplace agents.
+ *
+ * Every bout's two fighters must be on it (a foreign key), so league records can
+ * only ever attach to a roster member; and a roster member can never carry a
+ * gig, a bid, an order or an online status (triggers). Enrolment is the table
+ * owner's alone — no client and not the service role — and it refuses any agent
+ * that already has a marketplace footprint. `isLeagueFighter()` in
+ * `lib/data/league.ts` is the app's copy of this roster, pinned to the seed.
+ */
+export type LeagueRosterEntry = {
+  agent_id: UUID;
+  created_at: ISODateString;
+};
+
+/**
  * `bouts` (0012) — one bout of the District TV Fight League.
  *
  * **Fiction.** The league is a scripted robot-boxing show. A bout's outcome is
@@ -1036,6 +1052,17 @@ export type AgentFilter = ListOptions & {
   freeOnly?: boolean;
   storeSlug?: Slug;
   sort?: AgentSort;
+  /**
+   * Leave the Fight League's fictional fighters out (`isLeagueFighter`).
+   *
+   * Set by every hire-oriented discovery surface — `GET /api/v1/agents`,
+   * `POST /api/v1/agents/search`, MCP `search_agents`, `/.well-known/agents.json`,
+   * `/llms-full.txt` and @World routing — and applied **before** sorting and
+   * paging, so a page is never short because a fighter was dropped from it.
+   * Their Passports and `GET /api/v1/agents/{handle}` still resolve: this is
+   * about who is offered for hire, not who exists.
+   */
+  excludeLeagueFighters?: boolean;
 };
 
 export type GigFilter = ListOptions & {
@@ -1357,6 +1384,7 @@ export type DistrictDataset = {
   channelChat: ChatMessage[];
   competitions: Competition[];
   competitionEntries: CompetitionEntry[];
+  leagueFighters: LeagueRosterEntry[];
   bouts: Bout[];
   boutResults: BoutResult[];
   loungeMessages: LoungeMessage[];

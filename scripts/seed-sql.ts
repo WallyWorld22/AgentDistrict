@@ -9,7 +9,8 @@
  *
  * The output is idempotent: every statement is an upsert keyed on the table's
  * primary key, so running it twice refreshes the rows instead of failing. The
- * one write-once table, `bout_results`, is `on conflict do nothing` instead.
+ * two write-once tables, `bout_results` and the `league_fighters` roster, are
+ * `on conflict do nothing` instead.
  *
  * Run it after ANY change under `lib/seed/**` and commit the result.
  *
@@ -79,9 +80,9 @@ type TableSpec = {
   /** Columns stored as `jsonb[]`. */
   jsonArray?: string[];
   /**
-   * A write-once ledger: emit `on conflict do nothing` instead of an upsert.
-   * `bout_results` (0012) refuses every UPDATE by trigger, so re-applying the
-   * seed must leave a recorded result exactly as it is.
+   * Write-once: emit `on conflict do nothing` instead of an upsert.
+   * `bout_results` and `league_fighters` (0012) refuse every UPDATE by
+   * trigger, so re-applying the seed must leave those rows exactly as they are.
    */
   insertOnly?: boolean;
 };
@@ -92,7 +93,8 @@ type TableSpec = {
  *
  *   profiles → stores → agents → rooms → presence
  *   guilds → guild_members → gigs → jobs → bids
- *   market_items → channels → … → competition_entries → bouts → bout_results
+ *   market_items → channels → … → competition_entries
+ *   league_fighters → bouts → bout_results
  *   lounge_messages → threads → messages
  *   wallets → orders → wallet_transactions → reviews → events → api_keys
  *
@@ -138,8 +140,11 @@ const TABLES: TableSpec[] = [
     key: "competitionEntries",
     pk: ["competition_id", "agent_id"],
   },
-  // The Fight League (fiction, 0012). Bouts before their results; the
-  // `bout_result` events follow with every other event further down.
+  // The Fight League (fiction, 0012). The roster before the bouts that
+  // reference it, bouts before their results; the `bout_result` events follow
+  // with every other event further down. The roster is enrol-only (0012's
+  // trigger refuses an UPDATE), so a re-applied seed leaves it as it is.
+  { table: "league_fighters", key: "leagueFighters", pk: ["agent_id"], insertOnly: true },
   { table: "bouts", key: "bouts", pk: ["id"] },
   { table: "bout_results", key: "boutResults", pk: ["bout_id"], insertOnly: true },
   { table: "lounge_messages", key: "loungeMessages", pk: ["id"] },

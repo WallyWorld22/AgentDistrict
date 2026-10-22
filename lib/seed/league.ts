@@ -1,5 +1,10 @@
-import { boutResultEvent, boutLoserId, decideBoutOutcome } from "../data/league";
-import type { Bout, BoutResult, DistrictEvent } from "../data/types";
+import {
+  FIGHTER_HANDLES,
+  boutResultEvent,
+  boutLoserId,
+  decideBoutOutcome,
+} from "../data/league";
+import type { Bout, BoutResult, DistrictEvent, LeagueRosterEntry } from "../data/types";
 import { agent, agentId } from "./agents";
 import { at, daysAgo } from "./clock";
 import { channels, FIGHT_CHANNEL_SLUG } from "./tv";
@@ -22,6 +27,11 @@ import { id } from "./uuid";
  * Those states are relative to the seed epoch, like every seeded timestamp. In
  * supabase mode the clock is real time, so on a database seeded after the
  * epoch more of the card is already due.
+ *
+ * Both fighters are enrolled on the `league_fighters` roster first: 0012 makes
+ * every bout's fighters a foreign key into it, so a bout can only ever be
+ * fought — and a league record only ever attach — between roster members, and
+ * the roster refuses any agent with a marketplace footprint.
  *
  * The two seeded results are not written by hand: they are
  * `decideBoutOutcome()` of their bout — the same formula `decide_bout()` runs
@@ -73,6 +83,15 @@ if (!channel) throw new Error(`seed: the ${FIGHT_CHANNEL_SLUG} channel is missin
 function scheduledOffset(number: number): number {
   return LAST_FIGHT_NIGHT + (number - 5) * 7 * DAY;
 }
+
+/**
+ * The roster (`league_fighters`, 0012). Enrolled with the channel, before any
+ * bout: `bouts.fighter_a` / `fighter_b` reference it.
+ */
+export const leagueFighters: LeagueRosterEntry[] = FIGHTER_HANDLES.map((handle) => ({
+  agent_id: agentId(handle),
+  created_at: daysAgo(35),
+}));
 
 export function boutId(number: number, season = SEASON): string {
   return id("bout", `s${season}-b${number}`);

@@ -12,6 +12,7 @@ import {
   type GigPackage,
 } from "@/lib/data/types";
 import { CONTRACT_FIELD_TYPES } from "@/lib/data/ext/gigs";
+import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
 import { pingIndexNow } from "@/lib/seo/indexnow";
 import type { ActionState } from "@/app/actions";
 
@@ -120,6 +121,19 @@ export async function publishGigAction(
 ): Promise<ActionState> {
   try {
     const profile = await requireProfile();
+
+    // Before the form is validated: a fighter's gig is refused whatever else
+    // the form says. The picker never offers one; this is for a hand-built
+    // POST, and `createGig` refuses it again underneath.
+    const requested = text(form, "agentHandle");
+    if (isLeagueFighter(requested)) {
+      const fighter = await getRepo().getAgentByHandle(requested);
+      return {
+        ok: false,
+        message: leagueFighterRefusal(fighter?.name ?? `@${requested}`, "publish a gig"),
+      };
+    }
+
     const input = PublishGigSchema.parse({
       agentHandle: text(form, "agentHandle"),
       title: text(form, "title"),

@@ -8,12 +8,18 @@ export const dynamic = "force-dynamic";
  *
  * One compact record per agent (identity, capability, price, latency,
  * reputation, endpoints) plus a pointer to each agent's own A2A card. This is
- * the file a crawler or another marketplace reads to index the District.
+ * the file a crawler or another marketplace reads to index the District — so
+ * it lists the agents there are to hire, and the Fight League's fictional
+ * fighters are not among them (their Passports and cards still resolve).
  */
 export async function GET(request: Request): Promise<Response> {
   const url = requestOrigin(request.headers);
   const repo = getRepo();
-  const agents = await repo.listAgents({ limit: 200, sort: "rating" });
+  const agents = await repo.listAgents({
+    limit: 200,
+    sort: "rating",
+    excludeLeagueFighters: true,
+  });
 
   return Response.json(
     {

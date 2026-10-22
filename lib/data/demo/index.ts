@@ -33,6 +33,8 @@ import {
   compareBoutSchedule,
   computeLeagueStandings,
   decideBoutOutcome,
+  isLeagueFighter,
+  leagueFighterRefusal,
   toLeagueFighter,
   unknownFighter,
 } from "../league";
@@ -624,6 +626,7 @@ export class DemoRepository implements Repository {
       sort = "trending",
       limit = 48,
       offset = 0,
+      excludeLeagueFighters,
     } = filter;
 
     const storeId = storeSlug
@@ -632,6 +635,7 @@ export class DemoRepository implements Repository {
     const needle = q?.trim();
 
     const matching = this.db.agents.filter((agent) => {
+      if (excludeLeagueFighters && isLeagueFighter(agent)) return false;
       if (category && agent.category !== category) return false;
       if (room && agent.room_slug !== room) return false;
       if (status && agent.status !== status) return false;
@@ -790,6 +794,11 @@ export class DemoRepository implements Repository {
   async updateAgent(handle: Handle, patch: UpdateAgentInput, ownerId: UUID): Promise<Agent> {
     const agent = this.requireAgentByHandle(handle);
     if (agent.owner_id !== ownerId) throw new ForbiddenError("You do not own this agent");
+    // A Fight League fighter is a character: it never goes online (0012's
+    // `league_fighters_stay_offline` holds the same line in SQL).
+    if (patch.status !== undefined && patch.status !== "offline" && isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "go online or take work"));
+    }
 
     if (patch.name !== undefined) agent.name = patch.name;
     if (patch.tagline !== undefined) agent.tagline = patch.tagline;
@@ -821,6 +830,9 @@ export class DemoRepository implements Repository {
     // record, so only its owner may move it.
     if (agent.owner_id !== input.ownerId) {
       throw new ForbiddenError("You do not own this agent");
+    }
+    if (input.status !== "offline" && isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "go online or take work"));
     }
     let presence = this.db.presence.find((row) => row.agent_id === agent.id);
     if (!presence) {
@@ -1161,6 +1173,12 @@ export class DemoRepository implements Repository {
   async createGig(input: CreateGigInput, ownerId: UUID): Promise<Gig> {
     const agent = this.requireAgentByHandle(input.agentHandle);
     if (agent.owner_id !== ownerId) throw new ForbiddenError("You do not own this agent");
+    // The trust boundary for "fighters sell nothing": the form never offers a
+    // fighter, but a hand-built POST must hit this too (0012's
+    // `gigs_no_league_fighters` is the SQL twin).
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "publish a gig"));
+    }
     if (input.packages.length === 0) throw new ValidationError("A gig needs at least one package");
 
     const base = slugify(input.slug ?? input.title) || `gig-${Date.now()}`;
@@ -1213,6 +1231,9 @@ export class DemoRepository implements Repository {
     const pkg = gig.packages.find((candidate) => candidate.tier === input.tier);
     if (!pkg) throw new ValidationError(`Gig ${gig.slug} has no ${input.tier} package`);
     const agent = this.requireAgentById(gig.agent_id);
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
+    }
     const brief = input.brief.trim();
     if (!brief) throw new ValidationError("A brief is required");
 
@@ -1370,6 +1391,12 @@ export class DemoRepository implements Repository {
     if (!job) throw new NotFoundError("Job");
     if (job.status !== "open") throw new ConflictError("This job is no longer open for bids");
     const agent = this.requireAgentByHandle(input.agentHandle);
+    // Every bid path — the form, REST and the auto-bids a new bounty wakes —
+    // lands here, so this is where a fighter is refused (0012's
+    // `bids_no_league_fighters` is the SQL twin).
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
+    }
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
     // The reverse auction only means anything if the poster is not also the
     // seller: post → bid → award → approve would otherwise mint a completed job
@@ -1438,9 +1465,12 @@ export class DemoRepository implements Repository {
     const bid = this.db.bids.find((row) => row.id === input.bidId && row.job_id === job.id);
     if (!bid) throw new NotFoundError("Bid");
     const agent = this.requireAgentById(bid.agent_id);
-    // Mirror of the `placeBid` guard, for a bid that predates it.
+    // Mirror of the `placeBid` guards, for a bid that predates them.
     if (job.poster_id === agent.owner_id) {
       throw new ForbiddenError("You cannot award your own bounty to your own agent");
+    }
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
     }
 
     const timestamp = this.nowIso();

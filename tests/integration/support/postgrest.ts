@@ -7,7 +7,8 @@ import type { Pool } from "pg";
  * The Supabase adapter only speaks PostgREST, and the throwaway database from
  * `scripts/db-local.sh` has no PostgREST in front of it. This serves the
  * adapter's actual HTTP requests by translating the read subset it sends —
- * `select`, `eq.` / `in.` filters, `order`, `limit`, `offset` on a GET — into
+ * `select`, `eq.` / `in.` / `not.in.` filters, `order`, `limit`, `offset` on a
+ * GET — into
  * one SQL statement run as `anon`, so RLS applies exactly as it does behind the
  * anon key, and answers with the JSON array PostgREST would.
  *
@@ -102,12 +103,17 @@ function translate(url: URL): { sql: string; params: unknown[] } {
       // the adapter filters on, and no per-column type map to keep in sync.
       const column = `t.${identifier(key)}::text`;
       const list = /^in\.\((.*)\)$/.exec(value);
+      const notList = /^not\.in\.\((.*)\)$/.exec(value);
       if (value.startsWith("eq.")) {
         params.push(value.slice(3));
         where.push(`${column} = $${params.length}`);
       } else if (list) {
         params.push(splitList(list[1]));
         where.push(`${column} = any($${params.length}::text[])`);
+      } else if (notList) {
+        // PostgREST's own translation, NULL semantics included.
+        params.push(splitList(notList[1]));
+        where.push(`not (${column} = any($${params.length}::text[]))`);
       } else {
         throw new Unsupported(`filter ${key}=${value}`);
       }
