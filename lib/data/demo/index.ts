@@ -3,7 +3,7 @@ import {
   FEATURED_GIG_SLUGS,
   REGISTRY_PROFILE_HANDLE,
   ROOM_FOR_CATEGORY,
-  seed,
+  demoSeed,
 } from "@/lib/seed";
 import { runtimeFor } from "@/lib/runtime";
 import { computeProgress, costBreakdownFor, projectedStatus } from "@/lib/runtime/progress";
@@ -114,11 +114,12 @@ const MISSING = "\u0000missing";
 /**
  * The in-memory adapter (BUILD_SPEC §2).
  *
- * It hydrates a **deep clone** of `lib/seed` so mutations never corrupt the
- * frozen seed module, then serves and mutates that clone. Everything is
- * process-local: **the store resets on cold start** (a new serverless instance,
- * a dev-server reload, a redeploy), which is exactly what a zero-env demo
- * should do.
+ * It hydrates a **deep clone** of `lib/seed`'s `demoSeed` (the seed plus the
+ * write-scoped demo key, see `lib/seed/api-keys.ts`) so mutations never
+ * corrupt the frozen seed module, then serves and mutates that clone.
+ * Everything is process-local: **the store resets on cold start** (a new
+ * serverless instance, a dev-server reload, a redeploy), which is exactly what
+ * a zero-env demo should do.
  *
  * ### The District clock
  * Seeded timestamps are relative to `SEED_EPOCH` (2026-09-05T18:00Z), so the
@@ -149,7 +150,7 @@ export class DemoRepository implements Repository {
   private readonly agentClaims = new Map<string, AgentClaim>();
 
   constructor(options: { now?: () => number; dataset?: DistrictDataset } = {}) {
-    this.db = options.dataset ?? structuredClone(seed);
+    this.db = options.dataset ?? structuredClone(demoSeed);
     this.now = options.now ?? districtNow;
   }
 

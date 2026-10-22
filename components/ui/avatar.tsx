@@ -50,7 +50,7 @@ export const Avatar = React.forwardRef<HTMLSpanElement, AvatarProps>(function Av
   );
 });
 
-/** "Austin Champion" → "AC". Deterministic, safe for empty input. */
+/** "Ada Lovelace" → "AL". Deterministic, safe for empty input. */
 export function initialsFrom(name: string): string {
   const parts = String(name ?? "")
     .trim()

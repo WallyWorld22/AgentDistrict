@@ -11,6 +11,11 @@
  * primary key, so running it twice refreshes the rows instead of failing.
  *
  * Run it after ANY change under `lib/seed/**` and commit the result.
+ *
+ * The one environment input is `SEED_WRITE_API_KEY`. Unset (the committed
+ * file), the write-scoped demo key's row is left out. Set, the row is included
+ * with a digest of that private key, which is for a database you are seeding
+ * yourself: do not commit a `seed.sql` generated that way.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -18,7 +23,7 @@ import { dirname, join } from "node:path";
 
 import { seed, seedCounts, seedRowCount } from "../lib/seed/index";
 import { SEED_EPOCH } from "../lib/seed/clock";
-import { DEMO_API_KEY } from "../lib/seed/api-keys";
+import { DEMO_API_KEY, DEMO_WRITE_API_KEY_ENV, demoWriteApiKey } from "../lib/seed/api-keys";
 import type { DistrictDataset } from "../lib/data/types";
 
 /* -------------------------------------------------------------------------- */
@@ -298,6 +303,26 @@ $$;
 `;
 }
 
+/** Did `SEED_WRITE_API_KEY` put the write key's row into the seed? */
+const writeKeyIncluded = seed.apiKeys.some((key) => key.id === demoWriteApiKey.id);
+
+/** Header lines saying whether this file carries the write-scoped key's row. */
+const writeKeyNote = (
+  writeKeyIncluded
+    ? [
+        "The write-scoped demo key's api_keys row is INCLUDED, because",
+        `${DEMO_WRITE_API_KEY_ENV} was set. This file holds a digest of a private key:`,
+        "load it into your own database and do not commit it.",
+      ]
+    : [
+        "The write-scoped demo key is never committed, and its api_keys row is",
+        `omitted. Set ${DEMO_WRITE_API_KEY_ENV} and regenerate to seed one for your`,
+        "own database (and then do not commit the result).",
+      ]
+)
+  .map((line) => `-- ${line}`)
+  .join("\n");
+
 function render(): string {
   const header = `-- =============================================================================
 -- AgentDistrict — seed data
@@ -318,6 +343,8 @@ ${TABLES.map((spec) => `--   ${spec.table.padEnd(20)} ${seedCounts[spec.key]}`).
 --
 -- The demo API key is public on purpose (it is printed on /developers):
 --   ${DEMO_API_KEY}
+--
+${writeKeyNote}
 -- =============================================================================
 
 begin;
@@ -356,6 +383,12 @@ function main(): void {
   console.log(`seed:sql — wrote supabase/seed.sql (${seedRowCount} rows, ${kb} KB)`);
   for (const spec of TABLES) {
     console.log(`  ${spec.table.padEnd(22)} ${String(seedCounts[spec.key]).padStart(4)}`);
+  }
+  if (writeKeyIncluded) {
+    console.warn(
+      `seed:sql — ${DEMO_WRITE_API_KEY_ENV} is set, so seed.sql now carries a digest of that ` +
+        "private key. Load it into your own database; do not commit it.",
+    );
   }
 }
 

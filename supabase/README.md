@@ -87,7 +87,7 @@ Postgres instance (a test container, say) the schema still loads and the seed
 still applies. The migration prints a `notice` when it skips.
 
 **2. The seed creates the auth users first.** `seed.sql` opens with a guarded
-`DO` block that inserts twelve rows into `auth.users` — one per seeded profile,
+`DO` block that inserts thirteen rows into `auth.users` — one per seeded profile,
 with a fixed UUIDv5 id and `raw_user_meta_data.handle` set to that profile's
 handle. Inserting those rows fires `public.handle_new_user()` (from
 `0002_rls.sql`), which creates the matching `profiles` and `wallets` rows; the
@@ -119,7 +119,11 @@ The output is **byte-stable**: the seed uses UUIDv5 ids derived from stable
 keys, timestamps computed relative to the `SEED_EPOCH` constant
 (`2026-09-05T18:00:00.000Z`), and a seeded PRNG for sampling curated copy. There
 is no `Math.random()` and no `Date.now()` anywhere in `lib/seed`, so
-regenerating without changing the source produces a zero-line diff.
+regenerating without changing the source produces a zero-line diff. The one
+input from outside is `SEED_WRITE_API_KEY` (see
+[the write-scoped demo key](#the-write-scoped-demo-key) below): leave it unset
+when generating the committed file. The random write key demo mode mints when
+it is unset never reaches `seed.sql`.
 
 The file is **idempotent**: every statement is an upsert keyed on the table's
 primary key, so applying it twice refreshes rows rather than failing. The one
@@ -134,27 +138,30 @@ inserts jobs with a null award, inserts the bids, then patches the pointer with
 
 | Table | Rows | |
 |---|---:|---|
-| `profiles` | 12 | `austin` is the demo human; the rest are buyers and reviewers |
+| `profiles` | 13 | `austin` is the demo human; `district-registry` holds self-registered agents until a human claims them; the rest are buyers and reviewers |
 | `stores` | 5 | WallyWorks Labs, Northstar Agents, Launch Foundry, Sunshine Data Co, Treasure Coast Automations |
-| `agents` | 28 | all 11 categories, including the legacy cast with their exact stats |
-| `rooms` / `presence` | 6 / 28 | one presence row per agent |
+| `agents` | 29 | all 11 categories, including the legacy cast with their exact stats |
+| `rooms` / `presence` | 6 / 29 | one presence row per agent |
 | `guilds` / `guild_members` | 6 / 28 | |
-| `gigs` | 38 | three packages and a real input/output contract each |
-| `jobs` / `bids` | 16 / 46 | 12 open with 2-4 bids, 3 awarded/in-progress, 1 completed |
+| `gigs` | 39 | three packages and a real input/output contract each |
+| `jobs` / `bids` | 18 / 51 | 13 open with 2-4 bids, 3 awarded/in-progress, 1 completed, 1 cancelled |
 | `market_items` | 16 | all seven kinds |
 | `channels` / `hosts` / `chat` | 8 / 14 / 52 | 5 live |
-| `competitions` / `entries` | 3 / 11 | |
+| `competitions` / `entries` | 5 / 18 | 3 live, 1 finished, 1 upcoming |
 | `lounge_messages` | 50 | across all six rooms |
 | `threads` / `messages` | 9 / 33 | 7 for `austin`, 3 unread |
-| `wallets` / `wallet_transactions` | 12 / 22 | 16 of the transactions are `austin`'s |
-| `orders` | 54 | 4 in flight for `austin`, 3 approved, plus history |
-| `reviews` | 48 | one per approved order |
-| `events` | 36 | all 12 event kinds |
-| `api_keys` | 3 | |
+| `wallets` / `wallet_transactions` | 13 / 24 | 18 of the transactions are `austin`'s |
+| `orders` | 58 | 4 in flight for `austin`, 3 approved, plus history |
+| `reviews` | 46 | one each on 46 of the 50 approved orders |
+| `events` | 39 | all 13 event kinds |
+| `api_keys` | 1 | the public, read-only demo key; 2 when `SEED_WRITE_API_KEY` is set at generation time (never in the committed file) |
+
+The totals are in the header of `seed.sql` itself, which `npm run seed:sql`
+writes from the same counts, so check there first if this table drifts.
 
 **`agents.rating_count`, `agents.jobs_completed` and `gigs.runs_count` are
 lifetime figures, not row counts.** Scout reads `4.96 (1,842)` because that is
-what `docs/reference/desktop-home.png` shows; the 48 seeded reviews are a recent
+what `docs/reference/desktop-home.png` shows; the 46 seeded reviews are a recent
 sample, not the whole history. Do not recompute those columns from the seeded
 reviews — `public.recalc_agent_rating()` is for reviews written at runtime, and
 running it over seed data will (correctly) collapse the numbers.
@@ -173,9 +180,41 @@ ad_live_demo_2f8c41a7b09e4d63
 ```
 
 This value is **public on purpose**: it is printed on `/developers` so an agent
-can exercise `/api/v1/*` against a demo install without signing up. It only
-exists in seed data — never treat it as a secret, and never seed a key you would
-mind being read.
+can exercise `/api/v1/*` against a demo install without signing up, and it is
+**read-only** for that reason. It only exists in seed data — never treat it as
+a secret, and never seed a key you would mind being read. This repository is
+public, so any raw key committed to `lib/seed` is published the moment it is
+pushed, and stays readable in git history after it is deleted.
+
+### The write-scoped demo key
+
+`DEMO_WRITE_API_KEY` (the demo owner's "Builder key (private)", with
+`jobs:write`, `bids:write` and `orders:write`) is **never committed**. Its raw
+value comes from the `SEED_WRITE_API_KEY` environment variable:
+
+| `SEED_WRITE_API_KEY` | Demo mode (in-memory) | `npm run seed:sql` |
+|---|---|---|
+| unset (the default) | a random key is minted once per process; it works inside that process (the unit tests use it) and is unknown to anyone else | the key's `api_keys` row is **omitted**: this is how the committed `seed.sql` is generated |
+| set | that key works against the demo store | the row is included with a `sha1$` digest of that key, and the generator warns you |
+
+The value must look like `ad_live_<name>_<24+ lowercase letters or digits>`:
+
+```bash
+node -e "console.log('ad_live_bldr_' + require('crypto').randomBytes(16).toString('hex'))"
+```
+
+`tsx` does not read `.env.local`, so export it for the seed run itself, then
+load the result into your own database. **Do not commit a `seed.sql` generated
+with it set**, because that file holds a digest of your private key:
+
+```bash
+SEED_WRITE_API_KEY=ad_live_bldr_… npm run seed:sql
+psql "$DATABASE_URL" -f supabase/seed.sql
+git checkout supabase/seed.sql     # back to the committed, key-free file
+```
+
+`npm run e2e` needs none of this: `playwright.config.ts` mints a fresh key per
+run and hands it to both the server and the specs.
 
 `api_keys.key_hash` is algorithm-prefixed: `"<alg>$<hex>"`. The seed can only
 emit `sha1$…` (its hash is hand-rolled so `lib/seed` stays runtime-agnostic and

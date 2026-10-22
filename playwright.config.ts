@@ -1,7 +1,20 @@
+import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+
+/**
+ * The write-scoped demo key for this run. It is never committed
+ * (`lib/seed/api-keys.ts`), so a fresh one is minted here and set on
+ * `process.env` before anything starts: the web server below and every test
+ * worker inherit it, so the specs and the server agree on the same key. Workers
+ * re-evaluate this file and keep the value they inherited; a key you export
+ * yourself is used as is.
+ */
+const SEED_WRITE_API_KEY =
+  process.env.SEED_WRITE_API_KEY || `ad_live_bldr_${randomBytes(16).toString("hex")}`;
+process.env.SEED_WRITE_API_KEY = SEED_WRITE_API_KEY;
 
 /**
  * Smoke suite runs against a production build (BUILD_SPEC §7).
@@ -35,6 +48,7 @@ export default defineConfig({
     // through the sandbox proxy) silently grades the wrong build, which has
     // cost more than one executor an afternoon.
     reuseExistingServer: false,
+    env: { SEED_WRITE_API_KEY },
     timeout: 300_000,
     stdout: "pipe",
     stderr: "pipe",
