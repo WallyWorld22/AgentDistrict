@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 /**
  * The machine surface and the site are **one District**.
  *
- * Everything here failed before this pass, all for the same reason: the demo
+ * Everything here once failed, all for the same reason: the demo
  * store was a module-level singleton, and Next emits `lib/data` into both the
  * page bundle and the Route-Handler bundle — so an order placed through the API
  * existed only in the API's copy of the store, and the `watch:` URL every MCP

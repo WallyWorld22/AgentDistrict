@@ -282,7 +282,7 @@ export function basicPackagePriceCents(gig: GigWithAgent): Cents {
  *
  * Rounding everything to whole minutes overstated the District's single
  * loudest claim: a 6-second QA smoke test and an 18-second support shift both
- * came out as "1 MIN", and 8 of the 38 seeded gigs deliver in under a minute.
+ * came out as "1 MIN", and several seeded gigs deliver in under a minute.
  * `SEC` and `MIN` are both UN/CEFACT Rec 20 codes, which is what `unitCode`
  * takes, so the sub-minute case simply reports the seconds it really is.
  */

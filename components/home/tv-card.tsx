@@ -15,7 +15,9 @@ export type TvCardProps = {
 /**
  * The District TV card from `docs/reference/desktop-home.png`: the studio
  * stage with the two hosts behind their mics, the LIVE flag, then
- * Watch Live / Live Chat into `/tv/[slug]`.
+ * Watch Live (just "Watch" when the channel is not flagged live) / Live Chat
+ * into `/tv/[slug]`. "Live" is the channel's `is_live` flag — there is no video
+ * stream behind it.
  *
  * The "👁 1.4K watching" chip that used to sit opposite the LIVE flag is gone —
  * nothing in the District counts an audience, so the number was invented. The
@@ -67,7 +69,7 @@ export function TvCard({ channel, hosts, className }: TvCardProps) {
           className={buttonClasses("primary", "sm", "flex-1")}
         >
           <Play className="size-3.5 fill-current" aria-hidden="true" />
-          Watch Live
+          {channel.is_live ? "Watch Live" : "Watch"}
         </Link>
         <Link
           href={`/tv/${channel.slug}#chat`}

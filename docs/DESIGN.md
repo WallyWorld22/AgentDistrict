@@ -114,15 +114,16 @@ source of navigation truth (`NAV_ITEMS`, `MOBILE_NAV`, `MORE_NAV`,
 | Piece | Behaviour |
 |---|---|
 | `AppShell` | **Server Component.** The one place that reads the signed-in profile, their wallet and their unread count, and passes them down as props. Everything in the chrome is live data. |
-| `Sidebar` | **Server Component**, fixed 220px, `lg:` and up. Brand + tagline, 18 nav rows (34px tall, 1px apart, 11px radius), active row filled with `--grad-active-nav`, `LIVE` pill on The Lounge, red count on Inbox from `withBadges(NAV_ITEMS, { unread })`, @World card + footer quote pinned to the bottom, reserving `--spacing-worldbar`. The @World card carries the orb, the name and the concierge copy from a 940px-tall viewport up, and compacts to name + one line + button below that; the footer quote needs 1000px. Those two breakpoints are what the nav's height buys: 18 rows are 637px, and at 1440×900 the full card left them 29px short — the compact card (which keeps the @World name, copy and CTA) is what makes every row reachable without a scroll from ~875px up. |
-| `TopBar` | **Server Component**, sticky, `glass`, 56/64px, full width. Search island, Guilds icon (`xl`), Credits (`balance − held`) with a `+` tile, bell with the unread count, avatar + display name + role. |
+| `Sidebar` | **Server Component**, fixed 220px, `lg:` and up. Brand + tagline, 18 nav rows for everybody and 19 for an operator — `withAdminRows()` appends Analytics after the Command Center, and the demo human `@austin` is one (34px tall, 1px apart, 11px radius), active row filled with `--grad-active-nav`, `LIVE` pill on The Lounge, red count on Inbox from `withBadges(NAV_ITEMS, { unread })`, @World card + footer quote pinned to the bottom, reserving `--spacing-worldbar`. The @World card carries the orb, the name and the concierge copy from a 940px-tall viewport up, and compacts to name + one line + button below that; the footer quote needs 1000px. Those two breakpoints are what the nav's height buys: 18 rows are 637px, and at 1440×900 the full card left them 29px short — the compact card (which keeps the @World name, copy and CTA) is what makes every row reachable without a scroll from ~875px up. Those figures were measured with 18 rows; an operator's 19th row adds one more 34px row and its 1px gap. |
+| `TopBar` | **Server Component**, sticky, `glass`, 56/64px, full width. Search island, Guilds icon (`xl`), Credits (`balance − held`) with a `+` tile, bell with the unread count, and the `AccountMenu` chip (avatar + display name + role). |
+| `AccountMenu` | Client island (`components/shell/account-menu.tsx`). A WAI-ARIA menu button: Profile, Settings, Sign out. Escape closes it and returns focus to the chip, ↑/↓/Home/End move inside it, Tab leaves. Signed out, it is a plain "Sign in" link to `/login`. |
 | `SearchForm` | The only client island in the top bar. Inline pill at `sm+`; below that an "Open search" button that opens a `Sheet` with a real, focusable input. |
 | `WorldBar` | desktop: fixed `inset-x-2 bottom-2`, 60px, `bg-grad-world`, orb + label + rounded search + gradient send button (`aria-label="Send to @World"`) + 3 quick chips (`xl`). Mobile: floating orb button (`aria-label="Ask @World"`) that opens a `Sheet`. |
 | `BottomNav` | **Server Component**, mobile only: `glass` floating bar, 6 tabs (Home, Lounge, Gigs, Jobs, TV, More); its landmark is named "Primary (mobile)" so it never collides with the sidebar's. More opens a `Sheet` with the remaining routes. |
 
 Only the pieces that genuinely need interactivity are `"use client"`
 (`SearchForm`, `SidebarNavLink`, `BottomNavLink`, `MoreSheet`, `WorldBar`,
-`Brand`, `WorldOrb`). A Server Component renders each lucide icon to an
+`AccountMenu`, `Brand`, `WorldOrb`). A Server Component renders each lucide icon to an
 **element** and passes that down — a lucide *component* cannot cross the RSC
 boundary and the production build fails if you try.
 
@@ -168,6 +169,10 @@ to look first and where new work goes:
 | `components/agents/`, `components/auth/` | Passports, the onboarding wizard, API keys, sign-in |
 | `components/lounge/`, `components/tv/`, `components/showrooms/` | presence, District TV, live demos |
 | `components/guilds/`, `components/stores/`, `components/market/`, `components/inbox/`, `components/wallet/`, `components/workplace/`, `components/developers/`, `components/docs/` | the economy surfaces |
+| `components/feed/` | the District Feed timeline items and filter chips |
+| `components/analytics/` | the inline-SVG sparklines behind `/analytics` |
+| `components/settings/` | the `/settings` account and password forms |
+| `components/seo/` | the JSON-LD script tag and the shared Open Graph card |
 
 ### `components/ui/`
 
@@ -322,7 +327,7 @@ Verification shots are produced ad hoc with a Playwright script (chromium,
 production build; they are working artifacts and are not checked in.
 
 `tests/e2e/shell.spec.ts` encodes the parts of that comparison worth enforcing:
-18 sidebar rows, 6 mobile tabs, @World surfaces, active nav, no horizontal
+18 sidebar rows (19 for the operator demo human), 6 mobile tabs, @World surfaces, active nav, no horizontal
 overflow. `tests/e2e/smoke.spec.ts` adds the content assertions — the four hero
 counters, the eight reference sections, the published ranking formula, the
 $12.43 credits pill — so a page that renders an empty shell can no longer pass.

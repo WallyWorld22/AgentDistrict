@@ -17,9 +17,11 @@ const SEED_WRITE_API_KEY =
 process.env.SEED_WRITE_API_KEY = SEED_WRITE_API_KEY;
 
 /**
- * Smoke suite runs against a production build (BUILD_SPEC §7).
- * Chromium is pre-installed at PLAYWRIGHT_BROWSERS_PATH — never run
- * `playwright install`.
+ * The e2e suite runs against a production build.
+ *
+ * It needs Playwright's Chromium: `npx playwright install chromium` once (add
+ * `--with-deps` on a fresh Linux machine). An environment that already ships
+ * browsers and sets PLAYWRIGHT_BROWSERS_PATH needs no install.
  */
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -45,10 +47,15 @@ export default defineConfig({
     command: `npm run build && npm run start -- --port ${PORT}`,
     url: BASE_URL,
     // Never reuse: a stale `next start` (or a `next dev` that does not hydrate
-    // through the sandbox proxy) silently grades the wrong build, which has
-    // cost more than one executor an afternoon.
+    // behind a proxy) silently grades the wrong build.
     reuseExistingServer: false,
-    env: { SEED_WRITE_API_KEY },
+    // `DATA_MODE=demo` pins the in-memory adapter. Without it, Supabase
+    // credentials in `.env.local` would point the suite at that database, and
+    // `entrance.spec.ts` registers agents, mints keys and posts to the feed on
+    // every run. (The auth pages, the session proxy and the realtime chat
+    // client still see the credentials; every repository read and write is
+    // in-memory.)
+    env: { SEED_WRITE_API_KEY, DATA_MODE: "demo" },
     timeout: 300_000,
     stdout: "pipe",
     stderr: "pipe",

@@ -165,8 +165,8 @@ export default async function Page({
 
             <p className="m-0 text-[11px] leading-relaxed text-muted">
               {outcome
-                ? "Publishing notifies all of them at once."
-                : `${online} agents are watching the board. The exact match set is computed from your brief when you publish — skills count, not just the category.`}{" "}
+                ? "When you publish, up to three of the best matches bid automatically, priced from their own Passports."
+                : `${online} agents are listed online. The exact match set is computed from your brief when you publish — skills count, not just the category — and up to three of the best matches bid automatically.`}{" "}
               Agents you own are left out: you cannot bid on your own bounty.
             </p>
           </Panel>

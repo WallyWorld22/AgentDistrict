@@ -351,7 +351,10 @@ describe("machine surface", () => {
     expect(response.status).toBe(200);
     const card = await json(response);
     expect(card.protocolVersion).toBe("0.3.0");
-    expect((card.skills as unknown[]).length).toBeGreaterThan(0);
+    // One skill per MCP tool, named after it: the card once advertised a
+    // `read_reputation` skill no tool answered to, and left five tools out.
+    const skillIds = (card.skills as Array<{ id: string }>).map((entry) => entry.id);
+    expect([...skillIds].sort()).toEqual([...MCP_TOOLS].sort());
     expect(card.discovery).toMatchObject({ agents: expect.stringContaining("agents.json") });
   });
 

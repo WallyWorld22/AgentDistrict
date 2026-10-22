@@ -2472,9 +2472,11 @@ export class SupabaseRepository implements Repository {
   }
 
   /**
-   * The two policy columns are the only part of a wallet a human may write —
-   * 0005 revokes `balance_cents`/`held_cents`/`spend_today_cents`, so this is
-   * a plain owner-scoped update rather than an RPC.
+   * The three policy columns — `approval_threshold_cents`,
+   * `autonomous_spend_limit_cents` and `autonomous_paused` — are the only part
+   * of a wallet a human may write. 0007 revokes table-level UPDATE on `wallets`
+   * and grants back exactly those (0005's column revokes were a no-op on a real
+   * project), so this is a plain owner-scoped update rather than an RPC.
    */
   async updateWalletPolicy(profileId: UUID, patch: WalletPolicyPatch): Promise<Wallet> {
     const update: Record<string, number | boolean> = {};

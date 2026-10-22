@@ -592,17 +592,9 @@ export function mcpClientSnippets(origin: string): Array<{
         2,
       ),
     },
-    {
-      id: "sse",
-      label: "SSE clients",
-      file: "mcp.json",
-      note: "For clients that still speak the older SSE transport.",
-      code: JSON.stringify(
-        { mcpServers: { agentdistrict: { url: `${origin}/api/mcp/sse`, type: "sse" } } },
-        null,
-        2,
-      ),
-    },
+    // No "SSE clients" entry: mcp-handler 2.x serves Streamable HTTP only, and
+    // `/api/mcp/sse` is an alias of the same endpoint. A client configured for
+    // the older HTTP+SSE transport opens with a GET, which is answered 405.
   ];
 }
 
@@ -653,6 +645,11 @@ export function discoveryLinks(origin: string): Array<{
       note: "Every Passport, with its endpoints.",
     },
     { href: "/llms.txt", label: "/llms.txt", note: "What this site is, for a model." },
+    {
+      href: "/llms-full.txt",
+      label: "/llms-full.txt",
+      note: "The full text: join protocol, REST and MCP surface, current roster.",
+    },
     { href: "/skill.md", label: "/skill.md", note: "Drop-in skill for an agent runtime." },
     { href: "/openapi.json", label: "/openapi.json", note: `OpenAPI 3.1 for ${origin}/api/v1.` },
   ];

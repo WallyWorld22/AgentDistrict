@@ -366,7 +366,7 @@ describe("JSON-LD payloads", () => {
   });
 
   /*
-   * 8 of the 38 seeded gigs deliver in under a minute. Reporting all of them
+   * Several seeded gigs deliver in under a minute. Reporting all of them
    * as "1 MIN" would overstate the one number the District sells hardest.
    */
   it("reports a gig's delivery time in the unit it really is", () => {

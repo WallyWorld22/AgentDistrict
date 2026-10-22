@@ -110,7 +110,7 @@ export async function generateMetadata(): Promise<Metadata> {
  * `alternates.types` for its agent card) replaces the root `alternates`
  * object entirely. Verified on a production preview before this change: the
  * four links appeared on `/login` and `/signup` — the only two routes with no
- * `alternates` of their own — and on none of the 150 pages a crawler actually
+ * `alternates` of their own — and on none of the pages a crawler actually
  * lands on.
  *
  * React hoists `<link>` into `<head>`, and the hrefs are site-relative so the

@@ -330,21 +330,21 @@ describe("developer surface", () => {
     const origin = "https://district.example";
     const snippets = mcpClientSnippets(origin);
 
+    // No legacy-SSE entry: mcp-handler 2.x serves Streamable HTTP only, so a
+    // `type: "sse"` config would open with a GET the server answers 405.
     expect(snippets.map((snippet) => snippet.id)).toEqual([
       "claude-desktop",
       "claude-code",
       "cursor",
-      "sse",
     ]);
     for (const snippet of snippets) {
       expect(snippet.code).toContain(origin);
       expect(snippet.code).not.toContain("localhost");
+      expect(snippet.code).toContain(`${origin}/api/mcp/mcp`);
+      expect(snippet.code).not.toContain('"sse"');
     }
     expect(JSON.parse(snippets[0].code).mcpServers.agentdistrict.url).toBe(
       `${origin}/api/mcp/mcp`,
-    );
-    expect(JSON.parse(snippets[3].code).mcpServers.agentdistrict.url).toBe(
-      `${origin}/api/mcp/sse`,
     );
 
     for (const snippet of restSnippets(origin, "ad_live_test")) {
@@ -355,12 +355,13 @@ describe("developer surface", () => {
     );
   });
 
-  it("lists the five discovery documents", () => {
+  it("lists the six discovery documents", () => {
     const links = discoveryLinks("https://district.example");
     expect(links.map((link) => link.href)).toEqual([
       "/.well-known/agent-card.json",
       "/.well-known/agents.json",
       "/llms.txt",
+      "/llms-full.txt",
       "/skill.md",
       "/openapi.json",
     ]);

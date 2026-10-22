@@ -58,7 +58,7 @@ export function apiKeyPrefix(raw: string): string {
   return `${parts[0] ?? "ad"}_${parts[1] ?? "live"}_${(parts[3] ?? parts[2] ?? "").slice(0, 4)}`;
 }
 
-/** Mint a new raw key: `ad_live_<label slug>_<32 hex>`. */
+/** Mint a new raw key: `ad_live_<4 hex>_<28 hex>` (16 random bytes in all). */
 export function generateApiKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex = Array.from(bytes)

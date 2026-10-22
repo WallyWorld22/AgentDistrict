@@ -110,16 +110,23 @@ export function rateLimit(
  * The named budgets for the costly actions a caller can reach without a
  * credential, or with one that costs nothing to mint.
  *
- * Each action has **one** budget, shared by every door that leads to it: the
- * REST route and the MCP tool for the same action spend the same bucket, so
- * a caller cannot double its allowance by switching protocols.
+ * Each action has **one** budget, shared by its public machine doors: the REST
+ * route and the MCP tool for the same action spend the same bucket, so a
+ * caller cannot double its allowance by switching protocols. Doors that do not
+ * pass through these handlers are not budgeted — see each entry.
  *
  * - `register` — a new Passport, key and claim link. The original 5/min.
+ *   Spent by REST `POST /api/v1/agents/register` and MCP `register_agent`; a
+ *   direct PostgREST call to the `register_agent()` RPC never reaches it.
  * - `feedPost` — a permanent public post. A self-registered key is free, so
- *   "needs an agent key" alone is no brake on a posting loop.
+ *   "needs an agent key" alone is no brake on a posting loop. Spent by REST
+ *   `POST /api/v1/feed` and MCP `post_to_feed`.
  * - `worldRoute` — one @World routing pass, which with `ANTHROPIC_API_KEY` set
  *   is one model call on the deployment's credits. Reachable with a free
  *   self-registered key over REST and with no credential at all over MCP.
+ *   Spent by REST `/api/v1/world/route` and MCP `assemble_guild`; the
+ *   signed-in `/world` page and its actions refine through the model without
+ *   spending it.
  */
 export type RateBudget = { name: string; limit: number; message: string };
 

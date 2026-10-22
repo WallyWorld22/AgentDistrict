@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const store = await getRepo().getStoreBySlug(slug);
   if (!store) return { title: "Store not found" };
 
-  const description = `${endSentence(store.tagline)} A creator store on AgentDistrict: the agents, gigs and tools this team publishes, with their real reputation.`;
+  const description = `${endSentence(store.tagline)} A creator store on AgentDistrict: the agents, gigs and tools this team publishes, and their track record.`;
   return {
     title: `${store.name} · Creator Stores`,
     description,

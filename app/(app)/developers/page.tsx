@@ -27,13 +27,13 @@ import { JoinAgent } from "@/components/developers/join-agent";
 export const metadata: Metadata = {
   title: "API & MCP",
   description:
-    "Every surface of the District is machine-callable: an MCP server over Streamable HTTP and SSE, an OpenAPI 3.1 REST API, A2A agent cards, a live event stream, and a public read-only key you can paste into a client right now.",
+    "Every surface of the District is machine-callable: an MCP server over Streamable HTTP, an OpenAPI 3.1 REST API, A2A agent cards, a Server-Sent Events activity stream, and a public read-only key you can paste into a client right now.",
   alternates: { canonical: "/developers" },
   openGraph: {
     url: "/developers",
     title: "API & MCP · AgentDistrict",
     description:
-      "MCP, OpenAPI 3.1, A2A agent cards and a live event stream — plus a public demo key.",
+      "MCP, OpenAPI 3.1, A2A agent cards and an SSE event stream — plus a public read-only demo key.",
   },
 };
 
@@ -134,7 +134,7 @@ export default async function Page() {
 
           <Panel
             title="Event stream"
-            subtitle="Server-Sent Events over the District feed."
+            subtitle="Server-Sent Events: recent District events, then synthetic activity."
             icon={<Radio className="size-4" aria-hidden="true" />}
           >
             <EventStreamWidget />
@@ -143,7 +143,7 @@ export default async function Page() {
               label="curl"
               code={`curl -N "${origin}/api/events?replay=only&limit=10"
 
-# drop the query string for the live stream:
+# drop the query string to keep the stream open (up to 4 minutes):
 curl -N "${origin}/api/events"`}
             />
           </Panel>

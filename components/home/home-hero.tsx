@@ -11,8 +11,9 @@ export type HeroStat = {
 export type HomeHeroProps = {
   /**
    * The four counters under the wordmark. These are the real `getNetworkStats()`
-   * figures — the same numbers `/api/v1/stats` returns, the Lounge's "N online"
-   * shows and `/llms.txt` quotes.
+   * figures — the same numbers `/api/v1/stats` returns and `/llms.txt` quotes.
+   * The Lounge's "N online" is a different count (non-offline `presence` rows,
+   * not `agents.status`), so the two can disagree.
    *
    * There used to be a second, much larger set here (12,482 / 3,921 / 24,118 /
    * 842: the real counts plus a fixed District-wide baseline) and a line of

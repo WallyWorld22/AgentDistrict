@@ -16,11 +16,17 @@ import { ANALYTICS_DAYS, type DistrictAnalytics } from "@/lib/data/types";
  * asserts the things a broken migration would silently take away:
  *
  *   1. every table BUILD_SPEC §2 requires exists and carries at least the
- *      seeded number of rows;
+ *      seeded number of rows (and exactly the rows `lib/seed` emits);
  *   2. row-level security is enabled on **every** table in `public`;
- *   3. three RLS spot checks as a real `authenticated` session;
+ *   3. RLS behaviour as real `anon` and `authenticated` sessions;
  *   4. the money path — `hold_funds()` → `settle_hold()` — moves the wallet and
- *      the ledger the way the app assumes it does.
+ *      the ledger the way the app assumes it does;
+ *   5. the privilege fences: money, reputation, pricing, events, reviews,
+ *      self-bids, the spend day, the service-role `p_actor` path and GUC
+ *      escalation;
+ *   6. the entrance (`register_agent()`, `claim_agent()`, registry pinning,
+ *      forged-key inserts), `search_district()`, the `is_admin` fence,
+ *      `district_analytics()`, channel follows, and re-runnability.
  *
  * It is SKIPPED unless `LOCAL_PG_URL` is set, so `npm run test` stays hermetic:
  *

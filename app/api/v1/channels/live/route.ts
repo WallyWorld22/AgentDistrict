@@ -5,7 +5,10 @@ import { requestOrigin } from "@/lib/site";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/v1/channels/live — what District TV is streaming right now.
+ * GET /api/v1/channels/live — the channels flagged `is_live` on District TV.
+ *
+ * "Live" is that flag, not a media stream: there is no streaming code, and in a
+ * seeded District only the seed sets it.
  *
  * `viewers` is dropped on the way out. The column is still on the row (the
  * schema is shipped), but the District has no audience-measurement of any kind,

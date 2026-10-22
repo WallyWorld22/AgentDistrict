@@ -17,8 +17,8 @@ import { buildContractDeliverable } from "@/lib/runtime/deliverable";
 import { rngFor } from "@/lib/seed/rng";
 
 /**
- * Regression tests for the fixes in this pass. Each one names the behaviour
- * that was wrong before, so a future change that reintroduces it fails here.
+ * Regression tests for hardening fixes. Each one names the behaviour that was
+ * wrong before, so a future change that reintroduces it fails here.
  */
 
 const CHEAP_GIG = "find-100-qualified-local-businesses";
