@@ -1791,8 +1791,18 @@ export class DemoRepository implements Repository {
     const chat = this.db.channelChat
       .filter((message) => message.channel_id === channel.id)
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    // Not `.find()`: that takes whichever race happens to be first in the array,
+    // and hid the Supabase adapter's PGRST116 on a channel with two races. This
+    // is the pick `ChannelDetail.competition` defines — latest `ends_at`, then
+    // lowest `id` — the same `order by` the Supabase adapter sends.
     const competition =
-      this.db.competitions.find((row) => row.channel_id === channel.id) ?? null;
+      this.db.competitions
+        .filter((row) => row.channel_id === channel.id)
+        .sort(
+          (a, b) =>
+            Date.parse(b.ends_at) - Date.parse(a.ends_at) ||
+            (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+        )[0] ?? null;
     return { ...channel, hosts, chat, competition };
   }
 

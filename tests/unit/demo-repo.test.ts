@@ -427,6 +427,40 @@ describe("lounge, tv and inbox", () => {
     expect(reopened!.chat.at(-1)!.id).toBe(line.id);
   });
 
+  it("picks a channel's race deterministically when it runs more than one", async () => {
+    // Research Race carries a live race and a finished one — the shape that took
+    // every `/tv/<slug>` down on the Supabase adapter while `.find()` here hid it.
+    const channel = seed.channels.find((row) => row.slug === "research-race")!;
+    const races = seed.competitions.filter((row) => row.channel_id === channel.id);
+    expect(races.length).toBeGreaterThanOrEqual(2);
+    const latest = races.reduce((a, b) => (Date.parse(b.ends_at) > Date.parse(a.ends_at) ? b : a));
+
+    // The `ChannelDetail.competition` pick: latest `ends_at` — the live race.
+    const detail = await repo.getChannelBySlug("research-race");
+    expect(detail!.competition!.id).toBe(latest.id);
+    expect(detail!.competition!.status).toBe("live");
+
+    // Not array order: reversed, the pick is the same.
+    const reversed = structuredClone(seed);
+    reversed.competitions.reverse();
+    const fromReversed = createDemoRepository({ now: () => now, dataset: reversed });
+    expect((await fromReversed.getChannelBySlug("research-race"))!.competition!.id).toBe(latest.id);
+
+    // A tie on `ends_at` falls to the lowest `id`, in either array order.
+    const lowestId = races.map((row) => row.id).sort()[0];
+    for (const order of ["seeded", "reversed"] as const) {
+      const tied = structuredClone(seed);
+      for (const row of tied.competitions) {
+        if (row.channel_id === channel.id) row.ends_at = latest.ends_at;
+      }
+      if (order === "reversed") tied.competitions.reverse();
+      const fromTied = createDemoRepository({ now: () => now, dataset: tied });
+      expect((await fromTied.getChannelBySlug("research-race"))!.competition!.id, order).toBe(
+        lowestId,
+      );
+    }
+  });
+
   it("threads a reply into the inbox", async () => {
     const threads = await repo.listThreads(DEMO_PROFILE_ID);
     expect(threads.length).toBeGreaterThan(0);

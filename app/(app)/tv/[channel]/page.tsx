@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { Radio, Tv, Users } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
-import type { Agent, Channel } from "@/lib/data/types";
-import { chatTranscript, raceSecondsRemaining } from "@/lib/data/ext/lounge";
+import type { Agent } from "@/lib/data/types";
+import { chatTranscript, raceSecondsRemaining, relatedChannels } from "@/lib/data/ext/lounge";
 import { endSentence } from "@/lib/seo/schema";
 import { buttonClasses } from "@/components/ui/button";
 import { LiveDot } from "@/components/ui/live-dot";
@@ -60,7 +60,7 @@ export default async function Page({ params }: { params: Params }) {
 
   const followed = profile ? await repo.listFollowedChannelSlugs(profile.id) : [];
   const race = competitions.find((entry) => entry.id === channel.competition?.id) ?? null;
-  const related = await relatedChannels(channel, everyChannel);
+  const related = relatedChannels(channel, everyChannel);
   const transcript = chatTranscript(channel.chat, 40);
   const upNext = everyChannel
     .filter((entry) => entry.slug !== channel.slug && !entry.is_live)
@@ -244,29 +244,6 @@ async function hireableHosts(hosts: Agent[]): Promise<HostEntry[]> {
         hirePriceCents: gig ? gig.starting_price_cents : null,
         hireLabel: `Hire ${agent.name}`,
       } satisfies HostEntry;
-    }),
-  );
-}
-
-async function relatedChannels(
-  channel: Channel,
-  everyChannel: Channel[],
-): Promise<Array<Channel & { hosts: Agent[] }>> {
-  const repo = getRepo();
-  const siblings = everyChannel
-    .filter((entry) => entry.slug !== channel.slug)
-    .sort(
-      (a, b) =>
-        Number(b.kind === channel.kind) - Number(a.kind === channel.kind) ||
-        Number(b.is_live) - Number(a.is_live) ||
-        b.followers - a.followers,
-    )
-    .slice(0, 4);
-
-  return Promise.all(
-    siblings.map(async (entry) => {
-      const detail = await repo.getChannelBySlug(entry.slug);
-      return { ...entry, hosts: detail?.hosts ?? [] };
     }),
   );
 }
