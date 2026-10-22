@@ -24,6 +24,13 @@ import {
 } from "../hash";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
+import {
+  FIGHTER_HANDLES,
+  computeLeagueStandings,
+  isLeagueFighter,
+  leagueFighterRefusal,
+  unknownFighter,
+} from "../league";
 
 /**
  * How many rows the trending sort re-ranks in memory. The score is computed,
@@ -34,12 +41,16 @@ import { compareTrendingGigs, trendingAgentScore } from "../trending";
 const TRENDING_POOL = 240;
 import { sha1Hex } from "@/lib/seed/uuid";
 import {
+  LEAGUE_FIGHTER_COLUMNS,
   asRow,
   asRows,
   toAgent,
   toAgentClaim,
   toApiKey,
   toBid,
+  toBout,
+  toBoutResult,
+  toLeagueFighterRow,
   toChannel,
   toChatMessage,
   toCompetition,
@@ -76,6 +87,10 @@ import type {
   RegisteredAgent,
   Bid,
   BidWithAgent,
+  Bout,
+  BoutFilter,
+  BoutResult,
+  BoutWithResult,
   Channel,
   ChannelDetail,
   ChannelFilter,
@@ -102,6 +117,8 @@ import type {
   JobFilter,
   JobWithBidCount,
   JobWithBids,
+  LeagueFighter,
+  LeagueStanding,
   ListOptions,
   LoungeMessage,
   MarketFilter,
@@ -504,6 +521,7 @@ export class SupabaseRepository implements Repository {
       sort = "trending",
       limit = 48,
       offset = 0,
+      excludeLeagueFighters,
     } = filter;
     const client = await this.client();
 
@@ -517,14 +535,21 @@ export class SupabaseRepository implements Repository {
       if (error) throw new UpstreamError(error.message);
       const rows = asRows(data).map(toAgent);
       return sortAgents(
-        rows.filter((agent) =>
-          matchesAgentFilter(agent, { category, room, status, maxPriceCents, skills, freeOnly }),
+        rows.filter(
+          (agent) =>
+            !(excludeLeagueFighters && isLeagueFighter(agent)) &&
+            matchesAgentFilter(agent, { category, room, status, maxPriceCents, skills, freeOnly }),
         ),
         sort,
       ).slice(offset, offset + limit);
     }
 
     let query = client.from("agents").select("*");
+    // In SQL, before the range: dropping fighters after paging would hand back
+    // short pages (a `price` sort puts the $0 fighters first).
+    if (excludeLeagueFighters) {
+      query = query.not("handle", "in", `(${FIGHTER_HANDLES.join(",")})`);
+    }
     if (category) query = query.eq("category", category);
     if (room) query = query.eq("room_slug", room);
     if (status) query = query.eq("status", status);
@@ -684,6 +709,11 @@ export class SupabaseRepository implements Repository {
   async updateAgent(handle: Handle, patch: UpdateAgentInput, ownerId: UUID): Promise<Agent> {
     const agent = await this.requireAgentByHandle(handle);
     if (agent.owner_id !== ownerId) throw new ForbiddenError("You do not own this agent");
+    // See the demo adapter; 0012's `league_fighters_stay_offline` refuses it
+    // in the database too.
+    if (patch.status !== undefined && patch.status !== "offline" && isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "go online or take work"));
+    }
     const client = await this.client();
 
     const update: Record<string, unknown> = {};
@@ -722,6 +752,9 @@ export class SupabaseRepository implements Repository {
     // clear ForbiddenError beats PostgREST's silent zero-row update.
     if (agent.owner_id !== input.ownerId) {
       throw new ForbiddenError("You do not own this agent");
+    }
+    if (input.status !== "offline" && isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "go online or take work"));
     }
     const client = await this.client();
     const presence = await this.one(
@@ -1162,6 +1195,11 @@ export class SupabaseRepository implements Repository {
   async createGig(input: CreateGigInput, ownerId: UUID): Promise<Gig> {
     const agent = await this.requireAgentByHandle(input.agentHandle);
     if (agent.owner_id !== ownerId) throw new ForbiddenError("You do not own this agent");
+    // See the demo adapter; 0012's `gigs_no_league_fighters` refuses it in the
+    // database too.
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "publish a gig"));
+    }
     if (input.packages.length === 0) throw new ValidationError("A gig needs at least one package");
     const client = await this.client();
 
@@ -1214,6 +1252,9 @@ export class SupabaseRepository implements Repository {
     }
     const pkg = gig.packages.find((candidate) => candidate.tier === input.tier);
     if (!pkg) throw new ValidationError(`Gig ${gig.slug} has no ${input.tier} package`);
+    if (isLeagueFighter(gig.agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(gig.agent.name, "be hired"));
+    }
     const brief = input.brief.trim();
     if (!brief) throw new ValidationError("A brief is required");
 
@@ -1468,6 +1509,11 @@ export class SupabaseRepository implements Repository {
     if (job.status !== "open") throw new ConflictError("This job is no longer open for bids");
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
     const agent = await this.requireAgentByHandle(input.agentHandle);
+    // See the demo adapter; 0012's `bids_no_league_fighters` refuses it in the
+    // database too.
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
+    }
     // See the demo adapter: bidding on your own bounty is free reputation.
     // `bids_insert_agent_owner` (0008) refuses it in the database too.
     if (job.poster_id === agent.owner_id) {
@@ -1535,9 +1581,12 @@ export class SupabaseRepository implements Repository {
     );
     if (!bid) throw new NotFoundError("Bid");
     const agent = await this.requireAgentById(bid.agent_id);
-    // Mirror of the `placeBid` guard, for a bid that predates it.
+    // Mirror of the `placeBid` guards, for a bid that predates them.
     if (job.poster_id === agent.owner_id) {
       throw new ForbiddenError("You cannot award your own bounty to your own agent");
+    }
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
     }
 
     const timestamp = this.nowIso();
@@ -2181,6 +2230,113 @@ export class SupabaseRepository implements Repository {
     );
     if (!message) throw new UpstreamError("Chat message was not written");
     return message;
+  }
+
+  /* ------------------------------------------- the Fight League (fiction) */
+
+  /** Bouts matching `filter`, in schedule order (`scheduled_at`, then `id`). */
+  private async boutRows(filter: BoutFilter & { status?: Bout["status"] } = {}): Promise<Bout[]> {
+    const client = await this.client();
+    let query = client
+      .from("bouts")
+      .select("*")
+      .order("scheduled_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (filter.channelId) query = query.eq("channel_id", filter.channelId);
+    if (filter.season !== undefined) query = query.eq("season", filter.season);
+    if (filter.status) query = query.eq("status", filter.status);
+    return this.many(query, toBout);
+  }
+
+  private async boutResultsFor(boutIds: UUID[]): Promise<BoutResult[]> {
+    if (boutIds.length === 0) return [];
+    const client = await this.client();
+    return this.many(client.from("bout_results").select("*").in("bout_id", boutIds), toBoutResult);
+  }
+
+  /**
+   * Fighters as the league shows them. Selects the identity columns by name,
+   * so the league path never even receives a rating (see `LeagueFighter`).
+   */
+  private async leagueFighters(bouts: Bout[]): Promise<Map<UUID, LeagueFighter>> {
+    const ids = [...new Set(bouts.flatMap((bout) => [bout.fighter_a, bout.fighter_b]))];
+    if (ids.length === 0) return new Map();
+    const client = await this.client();
+    const rows = await this.many(
+      client.from("agents").select(LEAGUE_FIGHTER_COLUMNS).in("id", ids),
+      toLeagueFighterRow,
+    );
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
+  private async withResults(bouts: Bout[]): Promise<BoutWithResult[]> {
+    const [results, fighters] = await Promise.all([
+      this.boutResultsFor(bouts.map((bout) => bout.id)),
+      this.leagueFighters(bouts),
+    ]);
+    const resultByBout = new Map(results.map((row) => [row.bout_id, row]));
+    return bouts.map((bout) => ({
+      ...bout,
+      fighterA: fighters.get(bout.fighter_a) ?? unknownFighter(bout.fighter_a),
+      fighterB: fighters.get(bout.fighter_b) ?? unknownFighter(bout.fighter_b),
+      result: resultByBout.get(bout.id) ?? null,
+    }));
+  }
+
+  async listBouts(filter: BoutFilter = {}): Promise<BoutWithResult[]> {
+    return this.withResults(await this.boutRows(filter));
+  }
+
+  async getBout(id: UUID): Promise<BoutWithResult | null> {
+    const client = await this.client();
+    const bout = await this.one(
+      client.from("bouts").select("*").eq("id", id).maybeSingle(),
+      toBout,
+    );
+    if (!bout) return null;
+    const [withResult] = await this.withResults([bout]);
+    return withResult;
+  }
+
+  /**
+   * One `decide_bout()` call per bout that is due by this server's clock.
+   *
+   * The clock here only chooses which bouts to *ask* about; the function
+   * re-checks `scheduled_at <= now()` against the database's own clock and
+   * refuses otherwise, so a skewed app server can neither decide a bout early
+   * nor fail the page — a bout the database says is not due yet is skipped
+   * and comes up again on the next read. A concurrent caller that got there
+   * first is not an error either: the RPC hands back the result it recorded.
+   */
+  async decideDueBouts(channelId: UUID): Promise<BoutResult[]> {
+    const nowMs = Date.now();
+    const due = (await this.boutRows({ channelId, status: "scheduled" })).filter(
+      (bout) => Date.parse(bout.scheduled_at) <= nowMs,
+    );
+    if (due.length === 0) return [];
+
+    const client = await this.client();
+    const results: BoutResult[] = [];
+    for (const bout of due) {
+      const { data, error } = await client.rpc("decide_bout", { p_bout_id: bout.id });
+      if (error) {
+        if (/cannot be decided before then/i.test(error.message ?? "")) continue;
+        throw new UpstreamError(error.message);
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new UpstreamError(`decide_bout returned no result for ${bout.id}`);
+      results.push(toBoutResult(asRow(row)));
+    }
+    return results;
+  }
+
+  async leagueStandings(filter: BoutFilter = {}): Promise<LeagueStanding[]> {
+    const bouts = await this.boutRows(filter);
+    const [results, fighters] = await Promise.all([
+      this.boutResultsFor(bouts.map((bout) => bout.id)),
+      this.leagueFighters(bouts),
+    ]);
+    return computeLeagueStandings(bouts, results, fighters);
   }
 
   /* ---------------------------------------------------------------- lounge */

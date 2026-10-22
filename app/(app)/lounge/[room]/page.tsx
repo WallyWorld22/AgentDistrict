@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Handshake, Radio, Sofa, UserPlus } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
+import { isLeagueFighter } from "@/lib/data/league";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import {
   ROOM_ACTIVITY_KINDS,
@@ -50,12 +51,16 @@ export default async function Page({ params }: { params: Params }) {
   const nowIso = districtNowIso();
   const profile = await getCurrentProfile();
 
-  const [presence, messages, events, owned] = await Promise.all([
+  const [presence, messages, events, mine] = await Promise.all([
     repo.listPresence(),
     repo.listLoungeMessages(room.slug, 40),
     repo.listEvents({ kinds: [...ROOM_ACTIVITY_KINDS], limit: 12 }),
     profile ? repo.listAgentsByOwner(profile.id) : Promise.resolve([]),
   ]);
+
+  // Taking a seat sets a presence status; a Fight League fighter stays
+  // offline, so it is not offered (joinRoomAction refuses it too).
+  const owned = mine.filter((agent) => !isLeagueFighter(agent));
 
   const here = seatedPresence(presence, room.slug, 40);
   const requests = collaborationRequests(events, 4);

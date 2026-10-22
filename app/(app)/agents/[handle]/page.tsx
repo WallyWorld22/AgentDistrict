@@ -29,6 +29,9 @@ import {
   FOUNDING_CAST_NOTE,
   isFoundingCast,
 } from "@/lib/data/ext/cast";
+import { FIGHTER_FICTION_LABEL } from "@/lib/data/ext/fight-night";
+import { isLeagueFighter } from "@/lib/data/league";
+import { FIGHT_CHANNEL_SLUG } from "@/lib/seed";
 import { SITE_NAME } from "@/lib/site";
 import {
   agentBreadcrumbTrail,
@@ -51,6 +54,7 @@ import { DataRow, Inset, Panel } from "@/components/feature/panel";
 import { MessageAgentForm } from "@/components/feature/message-agent-form";
 import { AgentStatusControl } from "@/components/agents/agent-status-control";
 import { PassportJson } from "@/components/agents/passport-json";
+import { FictionBadge } from "@/components/tv/fiction-badge";
 
 type Params = Promise<{ handle: string }>;
 type Query = Promise<Record<string, string | string[] | undefined>>;
@@ -77,7 +81,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     agent.rating_count > 0 && !isFoundingCast(agent.handle)
       ? `Rated ${agent.rating_avg.toFixed(2)}/5 across ${agent.rating_count.toLocaleString("en-US")} ratings. `
       : "";
-  const description = `${endSentence(agent.tagline)} ${rating}${AGENT_CATEGORY_LABELS[agent.category]} agent on AgentDistrict. ${price}. Hire it over the web, MCP or REST.`;
+  // A Fight League fighter's snippet carries no price and no "hire it": the
+  // page is the disclosed-fiction profile, and the snippet says what it is.
+  const description = isLeagueFighter(agent)
+    ? `${endSentence(agent.tagline)} A fictional character on District TV's scripted Fight League — not a service, and there is nothing to hire.`
+    : `${endSentence(agent.tagline)} ${rating}${AGENT_CATEGORY_LABELS[agent.category]} agent on AgentDistrict. ${price}. Hire it over the web, MCP or REST.`;
 
   return {
     title: `${agent.name} · Agent Passport`,
@@ -135,6 +143,9 @@ export default async function Page({
   const featured = bestGig(gigs);
   const endpoints = resolvedEndpoints(agent.endpoints, origin);
   const owned = profile?.id === agent.owner_id;
+  // A Fight League fighter: a character with nothing to sell. Its Passport
+  // stays (the fight card links here) but offers no hire, price or presence.
+  const fighter = isLeagueFighter(agent);
   // `agentHandle` is the semantic filter `GigFilter` names; /gigs reads it.
   const gigsHref = `/gigs?agentHandle=${encodeURIComponent(agent.handle)}`;
 
@@ -211,6 +222,7 @@ export default async function Page({
                   <span className="sr-only"> — {FOUNDING_CAST_NOTE}</span>
                 </Pill>
               ) : null}
+              {fighter ? <FictionBadge label={FIGHTER_FICTION_LABEL} /> : null}
             </div>
             <p className="m-0 mt-1 text-[13px] text-ink">{agent.tagline}</p>
             <p className="m-0 mt-1 text-[11.5px] text-muted">
@@ -219,14 +231,16 @@ export default async function Page({
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-3">
               <Rating value={agent.rating_avg} count={agent.rating_count} size="lg" />
-              <Price
-                cents={agent.starting_price_cents}
-                free={agent.is_free}
-                from={agent.pricing_model === "from"}
-                unit={priceUnit(agent.pricing_model)}
-                tone="green"
-                size="lg"
-              />
+              {fighter ? null : (
+                <Price
+                  cents={agent.starting_price_cents}
+                  free={agent.is_free}
+                  from={agent.pricing_model === "from"}
+                  unit={priceUnit(agent.pricing_model)}
+                  tone="green"
+                  size="lg"
+                />
+              )}
             </div>
             <ul className="m-0 mt-2.5 flex list-none flex-wrap gap-1.5 p-0">
               {agent.regions.map((region) => (
@@ -240,7 +254,15 @@ export default async function Page({
             </ul>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            {featured ? (
+            {fighter ? (
+              <Link
+                href={`/tv/${FIGHT_CHANNEL_SLUG}`}
+                data-testid="fight-card-link"
+                className={buttonClasses("primary", "md")}
+              >
+                See the fight card
+              </Link>
+            ) : featured ? (
               <Link
                 href={`/gigs/${featured.slug}`}
                 data-testid="hire-agent"
@@ -326,7 +348,12 @@ export default async function Page({
             actionLabel="All gigs"
             icon={<Gem className="size-4" aria-hidden="true" />}
           >
-            {gigs.length === 0 ? (
+            {gigs.length === 0 && fighter ? (
+              <p className="m-0 text-[12px] text-muted">
+                {agent.name} is a fictional Fight League character: it publishes no gigs and
+                takes no bids.
+              </p>
+            ) : gigs.length === 0 ? (
               <div className="grid gap-2.5">
                 <p className="m-0 text-[12px] text-muted">
                   No published gigs yet — post a bounty and {agent.name} can bid on it.
@@ -387,7 +414,9 @@ export default async function Page({
                 ))}
                 {reviews.length === 0 ? (
                   <li className="text-[12px] text-muted">
-                    No reviews yet — be the first to hire {agent.name}.
+                    {fighter
+                      ? `Nobody hires a fictional character, so nobody reviews ${agent.name}.`
+                      : `No reviews yet — be the first to hire ${agent.name}.`}
                   </li>
                 ) : null}
               </ul>
@@ -406,13 +435,22 @@ export default async function Page({
               icon={<IdCard className="size-4" aria-hidden="true" />}
               bodyClassName="grid gap-3"
             >
-              <AgentStatusControl handle={agent.handle} status={agent.status} />
-              <Link
-                href="/gigs/new"
-                className={buttonClasses("subtle", "sm", "w-full")}
-              >
-                Publish a gig for {agent.name}
-              </Link>
+              {fighter ? (
+                <p data-testid="fighter-owner-note" className="m-0 text-[12px] leading-relaxed text-ink">
+                  {agent.name} is a fictional Fight League character, so it stays offline and
+                  cannot publish a gig or bid on a bounty. Its bouts are on the fight card.
+                </p>
+              ) : (
+                <>
+                  <AgentStatusControl handle={agent.handle} status={agent.status} />
+                  <Link
+                    href="/gigs/new"
+                    className={buttonClasses("subtle", "sm", "w-full")}
+                  >
+                    Publish a gig for {agent.name}
+                  </Link>
+                </>
+              )}
             </Panel>
           ) : null}
 
@@ -428,7 +466,11 @@ export default async function Page({
 
           <Panel
             title="Machine block"
-            subtitle="Everything another agent needs to call this one."
+            subtitle={
+              fighter
+                ? "A character, not a capability: its card says so, and lists nothing to call."
+                : "Everything another agent needs to call this one."
+            }
             icon={<Cpu className="size-4" aria-hidden="true" />}
           >
             <dl className="m-0 grid gap-0">

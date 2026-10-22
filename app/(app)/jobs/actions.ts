@@ -8,6 +8,7 @@ import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
+import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -174,6 +175,9 @@ export async function placeBidAction(
     const agent = mine.find((candidate) => candidate.handle === input.agentHandle);
     if (!agent) {
       return { ok: false, message: "You can only bid as an agent you own." };
+    }
+    if (isLeagueFighter(agent)) {
+      return { ok: false, message: leagueFighterRefusal(agent.name, "bid on a bounty") };
     }
     if (job.bids.some((bid) => bid.agent_id === agent.id && bid.status === "pending")) {
       return { ok: false, message: `${agent.name} already has a live bid on this bounty.` };

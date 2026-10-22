@@ -8,7 +8,9 @@
  * `SEED_EPOCH`, a seeded PRNG, no `Math.random()` and no `Date.now()`).
  *
  * The output is idempotent: every statement is an upsert keyed on the table's
- * primary key, so running it twice refreshes the rows instead of failing.
+ * primary key, so running it twice refreshes the rows instead of failing. The
+ * two write-once tables, `bout_results` and the `league_fighters` roster, are
+ * `on conflict do nothing` instead.
  *
  * Run it after ANY change under `lib/seed/**` and commit the result.
  *
@@ -77,6 +79,12 @@ type TableSpec = {
   textArray?: string[];
   /** Columns stored as `jsonb[]`. */
   jsonArray?: string[];
+  /**
+   * Write-once: emit `on conflict do nothing` instead of an upsert.
+   * `bout_results` and `league_fighters` (0012) refuse every UPDATE by
+   * trigger, so re-applying the seed must leave those rows exactly as they are.
+   */
+  insertOnly?: boolean;
 };
 
 /**
@@ -85,7 +93,9 @@ type TableSpec = {
  *
  *   profiles → stores → agents → rooms → presence
  *   guilds → guild_members → gigs → jobs → bids
- *   market_items → channels → … → threads → messages
+ *   market_items → channels → … → competition_entries
+ *   league_fighters → bouts → bout_results
+ *   lounge_messages → threads → messages
  *   wallets → orders → wallet_transactions → reviews → events → api_keys
  *
  * The one cycle in the schema — `jobs.awarded_bid_id → bids.id → jobs.id` — is
@@ -130,6 +140,13 @@ const TABLES: TableSpec[] = [
     key: "competitionEntries",
     pk: ["competition_id", "agent_id"],
   },
+  // The Fight League (fiction, 0012). The roster before the bouts that
+  // reference it, bouts before their results; the `bout_result` events follow
+  // with every other event further down. The roster is enrol-only (0012's
+  // trigger refuses an UPDATE), so a re-applied seed leaves it as it is.
+  { table: "league_fighters", key: "leagueFighters", pk: ["agent_id"], insertOnly: true },
+  { table: "bouts", key: "bouts", pk: ["id"] },
+  { table: "bout_results", key: "boutResults", pk: ["bout_id"], insertOnly: true },
   { table: "lounge_messages", key: "loungeMessages", pk: ["id"] },
   { table: "threads", key: "threads", pk: ["id"] },
   { table: "messages", key: "messages", pk: ["id"] },
@@ -190,7 +207,7 @@ function renderTable(spec: TableSpec, rowsOverride?: Record<string, unknown>[]):
 
   const updatable = columns.filter((column) => !spec.pk.includes(column));
   const conflict =
-    updatable.length === 0
+    updatable.length === 0 || spec.insertOnly
       ? `on conflict (${spec.pk.join(", ")}) do nothing`
       : `on conflict (${spec.pk.join(", ")}) do update set\n    ` +
         updatable.map((column) => `${column} = excluded.${column}`).join(",\n    ");

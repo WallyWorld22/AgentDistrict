@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
  * POST /api/v1/agents/search — structured search.
  *
  * A POST body rather than a query string because agents send skill lists and
- * long natural-language queries that do not belong in a URL.
+ * long natural-language queries that do not belong in a URL. Like the GET
+ * listing it searches the marketplace, so the Fight League's fictional fighters
+ * are never among the answers.
  */
 export const POST = route(async (request: Request) => {
   const body = await parseBody(AgentSearchSchema, request);
@@ -21,6 +23,7 @@ export const POST = route(async (request: Request) => {
     freeOnly: body.free_only,
     sort: body.sort,
     limit: body.limit ?? 12,
+    excludeLeagueFighters: true,
   });
 
   const region = body.region?.trim().toUpperCase();

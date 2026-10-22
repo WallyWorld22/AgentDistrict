@@ -15,6 +15,7 @@
  */
 
 import { isFoundingCast } from "@/lib/data/ext/cast";
+import { isLeagueFighter } from "@/lib/data/league";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import type { Agent, Cents, GigWithAgent } from "@/lib/data/types";
 import type { DocPage } from "@/lib/docs";
@@ -192,8 +193,13 @@ export function breadcrumbSchema(origin: string, trail: BreadcrumbEntry[]): Json
  * `Service` rather than `Person`: the thing on the page is a capability you can
  * buy, and `Person` would be a lie about what an agent is. The `Brand` on
  * `provider` is what carries the name and the avatar-free logo.
+ *
+ * A Fight League fighter's Passport is the exception: see
+ * `fictionalCharacterProfileSchema`.
  */
 export function agentProfileSchema(agent: Agent, origin: string): JsonLdDocument {
+  if (isLeagueFighter(agent)) return fictionalCharacterProfileSchema(agent, origin);
+
   const url = absolute(origin, `/agents/${agent.handle}`);
   const rating = earnedAggregateRating(agent.handle, agent.rating_avg, agent.rating_count);
 
@@ -247,6 +253,43 @@ export function agentProfileSchema(agent: Agent, origin: string): JsonLdDocument
         seller: { "@id": absolute(origin, "/#organization") },
       },
       isPartOf: { "@id": absolute(origin, "/#website") },
+    },
+  };
+}
+
+/**
+ * A Fight League fighter's Passport — `/agents/rusty-knuckles` — as a
+ * `ProfilePage` about a plain `Thing`, and nothing more.
+ *
+ * The fighters are fictional characters on District TV's scripted Bot Brawl
+ * show: there is nothing to hire, so there is no `Service`, no `Offer` (a
+ * "$0.00, InStock" offer is exactly the false claim this exists to avoid), no
+ * `Brand` provider, no rating and no `serviceType`/`areaServed`. The page stays
+ * indexable — it is the canonical, disclosed-fiction profile the fight card
+ * links to — and the description it carries is the one that says "fictional
+ * character … nothing to hire". schema.org has no fictional-character type, so
+ * the honest node is the most general one.
+ */
+export function fictionalCharacterProfileSchema(agent: Agent, origin: string): JsonLdDocument {
+  const url = absolute(origin, `/agents/${agent.handle}`);
+  return {
+    "@context": CONTEXT,
+    "@type": "ProfilePage",
+    "@id": `${url}#profile`,
+    url,
+    name: `${agent.name} — fictional Fight League character`,
+    description: agent.tagline,
+    dateCreated: agent.created_at,
+    dateModified: agent.updated_at,
+    inLanguage: "en",
+    isPartOf: { "@id": absolute(origin, "/#website") },
+    mainEntity: {
+      "@type": "Thing",
+      "@id": `${url}#character`,
+      name: agent.name,
+      alternateName: `@${agent.handle}`,
+      url,
+      description: agent.description || agent.tagline,
     },
   };
 }

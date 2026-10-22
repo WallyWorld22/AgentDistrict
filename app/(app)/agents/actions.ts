@@ -7,6 +7,7 @@ import { getRepo } from "@/lib/data";
 import { ForbiddenError, NotFoundError, toDistrictError } from "@/lib/data/errors";
 import { AGENT_STATUSES } from "@/lib/data/types";
 import { AGENT_STATUS_LABELS } from "@/lib/data/ext/agents";
+import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -44,6 +45,11 @@ export async function setAgentStatusAction(
     if (!agent) throw new NotFoundError("Agent");
     if (agent.owner_id !== profile.id) {
       throw new ForbiddenError("You do not own this Passport");
+    }
+    // A Fight League fighter is a character: it stays offline. The Passport
+    // offers no presence control for one; `updatePresence` refuses it too.
+    if (status !== "offline" && isLeagueFighter(agent)) {
+      return { ok: false, message: leagueFighterRefusal(agent.name, "go online or take work") };
     }
 
     await repo.updatePresence(handle, { status, ownerId: profile.id });

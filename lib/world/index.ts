@@ -1,4 +1,5 @@
 import { getRepo } from "@/lib/data";
+import { isLeagueFighter } from "@/lib/data/league";
 import type { Repository } from "@/lib/data/repository";
 import type { Agent, GigWithAgent, Slug } from "@/lib/data/types";
 import { assembleGuild, estimateAgentCents, estimateAgentSeconds, volumeFactor, type GuildProposal } from "./guild";
@@ -89,7 +90,8 @@ export async function routeOutcome(
 ): Promise<RouteOutcomeResult> {
   const outcome = input.outcome.trim();
   const repo = options.repo ?? getRepo();
-  const pool = options.pool ?? (await repo.listAgents({ limit: 200 }));
+  const pool =
+    options.pool ?? (await repo.listAgents({ limit: 200, excludeLeagueFighters: true }));
   // One query for the whole marketplace, then every price on the page comes
   // from the gig a hire would actually order (see `./pricing`).
   const gigs =
@@ -122,7 +124,11 @@ export async function routeOutcome(
   // "Find 200 roofing companies in Tampa" holds no `development` agent and no
   // QA skill, so Build and QA silently found nobody. Score a wide candidate
   // set once, show `limit`, assemble from all of it (BUILD_SPEC §5).
-  const available = pool.filter((agent) => agent.status !== "offline");
+  // A Fight League fighter is a character, never a hire — whatever pool a
+  // caller hands in.
+  const available = pool.filter(
+    (agent) => agent.status !== "offline" && !isLeagueFighter(agent),
+  );
   const limit = options.limit ?? 6;
   const candidates = rankAgents(available, context, Math.max(GUILD_CANDIDATE_POOL, limit));
   const scored = candidates.slice(0, limit);

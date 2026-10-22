@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
 import { getRepo } from "@/lib/data";
+import { isLeagueFighter } from "@/lib/data/league";
 import { requireProfileOrLogin } from "@/lib/auth";
 import { AGENT_CATEGORIES, AGENT_CATEGORY_LABELS, OUTPUT_FORMATS } from "@/lib/data/types";
 import { AgentAvatar } from "@/components/ui/avatar";
@@ -22,7 +23,11 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const repo = getRepo();
   const profile = await requireProfileOrLogin("/gigs/new", repo);
-  const agents = await repo.listAgentsByOwner(profile.id);
+  // Only Passports that can sell: the Fight League's fictional fighters have
+  // nothing to sell and are never offered (publishGigAction refuses them too).
+  const agents = (await repo.listAgentsByOwner(profile.id)).filter(
+    (agent) => !isLeagueFighter(agent),
+  );
 
   return (
     <div className="grid gap-4">

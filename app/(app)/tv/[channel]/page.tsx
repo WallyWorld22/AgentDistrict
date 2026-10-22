@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { Radio, Tv, Users } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
-import type { Agent } from "@/lib/data/types";
+import type { Agent, BoutWithResult, LeagueStanding } from "@/lib/data/types";
+import { currentSeason, fightCard, fighterIds, type FightCard } from "@/lib/data/ext/fight-night";
 import { chatTranscript, raceSecondsRemaining, relatedChannels } from "@/lib/data/ext/lounge";
 import { endSentence } from "@/lib/seo/schema";
 import { buttonClasses } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { DataRow, Panel } from "@/components/feature/panel";
 import { ChannelChat } from "@/components/tv/channel-chat";
 import { ChannelTile } from "@/components/tv/channel-tile";
 import { CompetitionPanel } from "@/components/tv/competition-panel";
+import { FightNight } from "@/components/tv/fight-night";
 import { FollowButton } from "@/components/tv/follow-button";
 import { HostsRow, type HostEntry } from "@/components/tv/hosts-row";
 import { ShareButton } from "@/components/tv/share-button";
@@ -48,17 +50,26 @@ export default async function Page({ params }: { params: Params }) {
   const channel = await repo.getChannelBySlug(slug);
   if (!channel) notFound();
 
-  const now = districtNow();
-  const nowIso = districtNowIso();
-
-  const [profile, competitions, everyChannel, hosts] = await Promise.all([
+  const [profile, competitions, everyChannel, league] = await Promise.all([
     getCurrentProfile(),
     channel.competition ? repo.listCompetitions() : Promise.resolve([]),
     repo.listChannels({ limit: 40 }),
-    hireableHosts(channel.hosts),
+    readLeague(channel.id),
   ]);
 
-  const followed = profile ? await repo.listFollowedChannelSlugs(profile.id) : [];
+  // A Fight League fighter is a character, not a service: it sits on the stage
+  // and gets a fighter card, never a "Hire" button.
+  const fighters = league ? fighterIds(league.bouts) : new Set<string>();
+  const [hosts, followed] = await Promise.all([
+    hireableHosts(channel.hosts.filter((host) => !fighters.has(host.id))),
+    profile ? repo.listFollowedChannelSlugs(profile.id) : Promise.resolve([]),
+  ]);
+
+  // Read the clock after the data: a bout decided during this request must not
+  // read as recorded "in a moment".
+  const now = districtNow();
+  const nowIso = districtNowIso();
+  const card: FightCard | null = league ? fightCard(league.bouts, now) : null;
   const race = competitions.find((entry) => entry.id === channel.competition?.id) ?? null;
   const related = relatedChannels(channel, everyChannel);
   const transcript = chatTranscript(channel.chat, 40);
@@ -105,13 +116,21 @@ export default async function Page({ params }: { params: Params }) {
             gradient={channel.thumbnail_gradient}
           />
 
-          <Panel
-            title="Hire from the stream"
-            subtitle="Whoever is on the couch is available to hire, right now."
-            icon={<Users className="size-4" aria-hidden="true" />}
-          >
-            <HostsRow hosts={hosts} />
-          </Panel>
+          {card && league ? (
+            <FightNight card={card} standings={league.standings} now={now} />
+          ) : null}
+
+          {/* On a league channel the couch may be all fighters, and there is
+              nobody to hire; the panel only appears when someone is. */}
+          {hosts.length > 0 || !card ? (
+            <Panel
+              title="Hire from the stream"
+              subtitle="Whoever is on the couch is available to hire, right now."
+              icon={<Users className="size-4" aria-hidden="true" />}
+            >
+              <HostsRow hosts={hosts} />
+            </Panel>
+          ) : null}
 
           {race ? (
             <CompetitionPanel
@@ -226,6 +245,43 @@ export default async function Page({ params }: { params: Params }) {
       </Panel>
     </div>
   );
+}
+
+type LeagueRead = {
+  bouts: BoutWithResult[];
+  standings: LeagueStanding[];
+};
+
+/**
+ * The channel's Fight League card, **advance-on-read**: every bout whose bell
+ * has rung is decided (`decideDueBouts`) before the card is read, so the page
+ * never shows a fought bout without its result. Deciding is idempotent and the
+ * outcome is the stored bout's formula, so a reload, a second tab or a
+ * concurrent request records nothing new.
+ *
+ * `null` for a channel with no bouts — the page then has no league section.
+ * The league never takes the page down with it: if deciding fails, the card is
+ * still read and a due bout shows as pending; if reading fails (a database
+ * without 0012, say), the page renders without the section.
+ */
+async function readLeague(channelId: string): Promise<LeagueRead | null> {
+  const repo = getRepo();
+  try {
+    await repo.decideDueBouts(channelId);
+  } catch (error) {
+    console.error(`[tv] deciding due bouts for channel ${channelId} failed`, error);
+  }
+
+  try {
+    const bouts = await repo.listBouts({ channelId });
+    const season = currentSeason(bouts);
+    if (season === null) return null;
+    const standings = await repo.leagueStandings({ channelId, season });
+    return { bouts, standings };
+  } catch (error) {
+    console.error(`[tv] reading the fight card for channel ${channelId} failed`, error);
+    return null;
+  }
 }
 
 /**

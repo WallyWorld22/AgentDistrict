@@ -62,10 +62,13 @@ describe("seed — quantities (BUILD_SPEC §2)", () => {
     expect(seed.events.length).toBeGreaterThanOrEqual(30);
   });
 
-  it("has exactly 6 guilds, 5 stores, 8 channels, 3 competitions and 6 rooms", () => {
+  it("has exactly 6 guilds, 5 stores, 9 channels, 5 competitions and 6 rooms", () => {
     expect(seedCounts.guilds).toBe(6);
     expect(seedCounts.stores).toBe(5);
-    expect(seedCounts.channels).toBe(8);
+    // BUILD_SPEC §2's eight, plus Bot Brawl — the fictional Fight League's
+    // channel (0012), off air so the home hero's live count is unchanged.
+    expect(seedCounts.channels).toBe(9);
+    expect(seed.channels.filter((channel) => channel.is_live)).toHaveLength(5);
     // Three live races, plus one finished and one upcoming so those statuses
     // and the UI branches that render them are exercised by real content.
     expect(seedCounts.competitions).toBe(5);
@@ -570,6 +573,9 @@ describe("seed — matches the migration", () => {
     channelChat: "channel_chat",
     competitions: "competitions",
     competitionEntries: "competition_entries",
+    leagueFighters: "league_fighters",
+    bouts: "bouts",
+    boutResults: "bout_results",
     loungeMessages: "lounge_messages",
     threads: "threads",
     messages: "messages",
@@ -582,7 +588,17 @@ describe("seed — matches the migration", () => {
   };
 
   const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
-  const migration = readFileSync(join(MIGRATIONS_DIR, "0001_init.sql"), "utf8");
+  const migrationFiles = readdirSync(MIGRATIONS_DIR)
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+  /**
+   * Every migration, in order, as one text. A table is as real when a later
+   * migration creates it (`league_fighters`, `bouts` and `bout_results`
+   * arrive in 0012) as when 0001 does.
+   */
+  const migration = migrationFiles
+    .map((name) => readFileSync(join(MIGRATIONS_DIR, name), "utf8"))
+    .join("\n");
 
   /**
    * Every `alter table … add column` across the whole migration set.
@@ -612,7 +628,7 @@ describe("seed — matches the migration", () => {
     const match = migration.match(
       new RegExp(`create table if not exists public\\.${table} \\(([\\s\\S]*?)\\n\\);`),
     );
-    if (!match) throw new Error(`0001_init.sql has no table public.${table}`);
+    if (!match) throw new Error(`no migration creates table public.${table}`);
 
     const skip = /^(constraint|primary|unique|check|foreign|--)/i;
     const declared = match[1]
@@ -650,14 +666,13 @@ describe("seed — matches the migration", () => {
   });
 
   it("enables RLS on every seeded table", () => {
-    const rls = readFileSync(
-      join(process.cwd(), "supabase", "migrations", "0002_rls.sql"),
-      "utf8",
-    );
+    // 0002 enables it on the original tables; a table a later migration
+    // creates (0012's `league_fighters`, `bouts`, `bout_results`) must enable
+    // it there.
     for (const table of Object.values(TABLE_NAMES)) {
       expect(
-        rls.includes(`alter table public.${table}`),
-        `0002_rls.sql does not enable RLS on public.${table}`,
+        new RegExp(`alter table public\\.${table}\\s+enable row level security`).test(migration),
+        `no migration enables RLS on public.${table}`,
       ).toBe(true);
     }
   });

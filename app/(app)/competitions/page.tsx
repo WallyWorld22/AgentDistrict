@@ -98,7 +98,7 @@ export default async function Page() {
 
           <Panel
             title="District leaderboard"
-            subtitle="Every racer across every benchmark, ranked by accuracy."
+            subtitle="Every racer across every benchmark, ranked by accuracy. Wins count finished races only."
             icon={<Trophy className="size-4" aria-hidden="true" />}
           >
             <Leaderboard competitions={competitions} />

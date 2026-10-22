@@ -7,7 +7,8 @@ import type { Pool } from "pg";
  * The Supabase adapter only speaks PostgREST, and the throwaway database from
  * `scripts/db-local.sh` has no PostgREST in front of it. This serves the
  * adapter's actual HTTP requests by translating the read subset it sends —
- * `select`, `eq.` / `in.` filters, `order`, `limit`, `offset` on a GET — into
+ * `select`, `eq.` / `in.` / `not.in.` filters, `order`, `limit`, `offset` on a
+ * GET — into
  * one SQL statement run as `anon`, so RLS applies exactly as it does behind the
  * anon key, and answers with the JSON array PostgREST would.
  *
@@ -18,6 +19,13 @@ import type { Pool } from "pg";
  *
  * Anything outside that subset is answered with a 400 naming the request, never
  * guessed at, so a test cannot pass on a query this does not understand.
+ *
+ * It also serves `POST /rest/v1/rpc/<function>` — `supabase.rpc(name, args)` —
+ * with named scalar arguments, again as `anon`, and **commits** (an RPC is how
+ * the adapter writes; the Fight League's `decide_bout()` is one). Functions
+ * returning a row type are what it understands, and the answer has PostgREST's
+ * shape for them: a set-returning function gives an array of row objects, any
+ * other the one row object (or `null`).
  */
 export function createPostgrestClient(pool: Pool): SupabaseClient {
   return createClient("http://postgrest.test", "anon-key", {
@@ -95,12 +103,17 @@ function translate(url: URL): { sql: string; params: unknown[] } {
       // the adapter filters on, and no per-column type map to keep in sync.
       const column = `t.${identifier(key)}::text`;
       const list = /^in\.\((.*)\)$/.exec(value);
+      const notList = /^not\.in\.\((.*)\)$/.exec(value);
       if (value.startsWith("eq.")) {
         params.push(value.slice(3));
         where.push(`${column} = $${params.length}`);
       } else if (list) {
         params.push(splitList(list[1]));
         where.push(`${column} = any($${params.length}::text[])`);
+      } else if (notList) {
+        // PostgREST's own translation, NULL semantics included.
+        params.push(splitList(notList[1]));
+        where.push(`not (${column} = any($${params.length}::text[]))`);
       } else {
         throw new Unsupported(`filter ${key}=${value}`);
       }
@@ -119,6 +132,32 @@ function translate(url: URL): { sql: string; params: unknown[] } {
   return { sql, params };
 }
 
+type Scalar = string | number | boolean | null;
+
+/** `POST /rest/v1/rpc/<fn>` with a JSON object body → one named-argument call. */
+function translateRpc(url: URL, body: unknown): { name: string; sql: string; params: Scalar[] } {
+  const path = /^\/rest\/v1\/rpc\/([^/]+)$/.exec(url.pathname);
+  if (!path) throw new Unsupported(`path ${url.pathname}`);
+  const name = path[1];
+  const fn = identifier(name);
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    throw new Unsupported("rpc body that is not a JSON object");
+  }
+  const params: Scalar[] = [];
+  const args = Object.entries(body as Record<string, unknown>).map(([key, value]) => {
+    if (value !== null && !["string", "number", "boolean"].includes(typeof value)) {
+      throw new Unsupported(`rpc argument ${key} that is not a scalar`);
+    }
+    params.push(value as Scalar);
+    return `${identifier(key)} => $${params.length}`;
+  });
+  return {
+    name,
+    sql: `select to_jsonb(r) as row from public.${fn}(${args.join(", ")}) r`,
+    params,
+  };
+}
+
 function respond(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -132,6 +171,10 @@ function postgrestFetch(pool: Pool): typeof fetch {
     const url = new URL(href);
     const method = (init?.method ?? "GET").toUpperCase();
     const accept = new Headers(init?.headers).get("accept") ?? "";
+
+    if (method === "POST" && url.pathname.startsWith("/rest/v1/rpc/")) {
+      return callRpc(pool, url, typeof init?.body === "string" ? init.body : "");
+    }
 
     let statement: { sql: string; params: unknown[] };
     try {
@@ -176,4 +219,43 @@ function postgrestFetch(pool: Pool): typeof fetch {
       connection.release();
     }
   };
+}
+
+async function callRpc(pool: Pool, url: URL, rawBody: string): Promise<Response> {
+  let statement: { name: string; sql: string; params: Scalar[] };
+  try {
+    statement = translateRpc(url, rawBody === "" ? {} : JSON.parse(rawBody));
+  } catch (error) {
+    if (!(error instanceof Unsupported) && !(error instanceof SyntaxError)) throw error;
+    return respond(400, {
+      code: "SHIM",
+      message: `postgrest test shim cannot serve POST ${url.pathname}: unsupported ${error.message}`,
+      details: null,
+      hint: null,
+    });
+  }
+
+  const connection = await pool.connect();
+  try {
+    await connection.query("begin");
+    await connection.query("set local role anon");
+    await connection.query("set local timezone to 'UTC'");
+    const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
+    // PostgREST answers a set-returning function with an array and anything
+    // else with its single value. `pg_proc` says which this one is.
+    const { rows: shape } = await connection.query<{ set: boolean }>(
+      `select bool_or(p.proretset) as set from pg_proc p
+        where p.pronamespace = 'public'::regnamespace and p.proname = $1`,
+      [statement.name],
+    );
+    await connection.query("commit");
+    const data = rows.map((row) => row.row);
+    return respond(200, shape[0]?.set ? data : (data[0] ?? null));
+  } catch (error) {
+    await connection.query("rollback").catch(() => undefined);
+    const { code, message } = error as { code?: string; message?: string };
+    return respond(400, { code: code ?? "", message: message ?? String(error), details: null, hint: null });
+  } finally {
+    connection.release();
+  }
 }

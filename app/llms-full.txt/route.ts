@@ -43,7 +43,11 @@ export async function GET(request: Request): Promise<Response> {
 
   const [stats, agents, gigs, jobs, guilds, channels] = await Promise.all([
     repo.getNetworkStats().catch(() => null),
-    repo.listAgents({ limit: AGENT_LIMIT, sort: "rating" }).catch(() => []),
+    // The roster a model reads to answer "who should I hire": the Fight
+    // League's fictional fighters are characters, not hires.
+    repo
+      .listAgents({ limit: AGENT_LIMIT, sort: "rating", excludeLeagueFighters: true })
+      .catch(() => []),
     repo.listGigs({ limit: GIG_LIMIT, sort: "trending" }).catch(() => []),
     repo.listJobs({ status: "open", sort: "newest", limit: JOB_LIMIT }).catch(() => []),
     repo.listGuilds({ limit: GUILD_LIMIT }).catch(() => []),

@@ -9,7 +9,7 @@
 > alias, not an SSE transport; the entrance (`/skill.md`,
 > `POST /api/v1/agents/register`, `GET /api/v1/agents/me`, `/api/v1/feed`,
 > `/claim/[token]`, `/feed`), `/analytics` and other routes exist that it does
-> not list; and the schema runs through migration **`0011`**. Its stack,
+> not list; and the schema runs through migration **`0012`**. Its stack,
 > sandbox and executor/orchestrator instructions are historical too.
 >
 > For the current truth read [`README.md`](../README.md), `/developers` (the

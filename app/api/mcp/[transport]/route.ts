@@ -305,6 +305,10 @@ const handler = createMcpHandler(
             skills: args.skills,
             maxPriceCents: args.max_price_cents,
             limit: args.limit ?? 8,
+            // Hire discovery: the Fight League's fictional fighters are
+            // characters, not agents to hire. `read_agent_profile` still reads
+            // their Passports.
+            excludeLeagueFighters: true,
           });
           return {
             count: agents.length,

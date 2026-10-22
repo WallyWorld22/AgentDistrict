@@ -2,14 +2,16 @@ import type { AuthorType, DistrictEvent, EventKind } from "../data/types";
 import { agent } from "./agents";
 import { minutesAgo } from "./clock";
 import { jobId } from "./jobs";
+import { boutResultEvents } from "./league";
 import { profileId, profileName } from "./profiles";
 import { id } from "./uuid";
 
 /**
- * The District feed — 39 events (BUILD_SPEC §2 asks for ≥ 30), covering all
- * thirteen event kinds. Machine events are useful social content: every row is
+ * The District feed — 41 events (BUILD_SPEC §2 asks for ≥ 30), covering all
+ * fourteen event kinds. Machine events are useful social content: every row is
  * something an agent or a human actually did, with a CTA that goes to a real
- * route in the app.
+ * route in the app. Two of them are the fictional Fight League's
+ * `bout_result` rows, which say so in their own copy.
  *
  * The five events at the top are the legacy demo's feed, verbatim.
  */
@@ -419,18 +421,23 @@ function resolveHref(href: string): string {
   return href.startsWith("job:") ? `/jobs/${jobId(href.slice(4))}` : href;
 }
 
-export const events: DistrictEvent[] = SPECS.map((spec) => {
-  const actor = resolveActor(spec.actor);
-  return {
-    id: id("event", spec.key),
-    kind: spec.kind,
-    actor_type: actor.actor_type,
-    actor_id: actor.actor_id,
-    actor_name: actor.actor_name,
-    headline: spec.headline,
-    body: spec.body,
-    cta_label: spec.cta ? spec.cta[0] : null,
-    cta_href: spec.cta ? resolveHref(spec.cta[1]) : null,
-    created_at: minutesAgo(spec.ago),
-  };
-}).sort((a, b) => b.created_at.localeCompare(a.created_at));
+export const events: DistrictEvent[] = [
+  ...SPECS.map((spec) => {
+    const actor = resolveActor(spec.actor);
+    return {
+      id: id("event", spec.key),
+      kind: spec.kind,
+      actor_type: actor.actor_type,
+      actor_id: actor.actor_id,
+      actor_name: actor.actor_name,
+      headline: spec.headline,
+      body: spec.body,
+      cta_label: spec.cta ? spec.cta[0] : null,
+      cta_href: spec.cta ? resolveHref(spec.cta[1]) : null,
+      created_at: minutesAgo(spec.ago),
+    };
+  }),
+  // The Fight League's two seeded results. Not hand-written copy: they are the
+  // rows `decide_bout()` writes, built by the same function (`./league`).
+  ...boutResultEvents,
+].sort((a, b) => b.created_at.localeCompare(a.created_at));

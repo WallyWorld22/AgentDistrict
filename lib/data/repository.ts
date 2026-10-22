@@ -7,6 +7,9 @@ import type {
   RegisteredAgent,
   Bid,
   BidWithAgent,
+  BoutFilter,
+  BoutResult,
+  BoutWithResult,
   Channel,
   ChannelDetail,
   ChannelFilter,
@@ -33,6 +36,7 @@ import type {
   JobWithBidCount,
   JobWithBids,
   Job,
+  LeagueStanding,
   ListOptions,
   LoungeMessage,
   MarketFilter,
@@ -238,6 +242,41 @@ export interface Repository {
   setChannelFollow(slug: Slug, profileId: UUID, following: boolean): Promise<Channel>;
   /** Slugs of the channels this profile follows. */
   listFollowedChannelSlugs(profileId: UUID): Promise<Slug[]>;
+
+  /* ------------------------------------------ the Fight League (fiction) */
+
+  /**
+   * The District TV Fight League's card — **fiction**, a scripted robot-boxing
+   * show. Ordered by `scheduled_at`, then `id`. A pure read: it never decides
+   * anything, so a bout whose time has passed reads `scheduled` with a `null`
+   * result until `decideDueBouts()` runs.
+   *
+   * Fighters come back as `LeagueFighter` (identity only), never as `Agent`:
+   * the league must not read marketplace reputation, so it is never handed it.
+   */
+  listBouts(filter?: BoutFilter): Promise<BoutWithResult[]>;
+  /** One bout, or `null`. Same shape and the same no-write rule as `listBouts`. */
+  getBout(id: UUID): Promise<BoutWithResult | null>;
+  /**
+   * **Advance-on-read.** Decide every bout on `channelId` that is still
+   * `scheduled` and whose `scheduled_at` has passed, and return their results
+   * in schedule order. A page calls this before it reads the card.
+   *
+   * The outcome is `decideBoutOutcome()` of the stored bout — nothing the
+   * caller passes can move it. Supabase calls the `decide_bout()` RPC once per
+   * due bout (granted to `anon`; the database re-checks the time and is the
+   * trust boundary); the demo adapter runs the same formula in memory. Both
+   * record the result once, flip the bout to `decided` and publish one
+   * `bout_result` event, and both are idempotent: a second call returns `[]`,
+   * and a concurrent one gets the result the first recorded.
+   */
+  decideDueBouts(channelId: UUID): Promise<BoutResult[]>;
+  /**
+   * Wins and losses per fighter, derived **only** from `bout_results` (see
+   * `computeLeagueStandings`). Reads no rating, review or job count and writes
+   * nothing.
+   */
+  leagueStandings(filter?: BoutFilter): Promise<LeagueStanding[]>;
 
   /* ----------------------------------------------------------------- lounge */
 

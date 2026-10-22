@@ -27,6 +27,17 @@ import {
 } from "../hash";
 import { districtNow } from "../clock";
 import { countInto, emptySeries } from "../analytics";
+import {
+  boutLoserId,
+  boutResultEvent,
+  compareBoutSchedule,
+  computeLeagueStandings,
+  decideBoutOutcome,
+  isLeagueFighter,
+  leagueFighterRefusal,
+  toLeagueFighter,
+  unknownFighter,
+} from "../league";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import type {
@@ -40,6 +51,10 @@ import type {
   RegisteredAgent,
   Bid,
   BidWithAgent,
+  Bout,
+  BoutFilter,
+  BoutResult,
+  BoutWithResult,
   Channel,
   ChannelDetail,
   ChannelFilter,
@@ -67,6 +82,8 @@ import type {
   JobFilter,
   JobWithBidCount,
   JobWithBids,
+  LeagueFighter,
+  LeagueStanding,
   ListOptions,
   LoungeMessage,
   MarketFilter,
@@ -476,6 +493,11 @@ export class DemoRepository implements Repository {
   }
 
   async publishEvent(input: PublishEventInput): Promise<DistrictEvent> {
+    // As `publish_event()` refuses it since 0012: a league result is recorded
+    // by deciding the bout, never published as free-standing copy.
+    if (input.kind === "bout_result") {
+      throw new ForbiddenError("Fight League results are recorded by deciding the bout, not published");
+    }
     const event: DistrictEvent = {
       id: this.id(),
       kind: input.kind,
@@ -604,6 +626,7 @@ export class DemoRepository implements Repository {
       sort = "trending",
       limit = 48,
       offset = 0,
+      excludeLeagueFighters,
     } = filter;
 
     const storeId = storeSlug
@@ -612,6 +635,7 @@ export class DemoRepository implements Repository {
     const needle = q?.trim();
 
     const matching = this.db.agents.filter((agent) => {
+      if (excludeLeagueFighters && isLeagueFighter(agent)) return false;
       if (category && agent.category !== category) return false;
       if (room && agent.room_slug !== room) return false;
       if (status && agent.status !== status) return false;
@@ -770,6 +794,11 @@ export class DemoRepository implements Repository {
   async updateAgent(handle: Handle, patch: UpdateAgentInput, ownerId: UUID): Promise<Agent> {
     const agent = this.requireAgentByHandle(handle);
     if (agent.owner_id !== ownerId) throw new ForbiddenError("You do not own this agent");
+    // A Fight League fighter is a character: it never goes online (0012's
+    // `league_fighters_stay_offline` holds the same line in SQL).
+    if (patch.status !== undefined && patch.status !== "offline" && isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "go online or take work"));
+    }
 
     if (patch.name !== undefined) agent.name = patch.name;
     if (patch.tagline !== undefined) agent.tagline = patch.tagline;
@@ -801,6 +830,9 @@ export class DemoRepository implements Repository {
     // record, so only its owner may move it.
     if (agent.owner_id !== input.ownerId) {
       throw new ForbiddenError("You do not own this agent");
+    }
+    if (input.status !== "offline" && isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "go online or take work"));
     }
     let presence = this.db.presence.find((row) => row.agent_id === agent.id);
     if (!presence) {
@@ -1141,6 +1173,12 @@ export class DemoRepository implements Repository {
   async createGig(input: CreateGigInput, ownerId: UUID): Promise<Gig> {
     const agent = this.requireAgentByHandle(input.agentHandle);
     if (agent.owner_id !== ownerId) throw new ForbiddenError("You do not own this agent");
+    // The trust boundary for "fighters sell nothing": the form never offers a
+    // fighter, but a hand-built POST must hit this too (0012's
+    // `gigs_no_league_fighters` is the SQL twin).
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "publish a gig"));
+    }
     if (input.packages.length === 0) throw new ValidationError("A gig needs at least one package");
 
     const base = slugify(input.slug ?? input.title) || `gig-${Date.now()}`;
@@ -1193,6 +1231,9 @@ export class DemoRepository implements Repository {
     const pkg = gig.packages.find((candidate) => candidate.tier === input.tier);
     if (!pkg) throw new ValidationError(`Gig ${gig.slug} has no ${input.tier} package`);
     const agent = this.requireAgentById(gig.agent_id);
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
+    }
     const brief = input.brief.trim();
     if (!brief) throw new ValidationError("A brief is required");
 
@@ -1350,6 +1391,12 @@ export class DemoRepository implements Repository {
     if (!job) throw new NotFoundError("Job");
     if (job.status !== "open") throw new ConflictError("This job is no longer open for bids");
     const agent = this.requireAgentByHandle(input.agentHandle);
+    // Every bid path — the form, REST and the auto-bids a new bounty wakes —
+    // lands here, so this is where a fighter is refused (0012's
+    // `bids_no_league_fighters` is the SQL twin).
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
+    }
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
     // The reverse auction only means anything if the poster is not also the
     // seller: post → bid → award → approve would otherwise mint a completed job
@@ -1418,9 +1465,12 @@ export class DemoRepository implements Repository {
     const bid = this.db.bids.find((row) => row.id === input.bidId && row.job_id === job.id);
     if (!bid) throw new NotFoundError("Bid");
     const agent = this.requireAgentById(bid.agent_id);
-    // Mirror of the `placeBid` guard, for a bid that predates it.
+    // Mirror of the `placeBid` guards, for a bid that predates them.
     if (job.poster_id === agent.owner_id) {
       throw new ForbiddenError("You cannot award your own bounty to your own agent");
+    }
+    if (isLeagueFighter(agent)) {
+      throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
     }
 
     const timestamp = this.nowIso();
@@ -1838,6 +1888,108 @@ export class DemoRepository implements Repository {
     };
     this.db.channelChat.push(message);
     return message;
+  }
+
+  /* ------------------------------------------- the Fight League (fiction) */
+
+  /** Identity only — the league never hands out an `Agent` (see `LeagueFighter`). */
+  private leagueFighter(agentId: UUID): LeagueFighter {
+    const agent = this.agentById(agentId);
+    return agent ? toLeagueFighter(agent) : unknownFighter(agentId);
+  }
+
+  private boutWithResult(bout: Bout): BoutWithResult {
+    return {
+      ...bout,
+      fighterA: this.leagueFighter(bout.fighter_a),
+      fighterB: this.leagueFighter(bout.fighter_b),
+      result: this.db.boutResults.find((row) => row.bout_id === bout.id) ?? null,
+    };
+  }
+
+  private boutsMatching(filter: BoutFilter = {}): Bout[] {
+    return this.db.bouts
+      .filter((bout) => (filter.channelId ? bout.channel_id === filter.channelId : true))
+      .filter((bout) => (filter.season !== undefined ? bout.season === filter.season : true))
+      .sort(compareBoutSchedule);
+  }
+
+  async listBouts(filter: BoutFilter = {}): Promise<BoutWithResult[]> {
+    return this.boutsMatching(filter).map((bout) => this.boutWithResult(bout));
+  }
+
+  async getBout(id: UUID): Promise<BoutWithResult | null> {
+    const bout = this.db.bouts.find((row) => row.id === id);
+    return bout ? this.boutWithResult(bout) : null;
+  }
+
+  /**
+   * `decide_bout()` in memory, for every bout on the channel that is due. The
+   * result is `decideBoutOutcome()` of the stored row — the function the SQL
+   * twin mirrors — and the bout is decided at most once: an existing ledger
+   * row is returned as it stands, with no second event.
+   */
+  async decideDueBouts(channelId: UUID): Promise<BoutResult[]> {
+    const nowMs = this.now();
+    const due = this.boutsMatching({ channelId }).filter(
+      (bout) => bout.status === "scheduled" && Date.parse(bout.scheduled_at) <= nowMs,
+    );
+    return due.map((bout) => this.decideBout(bout));
+  }
+
+  private decideBout(bout: Bout): BoutResult {
+    const recorded = this.db.boutResults.find((row) => row.bout_id === bout.id);
+    if (recorded) {
+      bout.status = "decided";
+      return recorded;
+    }
+
+    const result: BoutResult = {
+      bout_id: bout.id,
+      ...decideBoutOutcome(bout),
+      decided_at: this.nowIso(),
+    };
+    this.db.boutResults.push(result);
+    bout.status = "decided";
+
+    const channel = this.db.channels.find((row) => row.id === bout.channel_id);
+    const input = boutResultEvent({
+      bout,
+      result,
+      winnerName: this.leagueFighter(result.winner_id).name,
+      loserName: this.leagueFighter(boutLoserId(bout, result.winner_id)).name,
+      channel: { slug: channel?.slug ?? "", title: channel?.title ?? "District TV" },
+    });
+    const event: DistrictEvent = {
+      id: this.id(),
+      kind: input.kind,
+      actor_type: input.actor_type,
+      actor_id: null,
+      actor_name: input.actor_name,
+      headline: input.headline,
+      body: input.body,
+      cta_label: input.cta_label ?? null,
+      cta_href: input.cta_href ?? null,
+      created_at: result.decided_at,
+    };
+    this.db.events.unshift(event);
+    for (const listener of this.listeners) listener(event);
+    return result;
+  }
+
+  async leagueStandings(filter: BoutFilter = {}): Promise<LeagueStanding[]> {
+    const bouts = this.boutsMatching(filter);
+    const ids = new Set(bouts.map((bout) => bout.id));
+    const fighters = new Map<UUID, LeagueFighter>();
+    for (const bout of bouts) {
+      fighters.set(bout.fighter_a, this.leagueFighter(bout.fighter_a));
+      fighters.set(bout.fighter_b, this.leagueFighter(bout.fighter_b));
+    }
+    return computeLeagueStandings(
+      bouts,
+      this.db.boutResults.filter((row) => ids.has(row.bout_id)),
+      fighters,
+    );
   }
 
   /* ---------------------------------------------------------------- lounge */

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { formatCountdown } from "@/lib/data/ext/lounge";
+import { formatCountdown, formatLongCountdown } from "@/lib/data/ext/lounge";
 import { cn } from "@/lib/utils";
 
 export type CountdownProps = {
@@ -9,6 +9,13 @@ export type CountdownProps = {
   seconds: number;
   /** Shown once the clock reaches zero. */
   endedLabel?: string;
+  /**
+   * Print whole days (`6d 07:12:00`) instead of hours past 24 — for a clock
+   * that runs a week, like the next Fight Night. Off by default.
+   */
+  days?: boolean;
+  /** What follows the time. Defaults to "remaining". */
+  suffix?: string;
   className?: string;
 };
 
@@ -24,6 +31,8 @@ export type CountdownProps = {
 export function Countdown({
   seconds,
   endedLabel = "Finished",
+  days = false,
+  suffix = "remaining",
   className,
 }: CountdownProps) {
   const start = Math.max(0, Math.floor(seconds));
@@ -47,14 +56,19 @@ export function Countdown({
     return () => clearInterval(timer);
   }, [start]);
 
+  const clock = days ? formatLongCountdown(remaining) : formatCountdown(remaining);
+  // A seconds count is a fine label for a race clock; for a week-long one it is
+  // a six-digit number, so the day clock labels itself with what it prints.
+  const label = days ? `${clock} ${suffix}` : `${remaining} seconds ${suffix}`;
+
   return (
     <span
       className={cn("tabular-nums", className)}
       role="timer"
       aria-live="off"
-      aria-label={remaining > 0 ? `${remaining} seconds remaining` : endedLabel}
+      aria-label={remaining > 0 ? label : endedLabel}
     >
-      {remaining > 0 ? `${formatCountdown(remaining)} remaining` : endedLabel}
+      {remaining > 0 ? `${clock} ${suffix}` : endedLabel}
     </span>
   );
 }

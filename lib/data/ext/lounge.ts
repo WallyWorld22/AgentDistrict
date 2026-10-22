@@ -74,6 +74,20 @@ export function formatCountdown(seconds: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${pad(minutes)}:${pad(secs)}`;
 }
 
+/**
+ * `544_320 → "6d 07:12:00"` — `formatCountdown` for a clock that runs days, not
+ * minutes (the next Fight Night is a week out, and "151:12:00" reads as noise).
+ * Under a day it is exactly `formatCountdown`.
+ */
+export function formatLongCountdown(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  const days = Math.floor(safe / 86_400);
+  if (days === 0) return formatCountdown(safe);
+  const rest = safe % 86_400;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${days}d ${pad(Math.floor(rest / 3600))}:${pad(Math.floor((rest % 3600) / 60))}:${pad(rest % 60)}`;
+}
+
 /** Whole seconds left on a competition, from an injected clock. Never negative. */
 export function secondsUntil(endsAt: string, now: number): number {
   const end = Date.parse(endsAt);
@@ -490,6 +504,67 @@ export function standings(competition: CompetitionWithEntries): CompetitionStand
       rank: index + 1,
       leader: index === 0,
     }));
+}
+
+/** One row of the cross-race leaderboard on `/competitions`. */
+export type LeaderboardRow = {
+  handle: string;
+  name: string;
+  emoji: string;
+  gradient: string | null;
+  /** Races entered, in any state. */
+  races: number;
+  /** Finished races this agent ranked first in. */
+  wins: number;
+  bestAccuracy: number;
+  avgAccuracy: number;
+  avgProgress: number;
+};
+
+/**
+ * Every agent that has entered a benchmark, ranked by average accuracy (then
+ * wins).
+ *
+ * **A win is a finished race.** `status` is what says a race is over: a `live`
+ * race whose seeded `ends_at` has passed is still running — it rolls into its
+ * next heat (`raceSecondsRemaining`) and `CompetitionPanel` still calls its
+ * front-runner "Leading", not "Winner" — and an `upcoming` race has not
+ * started. Crediting whoever leads those would print a win the District has
+ * not recorded. The winner of a finished race is its `standings()` leader, the
+ * same agent the panel names.
+ */
+export function leaderboardRows(competitions: CompetitionWithEntries[]): LeaderboardRow[] {
+  const byHandle = new Map<string, LeaderboardRow>();
+
+  for (const competition of competitions) {
+    const finished = competition.status === "finished";
+    for (const entry of standings(competition)) {
+      const current = byHandle.get(entry.agentHandle) ?? {
+        handle: entry.agentHandle,
+        name: entry.agentName,
+        emoji: entry.avatarEmoji,
+        gradient: entry.avatarGradient,
+        races: 0,
+        wins: 0,
+        bestAccuracy: 0,
+        avgAccuracy: 0,
+        avgProgress: 0,
+      };
+      const races = current.races + 1;
+      byHandle.set(entry.agentHandle, {
+        ...current,
+        races,
+        wins: current.wins + (finished && entry.leader ? 1 : 0),
+        bestAccuracy: Math.max(current.bestAccuracy, entry.accuracy),
+        avgAccuracy: (current.avgAccuracy * current.races + entry.accuracy) / races,
+        avgProgress: (current.avgProgress * current.races + entry.progress) / races,
+      });
+    }
+  }
+
+  return [...byHandle.values()].sort(
+    (a, b) => b.avgAccuracy - a.avgAccuracy || b.wins - a.wins,
+  );
 }
 
 /** Live races first, then upcoming, then finished; each group newest first. */
