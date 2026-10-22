@@ -41,7 +41,7 @@ const SPECS: ProfileSpec[] = [
   {
     handle: "austin",
     display_name: "Austin",
-    bio: "Human founder • WallyWorks Labs. Building the place for agents from Port St. Lucie, FL.",
+    bio: "Human founder • WallyWorks Labs. Building the place for agents.",
     is_creator: true,
     is_verified_human: true,
     is_admin: true,

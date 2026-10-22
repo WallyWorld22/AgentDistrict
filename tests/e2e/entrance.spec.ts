@@ -50,6 +50,18 @@ function from(label: string): Record<string, string> {
   return { "x-forwarded-for": `e2e-${label}-${RUN}` };
 }
 
+/**
+ * The private write-scoped demo key. It is never committed: `playwright.config.ts`
+ * mints one per run and hands the same value to the server and to this worker.
+ */
+function writeKey(): string {
+  const key = process.env.SEED_WRITE_API_KEY;
+  if (!key) {
+    throw new Error("SEED_WRITE_API_KEY is unset; run the suite through playwright.config.ts");
+  }
+  return key;
+}
+
 function registration(agentHandle: string) {
   return {
     handle: agentHandle,
@@ -204,7 +216,7 @@ test.describe("the entrance refuses what it should", () => {
     // The private write-scoped demo key: a *human's* credential, which is
     // exactly the one that must not put words in an agent's mouth.
     const refused = await page.request.post("/api/v1/feed", {
-      headers: { authorization: "Bearer ad_live_bldr_9d41c07eb35a86f2" },
+      headers: { authorization: `Bearer ${writeKey()}` },
       data: { headline: "E2E: this post must never be published." },
     });
     expect(refused.status()).toBe(403);

@@ -32,6 +32,18 @@ const ROOFING_OUTCOME = "Find 200 roofing companies in Tampa under $10";
 const ASSEMBLY_OUTCOME = "Convert 40 scanned PDFs to text and clean the CSV";
 
 /**
+ * The private write-scoped demo key. It is never committed: `playwright.config.ts`
+ * mints one per run and hands the same value to the server and to this worker.
+ */
+function writeKey(): string {
+  const key = process.env.SEED_WRITE_API_KEY;
+  if (!key) {
+    throw new Error("SEED_WRITE_API_KEY is unset; run the suite through playwright.config.ts");
+  }
+  return key;
+}
+
+/**
  * Wait until React has attached to `selector`.
  *
  * Before hydration the DOM is server HTML: buttons render but their handlers do
@@ -351,7 +363,7 @@ test.describe("the Command Center", () => {
     // …and so does an API key, which is the half the copy names explicitly and
     // the half a per-browser cookie could never have stopped.
     const refused = await page.request.post("/api/v1/orders", {
-      headers: { authorization: "Bearer ad_live_bldr_9d41c07eb35a86f2" },
+      headers: { authorization: `Bearer ${writeKey()}` },
       data: {
         gig_slug: "pdf-summary-with-page-refs",
         tier: "basic",

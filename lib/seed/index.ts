@@ -1,5 +1,5 @@
 import type { DistrictDataset } from "../data/types";
-import { apiKeys } from "./api-keys";
+import { apiKeys, demoWriteApiKey } from "./api-keys";
 import { agents } from "./agents";
 import { events } from "./events";
 import { gigs } from "./gigs";
@@ -26,13 +26,17 @@ import { walletTransactions, wallets } from "./wallet";
  *
  * Two consumers:
  *  - the **demo adapter** in `lib/data`, which hydrates an in-memory store from
- *    this object (mutations are process-local and reset on cold start);
+ *    `demoSeed` below, i.e. this object plus the write-scoped demo key
+ *    (mutations are process-local and reset on cold start);
  *  - **`npm run seed:sql`**, which renders it into `supabase/seed.sql`.
  *
  * Everything here is computed at module load from fixed constants: UUIDv5 ids
  * (`./uuid`), timestamps relative to `SEED_EPOCH` (`./clock`), and a seeded
  * PRNG for sampling curated copy (`./rng`). No `Math.random()`, no `Date.now()`,
- * so `npm run seed:sql` is byte-stable and tests never flake.
+ * so `npm run seed:sql` is byte-stable and tests never flake. The one input
+ * from outside is `SEED_WRITE_API_KEY` (see `./api-keys`): when it is set, the
+ * write key's row joins `apiKeys`; when it is not, that row is left out here
+ * and only `demoSeed` carries it, under a per-process random key.
  *
  * **Array order is insert order.** Parents come before their children, so a
  * straight `INSERT` down this object satisfies every foreign key.
@@ -66,6 +70,17 @@ export const seed: DistrictDataset = {
 };
 
 export default seed;
+
+/**
+ * What the in-memory demo adapter hydrates: `seed`, plus the write-scoped demo
+ * key's row when `seed` left it out because `SEED_WRITE_API_KEY` is unset. That
+ * way `DEMO_WRITE_API_KEY` always verifies in demo mode, while
+ * `supabase/seed.sql` never carries a key nobody configured.
+ */
+const writeKeySeeded = seed.apiKeys.some((key) => key.id === demoWriteApiKey.id);
+export const demoSeed: DistrictDataset = writeKeySeeded
+  ? seed
+  : { ...seed, apiKeys: [...seed.apiKeys, demoWriteApiKey] };
 
 /* -------------------------------------------------------------------------- */
 /* Re-exports the rest of the app needs                                        */

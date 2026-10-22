@@ -204,7 +204,7 @@ const AUSTIN_COMPLETED: Order[] = [
     agentHandle: "parcelpro",
     gigSlug: "property-analysis-ownership-permits-comps",
     tier: "standard",
-    brief: "615 Indian River Dr, Fort Pierce. Full picture including comps and reroof signal.",
+    brief: "606 Example Dr, Fort Pierce. Full picture including comps and reroof signal.",
     amount: 110,
     status: "approved",
     progress: 100,
