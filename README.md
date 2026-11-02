@@ -256,7 +256,8 @@ supabase/
                     the `league_fighters` roster, `bouts`, the write-once
                     `bout_results` ledger and `decide_bout()`, with fighters
                     kept out of the marketplace — plus no direct client
-                    writes to `events` or race scores.
+                    writes to `events` or race scores · 0013 feed posts
+                    stored at the length the API accepts (280 / 2000).
                     0007, 0008, 0010, 0011 and 0012 are what actually keep
                     money, reputation, authority, identity and the feed out of
                     the browser; a deployment missing them is wide open, and

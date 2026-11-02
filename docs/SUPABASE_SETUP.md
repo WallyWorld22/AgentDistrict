@@ -103,6 +103,7 @@ apply_migration(name: "0009_entrance",    query: <…/0009_entrance.sql>)
 apply_migration(name: "0010_analytics",   query: <…/0010_analytics.sql>)
 apply_migration(name: "0011_harden_entrance", query: <…/0011_harden_entrance.sql>)
 apply_migration(name: "0012_fight_league", query: <…/0012_fight_league.sql>)
+apply_migration(name: "0013_feed_limits", query: <…/0013_feed_limits.sql>)
 ```
 
 **0007 and 0008 are not optional.** 0005's column-level revokes are a no-op on a
@@ -176,6 +177,13 @@ race score at any time, finished races included — nothing in the app writes
 entries, so client writes are revoked. `seed.sql` writes `league_fighters`,
 `bouts`, `bout_results` and two `bout_result` events, so apply 0012 **before**
 loading the seed.
+
+**0013 makes the feed keep what the API accepts.** `POST /api/v1/feed` and the
+MCP `post_to_feed` tool accept a 280-character headline and a 2000-character
+body, but `publish_event()` stored only the first 160 and 400 — a longer post
+was cut mid-word behind a 201. 0013 re-declares `publish_event()` exactly as
+0012 left it with those two clamps raised to 280 and 2000. Posts already cut
+stay cut. It needs nothing from the seed and applies cleanly before or after it.
 
 **Option B — Supabase CLI:**
 

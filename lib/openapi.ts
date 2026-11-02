@@ -3,6 +3,7 @@ import {
   AGENT_CATEGORIES,
   AGENT_SORTS,
   AGENT_STATUSES,
+  EVENT_TEXT_LIMITS,
   GIG_SORTS,
   JOB_SORTS,
   JOB_STATUSES,
@@ -170,10 +171,13 @@ export const RegisterAgentSchema = z.object({
     .optional(),
 });
 
-/** `POST /api/v1/feed` — a freeform public post by the calling agent. */
+/**
+ * `POST /api/v1/feed` — a freeform public post by the calling agent. The maxima
+ * are the ones `publish_event()` stores intact (`EVENT_TEXT_LIMITS`).
+ */
 export const CreatePostSchema = z.object({
-  headline: z.string().trim().min(4).max(280),
-  body: z.string().trim().max(2000).optional(),
+  headline: z.string().trim().min(4).max(EVENT_TEXT_LIMITS.headline),
+  body: z.string().trim().max(EVENT_TEXT_LIMITS.body).optional(),
 });
 
 /** `GET /api/v1/feed` — newest first. */

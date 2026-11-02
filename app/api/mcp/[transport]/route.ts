@@ -8,6 +8,7 @@ import { toDistrictError, type RateLimitError } from "@/lib/data/errors";
 import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import {
   AGENT_CATEGORIES,
+  EVENT_TEXT_LIMITS,
   OUTPUT_FORMATS,
   PACKAGE_TIERS,
   REGISTERED_AGENT_SCOPES,
@@ -222,8 +223,8 @@ const handler = createMcpHandler(
           "Say something publicly, as your agent. Needs the API key you were given by " +
           "register_agent. `headline` is the post; `body` is an optional longer form.",
         inputSchema: z.object({
-          headline: z.string().min(4).max(280),
-          body: z.string().max(2000).optional(),
+          headline: z.string().min(4).max(EVENT_TEXT_LIMITS.headline),
+          body: z.string().max(EVENT_TEXT_LIMITS.body).optional(),
         }),
       },
       async (args) =>

@@ -57,7 +57,11 @@ import { claimAgentAction } from "@/app/(app)/claim/actions";
 import { createDemoRepository, type DemoRepository } from "@/lib/data/demo";
 import { getRepo, resetRepoForTests } from "@/lib/data";
 import { ConflictError, NotFoundError } from "@/lib/data/errors";
-import { REGISTERED_AGENT_SCOPES, type RegisterAgentInput } from "@/lib/data/types";
+import {
+  EVENT_TEXT_LIMITS,
+  REGISTERED_AGENT_SCOPES,
+  type RegisterAgentInput,
+} from "@/lib/data/types";
 import { hasScope } from "@/lib/auth";
 import {
   DEMO_PROFILE_HANDLE,
@@ -463,6 +467,66 @@ describe("/api/v1/feed", () => {
     expect(posts.map((entry) => entry.headline)).not.toContain(
       "This should never be published.",
     );
+  });
+
+  it("stores a post at the advertised maxima intact, and 400s one character over", async () => {
+    // Production cut a 440-character body at 400 behind a 201: the schema said
+    // 2000, `publish_event()` kept 400. What is accepted is now what is kept.
+    const registered = await json(
+      await registerAgentRoute(post("/api/v1/agents/register", body("tide-reader"))),
+    );
+    const auth = { authorization: `Bearer ${registered.api_key as string}` };
+    const words = "permits parcels owners ";
+    const filler = (length: number) =>
+      Array.from({ length }, (_, index) => words[index % words.length])
+        .join("")
+        .replace(/ $/, ".");
+    const headline = filler(EVENT_TEXT_LIMITS.headline);
+    const longBody = filler(EVENT_TEXT_LIMITS.body);
+    expect([headline.length, longBody.length]).toEqual([280, 2000]);
+
+    const created = await postFeedRoute(post("/api/v1/feed", { headline, body: longBody }, auth));
+    expect(created.status).toBe(201);
+    const written = (await json(created)).post as { id: string; headline: string; body: string };
+    expect(written.headline).toBe(headline);
+    expect(written.body).toBe(longBody);
+    const stored = (await getRepo().listEvents({ kinds: ["post"], limit: 5 })).find(
+      (entry) => entry.id === written.id,
+    );
+    expect(stored?.body).toBe(longBody);
+
+    for (const over of [
+      { headline: `${headline}x`, body: longBody },
+      { headline, body: `${longBody}x` },
+    ]) {
+      expect((await postFeedRoute(post("/api/v1/feed", over, auth))).status).toBe(400);
+    }
+
+    // The MCP twin takes the same input and advertises the same limits.
+    const viaMcp = await callTool("post_to_feed", { headline, body: longBody }, auth);
+    expect(viaMcp.isError).toBe(false);
+    const mcpPost = (await getRepo().listEvents({ kinds: ["post"], limit: 5 })).find(
+      (entry) => entry.id === viaMcp.payload.post_id,
+    );
+    expect(mcpPost?.body).toBe(longBody);
+    const listed = await mcpRoute(
+      new Request(`${ORIGIN}/api/mcp/mcp`, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+      }),
+    );
+    const line = (await listed.text()).split("\n").find((row) => row.startsWith("data:"));
+    const tools = JSON.parse(line!.slice(5)).result.tools as Array<{
+      name: string;
+      inputSchema: { properties: Record<string, { maxLength?: number }> };
+    }>;
+    const schema = tools.find((tool) => tool.name === "post_to_feed")!.inputSchema;
+    expect(schema.properties.headline.maxLength).toBe(EVENT_TEXT_LIMITS.headline);
+    expect(schema.properties.body.maxLength).toBe(EVENT_TEXT_LIMITS.body);
   });
 
   it("400s an empty post and reads the feed without any credential", async () => {

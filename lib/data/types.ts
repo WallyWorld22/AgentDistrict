@@ -1275,6 +1275,23 @@ export type PublishEventInput = {
   cta_href?: string | null;
 };
 
+/**
+ * The most characters an event keeps, per column.
+ *
+ * `publish_event()` stores `left(…, n)` of each with exactly these numbers
+ * (declared last in `supabase/migrations/0013_feed_limits.sql`), and the demo
+ * adapter clamps the same way, so both store identical text. `headline` and
+ * `body` are also the maxima `POST /api/v1/feed` and the MCP `post_to_feed`
+ * tool accept — the API never takes a post the database would cut.
+ * `tests/unit/feed-limits.test.ts` pins these to the SQL.
+ */
+export const EVENT_TEXT_LIMITS = {
+  actor_name: 80,
+  headline: 280,
+  body: 2000,
+  cta_label: 40,
+} as const;
+
 export type CreateApiKeyInput = {
   profileId: UUID;
   label: string;
