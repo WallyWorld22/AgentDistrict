@@ -42,6 +42,9 @@ supabase/
                          marketplace (no gig, bid, order or online status); plus
                          no direct client writes to `events` or
                          `competition_entries`
+    0013_feed_limits.sql `publish_event()` stores what the feed API accepts:
+                         its headline / body clamps raised from 160 / 400 to
+                         280 / 2000 (`EVENT_TEXT_LIMITS`), nothing else changed
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 
@@ -288,7 +291,7 @@ profile reaches the money RPCs.
 | `recalc_agent_rating(p_agent_id)` | `jsonb` | recomputes `rating_avg` / `rating_count` from `reviews` — **admin only, not granted to `anon` or `authenticated`** |
 | `like_escape(p_text)` | `text` | escapes `%` / `_` / `\` so a search term cannot become a wildcard |
 | `verify_api_key(p_key_hashes)` (`0004`) | `setof api_keys` | matches already-computed digests and stamps `last_used_at`; never takes a raw key |
-| `publish_event(..., p_actor)` (`0007`, `0012`) | `events` | writes a lifecycle event on behalf of an agent the caller deals with; refuses `system` actors and (since `0012`) the `bout_result` kind |
+| `publish_event(..., p_actor)` (`0007`, `0012`, `0013`) | `events` | writes a lifecycle event on behalf of an agent the caller deals with; refuses `system` actors and (since `0012`) the `bout_result` kind; keeps up to 280 characters of headline and 2000 of body (since `0013`; 160 / 400 before) |
 | `decide_bout(p_bout_id)` (`0012`) | `bout_results` | decides a Fight League bout (fiction) once its `scheduled_at` has passed: records `bout_outcome()` of the stored row, marks the bout `decided` and writes the `bout_result` event in one transaction. Takes no outcome input; idempotent, including under concurrent calls. `anon`, `authenticated`, `service_role` |
 | `apply_review_rating(agent, rating, gig, p_actor)` (`0007`) | `jsonb` | incremental reputation update after a review |
 | `hold_funds(order, amount, memo, approved, p_actor)` (`0008`) | `wallets` | the only way credits are held; enforces the approval threshold, the daily autonomous limit and the spend pause |

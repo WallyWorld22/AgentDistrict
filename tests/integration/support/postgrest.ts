@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Pool } from "pg";
 
+/** The database roles a Supabase key arrives as. */
+export type PostgrestRole = "anon" | "service_role";
+
 /**
  * A real `supabase-js` client whose PostgREST traffic a local Postgres answers.
  *
@@ -9,8 +12,8 @@ import type { Pool } from "pg";
  * adapter's actual HTTP requests by translating the read subset it sends —
  * `select`, `eq.` / `in.` / `not.in.` filters, `order`, `limit`, `offset` on a
  * GET — into
- * one SQL statement run as `anon`, so RLS applies exactly as it does behind the
- * anon key, and answers with the JSON array PostgREST would.
+ * one SQL statement run as `anon` (or `role`, below), so RLS applies exactly as
+ * it does behind that key, and answers with the JSON array PostgREST would.
  *
  * `.maybeSingle()` is enforced by postgrest-js itself on the array it receives,
  * so a filter that matches two rows fails here with the same PGRST116 ("JSON
@@ -21,15 +24,24 @@ import type { Pool } from "pg";
  * guessed at, so a test cannot pass on a query this does not understand.
  *
  * It also serves `POST /rest/v1/rpc/<function>` — `supabase.rpc(name, args)` —
- * with named scalar arguments, again as `anon`, and **commits** (an RPC is how
+ * with named scalar arguments, again as that role, and **commits** (an RPC is how
  * the adapter writes; the Fight League's `decide_bout()` is one). Functions
  * returning a row type are what it understands, and the answer has PostgREST's
  * shape for them: a set-returning function gives an array of row objects, any
  * other the one row object (or `null`).
+ *
+ * `role` is the database role every request runs as: `anon` (the default) is
+ * the anon-key client, `service_role` the service-role client an API-key or MCP
+ * caller reaches Postgres through (`getRepoActingAs()` in `lib/data`).
  */
-export function createPostgrestClient(pool: Pool): SupabaseClient {
-  return createClient("http://postgrest.test", "anon-key", {
-    global: { fetch: postgrestFetch(pool) },
+export function createPostgrestClient(
+  pool: Pool,
+  options: { role?: PostgrestRole } = {},
+): SupabaseClient {
+  const role = options.role ?? "anon";
+  if (role !== "anon" && role !== "service_role") throw new Error(`unsupported role ${String(role)}`);
+  return createClient("http://postgrest.test", `${role}-key`, {
+    global: { fetch: postgrestFetch(pool, role) },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
@@ -165,7 +177,7 @@ function respond(status: number, body: unknown): Response {
   });
 }
 
-function postgrestFetch(pool: Pool): typeof fetch {
+function postgrestFetch(pool: Pool, role: PostgrestRole): typeof fetch {
   return async (input, init) => {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(href);
@@ -173,7 +185,7 @@ function postgrestFetch(pool: Pool): typeof fetch {
     const accept = new Headers(init?.headers).get("accept") ?? "";
 
     if (method === "POST" && url.pathname.startsWith("/rest/v1/rpc/")) {
-      return callRpc(pool, url, typeof init?.body === "string" ? init.body : "");
+      return callRpc(pool, role, url, typeof init?.body === "string" ? init.body : "");
     }
 
     let statement: { sql: string; params: unknown[] };
@@ -193,7 +205,7 @@ function postgrestFetch(pool: Pool): typeof fetch {
     const connection = await pool.connect();
     try {
       await connection.query("begin");
-      await connection.query("set local role anon");
+      await connection.query(`set local role ${role}`);
       await connection.query("set local timezone to 'UTC'");
       const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
       await connection.query("rollback");
@@ -221,7 +233,12 @@ function postgrestFetch(pool: Pool): typeof fetch {
   };
 }
 
-async function callRpc(pool: Pool, url: URL, rawBody: string): Promise<Response> {
+async function callRpc(
+  pool: Pool,
+  role: PostgrestRole,
+  url: URL,
+  rawBody: string,
+): Promise<Response> {
   let statement: { name: string; sql: string; params: Scalar[] };
   try {
     statement = translateRpc(url, rawBody === "" ? {} : JSON.parse(rawBody));
@@ -238,7 +255,7 @@ async function callRpc(pool: Pool, url: URL, rawBody: string): Promise<Response>
   const connection = await pool.connect();
   try {
     await connection.query("begin");
-    await connection.query("set local role anon");
+    await connection.query(`set local role ${role}`);
     await connection.query("set local timezone to 'UTC'");
     const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
     // PostgREST answers a set-returning function with an array and anything

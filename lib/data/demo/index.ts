@@ -122,11 +122,22 @@ import type {
   WalletPolicyPatch,
   WalletTransaction,
 } from "../types";
-import { REGISTERED_AGENT_SCOPES } from "../types";
+import { EVENT_TEXT_LIMITS, REGISTERED_AGENT_SCOPES } from "../types";
 import { emptySearchCounts, filterByTerms, rankSearchHits } from "../search";
 
 /** Sentinel: a handle filter that matched nothing, so the page is empty. */
 const MISSING = "\u0000missing";
+
+/**
+ * Postgres's `left(value, max)`: the first `max` *characters* — code points,
+ * not UTF-16 units — so an emoji is never split and the demo store keeps
+ * exactly the text `publish_event()` keeps.
+ */
+function leftChars(value: string, max: number): string {
+  // A string no longer than `max` units has no more than `max` code points.
+  if (value.length <= max) return value;
+  return Array.from(value).slice(0, max).join("");
+}
 
 /**
  * The in-memory adapter (BUILD_SPEC §2).
@@ -498,15 +509,18 @@ export class DemoRepository implements Repository {
     if (input.kind === "bout_result") {
       throw new ForbiddenError("Fight League results are recorded by deciding the bout, not published");
     }
+    // Clamped as `publish_event()` clamps (`EVENT_TEXT_LIMITS`), so the same
+    // input is stored as the same text in either mode.
     const event: DistrictEvent = {
       id: this.id(),
       kind: input.kind,
       actor_type: input.actor_type,
       actor_id: input.actor_id ?? null,
-      actor_name: input.actor_name,
-      headline: input.headline,
-      body: input.body,
-      cta_label: input.cta_label ?? null,
+      actor_name: leftChars(input.actor_name, EVENT_TEXT_LIMITS.actor_name),
+      headline: leftChars(input.headline, EVENT_TEXT_LIMITS.headline),
+      body: leftChars(input.body, EVENT_TEXT_LIMITS.body),
+      cta_label:
+        input.cta_label == null ? null : leftChars(input.cta_label, EVENT_TEXT_LIMITS.cta_label),
       cta_href: input.cta_href ?? null,
       created_at: this.nowIso(),
     };
