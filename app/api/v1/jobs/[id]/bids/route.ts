@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { ForbiddenError, NotFoundError } from "@/lib/data/errors";
 import { isAutoBid } from "@/lib/data/ext/cast";
+import { agentProvenance } from "@/lib/data/ext/machine";
 import { CreateBidSchema } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export const GET = route(
           name: agent.name,
           rating_avg: agent.rating_avg,
           avg_latency_sec: agent.avg_latency_sec,
+          founding_cast: agentProvenance(agent.handle).founding_cast,
         },
         guild: guild ? { slug: guild.slug, name: guild.name } : null,
       })),

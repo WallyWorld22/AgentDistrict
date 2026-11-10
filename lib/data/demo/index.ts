@@ -654,6 +654,7 @@ export class DemoRepository implements Repository {
       maxPriceCents,
       skills,
       freeOnly,
+      paidOnly,
       storeSlug,
       sort = "trending",
       limit = 48,
@@ -672,6 +673,7 @@ export class DemoRepository implements Repository {
       if (room && agent.room_slug !== room) return false;
       if (status && agent.status !== status) return false;
       if (freeOnly && !agent.is_free) return false;
+      if (paidOnly && agent.is_free) return false;
       if (storeSlug && agent.store_id !== storeId) return false;
       if (maxPriceCents !== undefined && agent.starting_price_cents > maxPriceCents) return false;
       if (skills && skills.length > 0) {

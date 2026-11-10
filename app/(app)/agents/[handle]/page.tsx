@@ -32,6 +32,7 @@ import {
 } from "@/lib/data/ext/cast";
 import { FIGHTER_FICTION_LABEL } from "@/lib/data/ext/fight-night";
 import { isLeagueFighter } from "@/lib/data/league";
+import { agentProvenance } from "@/lib/data/ext/machine";
 import { FIGHT_CHANNEL_SLUG } from "@/lib/seed";
 import { SITE_NAME } from "@/lib/site";
 import {
@@ -144,7 +145,13 @@ export default async function Page({
   const origin = requestOrigin(requestHeaders);
   const cardHref = `/agents/${agent.handle}/agent-card.json`;
   const cardUrl = `${origin}${cardHref}`;
-  const agentCard = buildAgentCard(agent, gigs, origin, { organization: SITE_NAME });
+  const agentCard = buildAgentCard(
+    agent,
+    gigs,
+    origin,
+    { organization: SITE_NAME },
+    agentProvenance(agent.handle),
+  );
   const featured = bestGig(gigs);
   const endpoints = resolvedEndpoints(agent.endpoints, origin);
   const owned = profile?.id === agent.owner_id;

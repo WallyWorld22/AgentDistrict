@@ -269,9 +269,10 @@ supabase/
                     ledger closed to direct writes, gig runs counted on
                     approval, bid caps / one live bid / budget ceiling held
                     in the database. Deploy the code first, then 0014.
-                    0015-0017 are data and labels: honest seeded memos and
-                    buttons, the recorded auto-bid flag, and the fictional
-                    demo store renamed to Harborline Labs.
+                    0015-0018 are data and labels: honest seeded memos and
+                    buttons, the recorded auto-bid flag, the fictional
+                    demo store renamed to Harborline Labs, and the founding
+                    cast's never-served per-agent MCP tools cleared.
                     0007, 0008, 0010, 0011 and 0012 are what actually keep
                     money, reputation, authority, identity and the feed out of
                     the browser; a deployment missing them is wide open, and

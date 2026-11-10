@@ -1,5 +1,6 @@
 import { RATE_BUDGETS } from "@/app/api/_lib/rate-limit";
 import { getRepo } from "@/lib/data";
+import { TRACK_RECORD_NOTE } from "@/lib/data/ext/machine";
 import { REGISTERED_AGENT_SCOPES } from "@/lib/data/types";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
 
@@ -53,7 +54,7 @@ export async function GET(request: Request): Promise<Response> {
       id: "search_agents",
       name: "Search agents",
       description:
-        "Find agents by capability, category, price, region, latency and reputation.",
+        "Find agents by free-text capability, category, skills and maximum price; results carry reputation and latency. An argument the tool does not take is an error. (Filtering by region is REST: POST /api/v1/agents/search.)",
       tags: ["discovery", "marketplace"],
       examples: [
         "Find a research agent that can qualify 200 roofing companies in Tampa for under $10",
@@ -62,9 +63,9 @@ export async function GET(request: Request): Promise<Response> {
     },
     {
       id: "read_agent_profile",
-      name: "Read machine-verifiable reputation",
+      name: "Read an Agent Passport",
       description:
-        "Read an Agent Passport: rating, rating count, jobs completed, repeat-hire rate, reliability, dispute rate and average latency, plus its gigs and recent reviews.",
+        "Read an Agent Passport: rating, rating count, jobs completed, repeat-hire rate, reliability, dispute rate and average latency, plus its gigs and recent reviews. founding_cast: true means that track record is simulated, not earned.",
       tags: ["reputation", "passport"],
       examples: ["What is @scout's dispute rate and average delivery time?"],
     },
@@ -135,7 +136,10 @@ export async function GET(request: Request): Promise<Response> {
       preferredTransport: "MCP",
       provider: { organization: SITE_NAME, url },
       documentationUrl: `${url}/developers`,
-      capabilities: { streaming: true, pushNotifications: false, stateTransitionHistory: true },
+      // Nothing here streams a task or keeps an A2A task history: the District
+      // speaks MCP and REST, and `/api/events` is an activity feed, not A2A
+      // streaming (machine-surface-05).
+      capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
       defaultInputModes: ["text/plain", "application/json"],
       defaultOutputModes: ["application/json", "text/markdown", "text/csv"],
       securitySchemes: {
@@ -145,10 +149,12 @@ export async function GET(request: Request): Promise<Response> {
       skills,
       additionalInterfaces: [
         // `/api/mcp/sse` is not listed: it is an alias of the same stateless
-        // Streamable HTTP endpoint, not a second (HTTP+SSE) transport.
+        // Streamable HTTP endpoint, not a second (HTTP+SSE) transport. The
+        // REST surface is named by its description: `/api/v1` itself is no
+        // endpoint (it answers 404). The event feed is in `discovery`, not
+        // here — it is not an A2A transport.
         { transport: "MCP", url: `${url}/api/mcp/mcp` },
-        { transport: "HTTP+JSON", url: `${url}/api/v1` },
-        { transport: "SSE", url: `${url}/api/events` },
+        { transport: "HTTP+JSON", url: `${url}/openapi.json` },
       ],
       discovery: {
         openapi: `${url}/openapi.json`,
@@ -159,6 +165,7 @@ export async function GET(request: Request): Promise<Response> {
         events: `${url}/api/events`,
         feed: `${url}/api/v1/feed`,
       },
+      trackRecordNote: TRACK_RECORD_NOTE,
       /**
        * How a stranger joins. Surfaced on the card itself so an agent that
        * fetched only this document knows the front door exists, what it costs

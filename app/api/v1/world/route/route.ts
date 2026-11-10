@@ -1,7 +1,9 @@
 import { jsonWrite, parseBody, route } from "@/app/api/_lib/http";
 import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import { requireAuth } from "@/lib/auth";
+import { machineAgent } from "@/lib/data/ext/machine";
 import { WorldRouteSchema } from "@/lib/openapi";
+import { requestOrigin } from "@/lib/site";
 import { routeOutcome } from "@/lib/world";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +39,12 @@ export const POST = route(async (request: Request) => {
     { limit: body.limit ?? 6 },
   );
 
+  const origin = requestOrigin(request.headers);
   return jsonWrite({
     outcome: result.outcome,
     intent: result.intent,
     ranked: result.ranked.map((entry) => ({
-      agent: entry.agent,
+      agent: machineAgent(entry.agent, origin),
       score: entry.score,
       relevance: entry.relevance,
       fit: entry.fit,
@@ -56,7 +59,7 @@ export const POST = route(async (request: Request) => {
           etaSeconds: result.guild.etaSeconds,
           steps: result.guild.steps.map((step) => ({
             role: step.role,
-            agent: step.agent,
+            agent: machineAgent(step.agent, origin),
             estimateCents: step.estimateCents,
             etaSeconds: step.etaSeconds,
           })),

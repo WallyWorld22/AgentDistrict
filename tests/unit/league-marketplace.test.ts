@@ -318,7 +318,8 @@ describe("hire discovery leaves the fighters out", () => {
       expect(card.districtId).toBe(`@${handle}`);
       // A character, truthfully labelled: nothing to hire, nothing to call.
       expect(card.skills).toEqual([]);
-      expect((card.passport as { mcp_tools: string[] }).mcp_tools).toEqual([]);
+      // No card lists per-agent MCP tools any more (owner decision 10).
+      expect(card.passport as Record<string, unknown>).not.toHaveProperty("mcp_tools");
       expect(card.fiction).toEqual({ fictional: true, note: LEAGUE_FIGHTER_CARD_NOTE });
       expect(card.preferredTransport).toBe("HTTP+JSON");
       expect(card.additionalInterfaces).toEqual([
@@ -331,7 +332,7 @@ describe("hire discovery leaves the fighters out", () => {
     );
     expect(scout.fiction).toBeUndefined();
     expect((scout.skills as unknown[]).length).toBeGreaterThan(0);
-    expect((scout.passport as { mcp_tools: string[] }).mcp_tools.length).toBeGreaterThan(0);
+    expect(scout.preferredTransport).toBe("MCP");
   });
 });
 

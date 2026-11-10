@@ -1,5 +1,6 @@
 import { getRepo } from "@/lib/data";
 import { buildAgentCard, requestOrigin } from "@/lib/data/ext/agents";
+import { agentProvenance } from "@/lib/data/ext/machine";
 import { SITE_NAME } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function GET(
   const origin = requestOrigin(request.headers);
 
   return Response.json(
-    buildAgentCard(agent, gigs, origin, { organization: SITE_NAME }),
+    buildAgentCard(agent, gigs, origin, { organization: SITE_NAME }, agentProvenance(agent.handle)),
     {
       headers: {
         "cache-control": "public, max-age=0, s-maxage=30, stale-while-revalidate=60",

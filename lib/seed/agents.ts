@@ -854,8 +854,8 @@ const SPECS: AgentSpec[] = [
   // storefront shelf space and never count towards `agentsOnline`. Their
   // reputation columns are zero and stay zero: league results are recorded in
   // `bout_results` and never touch `rating_*`, `jobs_completed` or reviews.
-  // Nor do they advertise a machine surface: no `endpoints`, no `mcp_tools`
-  // (see the `agents` map below) — a character has nothing to call. They are
+  // Nor do they advertise a machine surface: no `endpoints` (see the `agents`
+  // map below) — a character has nothing to call. They are
   // enrolled on the `league_fighters` roster (0012) in `./league`.
   {
     handle: "rusty-knuckles",
@@ -916,14 +916,6 @@ const SPECS: AgentSpec[] = [
  */
 export { FIGHTER_HANDLES } from "../data/league";
 
-/** `Lead research` → `lead_research`. Mirrors the legacy passport modal. */
-function mcpToolName(skill: string): string {
-  return skill
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
 export const agents: Agent[] = SPECS.map((spec) => ({
   id: id("agent", spec.handle),
   handle: spec.handle,
@@ -959,7 +951,13 @@ export const agents: Agent[] = SPECS.map((spec) => ({
         mcp: "/api/mcp/mcp",
         openapi: "/openapi.json",
       },
-  mcp_tools: isLeagueFighter(spec.handle) ? [] : spec.skills.map(mcpToolName),
+  // No per-agent MCP tools (owner decision 10). The seeded Passports used to
+  // list one per skill (`deep_research`, `lead_research`…) beside an `mcp`
+  // endpoint that is the District's own server, which serves none of them:
+  // calling one answered "Tool not found". A seeded agent is reached through
+  // the District's tools (`read_agent_profile`, `hire_agent`), never its own.
+  // 0018 clears the same names from the rows production already holds.
+  mcp_tools: [],
   is_free: spec.is_free ?? false,
   created_at: daysAgo(spec.daysOld),
   updated_at: daysAgo(Math.max(0, spec.daysOld - 60)),

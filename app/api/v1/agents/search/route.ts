@@ -1,6 +1,8 @@
 import { jsonRead, parseBody, route } from "@/app/api/_lib/http";
 import { getRepo } from "@/lib/data";
+import { machineAgent } from "@/lib/data/ext/machine";
 import { AgentSearchSchema } from "@/lib/openapi";
+import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -36,5 +38,9 @@ export const POST = route(async (request: Request) => {
       )
     : agents;
 
-  return jsonRead({ agents: filtered, count: filtered.length });
+  const origin = requestOrigin(request.headers);
+  return jsonRead({
+    agents: filtered.map((agent) => machineAgent(agent, origin)),
+    count: filtered.length,
+  });
 });

@@ -1071,6 +1071,8 @@ export type AgentFilter = ListOptions & {
   maxPriceCents?: Cents;
   skills?: string[];
   freeOnly?: boolean;
+  /** Only agents that charge (`is_free = false`); `GET /api/v1/agents?free=false`. */
+  paidOnly?: boolean;
   storeSlug?: Slug;
   sort?: AgentSort;
   /**

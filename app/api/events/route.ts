@@ -1,4 +1,7 @@
+import { z } from "zod";
+import { jsonError } from "@/app/api/_lib/http";
 import { getRepo } from "@/lib/data";
+import { ValidationError } from "@/lib/data/errors";
 import type { DistrictEvent } from "@/lib/data/types";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +18,17 @@ export const maxDuration = 300;
  *    from a deterministic rotation, so the feed is alive on a fresh install.
  *
  * Query parameters:
- *   `?limit=20`   how many events to replay (1–50)
+ *   `?limit=20`   how many events to replay: a whole number, 1–50
  *   `?replay=only` replay and close — handy for `curl` and tests
+ *
+ * A `limit` that is not a whole number in range is a 400 in the API's error
+ * envelope, before the stream opens. It used to become `NaN`, which replayed
+ * nothing and looked exactly like an empty District (machine-surface-16).
  */
+
+const EventsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+});
 
 const REPLAY_DEFAULT = 20;
 const SYNTHETIC_INTERVAL_MS = 8_000;
@@ -86,7 +97,16 @@ async function buildRotation(): Promise<DistrictEvent[]> {
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const replayOnly = url.searchParams.get("replay") === "only";
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? REPLAY_DEFAULT)));
+  const rawLimit = url.searchParams.get("limit");
+  const parsed = EventsQuerySchema.safeParse({ limit: rawLimit ?? undefined });
+  if (!parsed.success) {
+    return jsonError(
+      new ValidationError("Invalid query parameters", [
+        { path: "limit", message: "limit must be a whole number from 1 to 50" },
+      ]),
+    );
+  }
+  const limit = parsed.data.limit ?? REPLAY_DEFAULT;
 
   const repo = getRepo();
   const recent = (await repo.listEvents({ limit })).slice().reverse();

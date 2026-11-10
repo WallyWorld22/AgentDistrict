@@ -1,9 +1,48 @@
 import * as React from "react";
-import type { DocSection } from "@/lib/docs";
+import { DOC_ORIGIN, type DocSection } from "@/lib/docs";
 import { CodeBlock } from "@/components/ui/code-block";
 
 /**
- * Renders `` `backticked` `` spans as real inline code.
+ * A backticked span that is a page or document a reader can open: a plain
+ * site path such as `/openapi.json` or `/developers`. Templates
+ * (`/agents/{handle}`, `/orders/:id`) and the API itself (`/api/...`, which
+ * answers machines, not readers) stay code.
+ */
+function linkablePath(code: string): boolean {
+  return /^\/[A-Za-z0-9._~/-]*$/.test(code) && !code.startsWith("/api/");
+}
+
+/**
+ * `**bold**` and `*italic*` inside one stretch of prose. The doc source uses
+ * both (`**input contract**`, `*autonomous*`), and they used to print as
+ * literal asterisks (comms-docs-09). A lone `*` with a space after it is left
+ * alone, so arithmetic like `0.35 × quality` or `a * b` survives.
+ */
+function Emphasis({ text }: { text: string }) {
+  const pattern = /\*\*([^*]+?)\*\*|\*(?!\s)([^*]+?)(?<!\s)\*/g;
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > last) out.push(text.slice(last, index));
+    out.push(
+      match[1] !== undefined ? (
+        <strong key={index} className="font-extrabold">
+          {match[1]}
+        </strong>
+      ) : (
+        <em key={index}>{match[2]}</em>
+      ),
+    );
+    last = index + match[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return <>{out}</>;
+}
+
+/**
+ * Renders the doc source's inline markup: `` `backticked` `` spans as real
+ * inline code (a site path among them as a link), and bold and italic.
  *
  * The doc source is written the way anyone writes prose about code, so the
  * backticks have to mean something — printing them verbatim made
@@ -13,24 +52,36 @@ export function InlineDocText({ text }: { text: string }) {
   const parts = text.split("`");
   return (
     <>
-      {parts.map((part, index) =>
-        index % 2 === 1 ? (
-          <code
-            key={index}
-            className="rounded-[6px] bg-[#111a2b] px-1 py-px font-mono text-[0.92em] text-cyan"
-          >
+      {parts.map((part, index) => {
+        if (index % 2 === 0) return <Emphasis key={index} text={part} />;
+        const code = (
+          <code className="rounded-[6px] bg-[#111a2b] px-1 py-px font-mono text-[0.92em] text-cyan">
             {part}
           </code>
+        );
+        return linkablePath(part) ? (
+          <a
+            key={index}
+            href={part}
+            className="underline decoration-cyan/40 underline-offset-2 hover:decoration-cyan"
+          >
+            {code}
+          </a>
         ) : (
-          <React.Fragment key={index}>{part}</React.Fragment>
-        ),
-      )}
+          <React.Fragment key={index}>{code}</React.Fragment>
+        );
+      })}
     </>
   );
 }
 
-/** Renders one documentation section (BUILD_SPEC §4 `/docs`). */
-export function DocSectionView({ section }: { section: DocSection }) {
+/**
+ * Renders one documentation section (BUILD_SPEC §4 `/docs`).
+ *
+ * `origin` replaces the source's `DOC_ORIGIN` placeholder in code samples, so
+ * the Copy button hands over a command aimed at this site.
+ */
+export function DocSectionView({ section, origin }: { section: DocSection; origin: string }) {
   return (
     <section className="grid gap-2">
       <h3 className="m-0 text-[13.5px] font-extrabold tracking-[-0.01em]">
@@ -72,7 +123,13 @@ export function DocSectionView({ section }: { section: DocSection }) {
             );
           case "code":
             return (
-              <CodeBlock key={index} label={block.label} code={block.text} copyable={false} />
+              <CodeBlock
+                key={index}
+                label={block.label}
+                code={block.text.split(DOC_ORIGIN).join(origin)}
+                copyable={!block.diagram}
+                wrap={!block.diagram}
+              />
             );
           case "table":
             return (

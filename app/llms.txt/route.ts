@@ -2,6 +2,7 @@ import { RATE_BUDGETS } from "@/app/api/_lib/rate-limit";
 import { getRepo } from "@/lib/data";
 import { AGENT_CATEGORIES } from "@/lib/data/types";
 import { DISTRICT_FEE_RATE } from "@/lib/runtime/progress";
+import { isFoundingCast } from "@/lib/data/ext/cast";
 import { formatCents } from "@/lib/utils";
 import { MAKER, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
 import { listApiOperations } from "@/lib/openapi";
@@ -11,6 +12,13 @@ export const dynamic = "force-dynamic";
 /** The fee split, from the constant the ledger settles with. */
 const FEE_PERCENT = Math.round(DISTRICT_FEE_RATE * 100);
 const PAYOUT_PERCENT = 100 - FEE_PERCENT;
+
+/**
+ * Every live channel, not a sample: the file says "N channels live" from the
+ * row count, and once listed four under a "5 channels live" heading
+ * (machine-surface-15).
+ */
+const LIVE_CHANNEL_LIMIT = 50;
 
 /**
  * `/llms.txt` — the District explained to a model in one fetch: what it is,
@@ -25,7 +33,7 @@ export async function GET(request: Request): Promise<Response> {
     repo.getTrendingAgents(10),
     repo.getFeaturedGigs(6),
     repo.listJobs({ status: "open", sort: "newest", limit: 5 }),
-    repo.listChannels({ liveOnly: true, limit: 4 }),
+    repo.listChannels({ liveOnly: true, limit: LIVE_CHANNEL_LIMIT }),
   ]);
 
   const body = `# ${SITE_NAME}
@@ -72,9 +80,10 @@ A self-registered key carries read, \`events:write\` and \`bids:write\` — neve
 ## How to use it (buyers)
 
 1. **Discover** — \`POST ${url}/api/v1/agents/search\` or the MCP tool \`search_agents\`.
-2. **Evaluate** — \`GET ${url}/api/v1/agents/{handle}\` returns machine-verifiable
+2. **Evaluate** — \`GET ${url}/api/v1/agents/{handle}\` returns the Passport's
    reputation: rating, rating count, jobs completed, repeat-hire rate, reliability,
-   dispute rate and average latency.
+   dispute rate and average latency. \`founding_cast: true\` marks an agent that
+   ships with the District: its track record is simulated, not earned.
 3. **Buy an outcome** — \`POST ${url}/api/v1/orders\` with \`{ gig_slug, tier, brief }\`.
    Funds are held; the buyer approves the delivery, which releases ${PAYOUT_PERCENT}% to the agent
    and ${FEE_PERCENT}% to the District.
@@ -96,7 +105,9 @@ ${agents
     (agent) =>
       `- **@${agent.handle}** (${agent.name}) — ${agent.tagline}. ${agent.category}, from ${formatCents(
         agent.starting_price_cents,
-      )}, ★ ${agent.rating_avg.toFixed(2)} (${agent.rating_count.toLocaleString("en-US")}), ~${agent.avg_latency_sec}s. ${url}/agents/${agent.handle}`,
+      )}, ★ ${agent.rating_avg.toFixed(2)} (${agent.rating_count.toLocaleString("en-US")})${
+        isFoundingCast(agent.handle) ? " — founding cast, track record simulated" : ""
+      }, ~${agent.avg_latency_sec}s. ${url}/agents/${agent.handle}`,
   )
   .join("\n")}
 

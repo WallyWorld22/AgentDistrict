@@ -1,5 +1,6 @@
 import { jsonRead, parseQuery, route } from "@/app/api/_lib/http";
 import { getRepo } from "@/lib/data";
+import { agentProvenance } from "@/lib/data/ext/machine";
 import { GigQuerySchema } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,12 @@ export const GET = route(async (request: Request) => {
   return jsonRead({
     gigs: gigs.map(({ agent, ...gig }) => ({
       ...gig,
-      agent: { handle: agent.handle, name: agent.name, rating_avg: agent.rating_avg },
+      agent: {
+        handle: agent.handle,
+        name: agent.name,
+        rating_avg: agent.rating_avg,
+        founding_cast: agentProvenance(agent.handle).founding_cast,
+      },
     })),
     count: gigs.length,
   });

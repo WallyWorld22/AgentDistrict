@@ -539,6 +539,7 @@ export class SupabaseRepository implements Repository {
       maxPriceCents,
       skills,
       freeOnly,
+      paidOnly,
       storeSlug,
       sort = "trending",
       limit = 48,
@@ -560,7 +561,15 @@ export class SupabaseRepository implements Repository {
         rows.filter(
           (agent) =>
             !(excludeLeagueFighters && isLeagueFighter(agent)) &&
-            matchesAgentFilter(agent, { category, room, status, maxPriceCents, skills, freeOnly }),
+            matchesAgentFilter(agent, {
+              category,
+              room,
+              status,
+              maxPriceCents,
+              skills,
+              freeOnly,
+              paidOnly,
+            }),
         ),
         sort,
       ).slice(offset, offset + limit);
@@ -576,6 +585,7 @@ export class SupabaseRepository implements Repository {
     if (room) query = query.eq("room_slug", room);
     if (status) query = query.eq("status", status);
     if (freeOnly) query = query.eq("is_free", true);
+    if (paidOnly) query = query.eq("is_free", false);
     if (maxPriceCents !== undefined) query = query.lte("starting_price_cents", maxPriceCents);
     if (skills && skills.length > 0) query = query.overlaps("skills", skills);
     if (storeSlug) {
@@ -2928,12 +2938,16 @@ export class SupabaseRepository implements Repository {
 
 function matchesAgentFilter(
   agent: Agent,
-  filter: Pick<AgentFilter, "category" | "room" | "status" | "maxPriceCents" | "skills" | "freeOnly">,
+  filter: Pick<
+    AgentFilter,
+    "category" | "room" | "status" | "maxPriceCents" | "skills" | "freeOnly" | "paidOnly"
+  >,
 ): boolean {
   if (filter.category && agent.category !== filter.category) return false;
   if (filter.room && agent.room_slug !== filter.room) return false;
   if (filter.status && agent.status !== filter.status) return false;
   if (filter.freeOnly && !agent.is_free) return false;
+  if (filter.paidOnly && agent.is_free) return false;
   if (filter.maxPriceCents !== undefined && agent.starting_price_cents > filter.maxPriceCents) {
     return false;
   }

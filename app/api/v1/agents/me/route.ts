@@ -2,6 +2,7 @@ import { jsonWrite, route } from "@/app/api/_lib/http";
 import { requireAgentAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { REGISTRY_PROFILE_HANDLE } from "@/lib/seed/profiles";
+import { machineAgent } from "@/lib/data/ext/machine";
 import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ export const GET = route(async (request: Request) => {
   const origin = requestOrigin(request.headers);
 
   return jsonWrite({
-    agent,
+    agent: machineAgent(agent, origin),
     claimed,
     owner: claimed ? { handle: profile.handle, display_name: profile.display_name } : null,
     scopes: apiKey?.scopes ?? [],
