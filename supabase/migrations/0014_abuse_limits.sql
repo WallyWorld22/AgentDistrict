@@ -36,8 +36,27 @@
 --      order (`reputation_bumps`), and the adapter calls it from
 --      `approveOrder` instead of `orderGig`.
 --
--- Re-runnable: `create or replace` with unchanged signatures and idempotent
--- grants. Applies after 0001–0013 and the seed, and again on top of itself.
+--   4. The money ledger is written by the SECURITY DEFINER functions alone.
+--      0002 let a session insert and update its own `wallet_transactions`
+--      rows, and the daily top-up sum in (2) reads those rows: back-dating
+--      the day's `topup` rows reopened the cap, and an inserted row could say
+--      anything ("Wire from Chase Bank"). The adapter only reads the ledger,
+--      so INSERT / UPDATE / DELETE / TRUNCATE are revoked from `authenticated`
+--      (and `anon`) and the two write policies are dropped.
+--
+--   5. The bid caps, the one-live-bid rule and the budget ceiling hold in the
+--      database too (jobs-03, jobs-04, machine-surface-07). The data layer
+--      refuses them first with its own words; these stop a direct PostgREST
+--      write and the race between two concurrent bids:
+--        * `jobs_budget_ceiling`: budget_cents ≤ 10000000 ($100,000.00),
+--          `not valid` so a row that predates it does not block the migration,
+--        * `bids_fit_their_bounty()`: a bid's amount ≤ the bounty's budget and
+--          its eta ≤ the deadline, and at most one pending bid per agent per
+--          bounty, checked with the bounty row locked.
+--
+-- Re-runnable: `create or replace` with unchanged signatures, idempotent
+-- grants, `drop … if exists` before every policy, constraint and trigger.
+-- Applies after 0001–0013 and the seed, and again on top of itself.
 -- =============================================================================
 
 -- =============================================================================
@@ -185,3 +204,85 @@ $$;
 
 revoke execute on function public.increment_gig_runs(uuid, uuid, uuid) from public, anon;
 grant execute on function public.increment_gig_runs(uuid, uuid, uuid) to authenticated, service_role;
+
+-- =============================================================================
+-- 4. wallet_transactions — written by the money functions only
+-- =============================================================================
+
+-- `hold_funds`, `settle_hold`, `top_up_wallet` and the order functions are
+-- SECURITY DEFINER and keep writing; a session keeps reading its own rows
+-- (`wallet_transactions_select_self`).
+drop policy if exists "wallet_transactions_insert_self" on public.wallet_transactions;
+drop policy if exists "wallet_transactions_update_self" on public.wallet_transactions;
+revoke insert, update, delete, truncate on public.wallet_transactions from anon, authenticated;
+
+-- =============================================================================
+-- 5. Bounty and bid limits in the database
+-- =============================================================================
+
+-- The same ceiling as `MAX_JOB_BUDGET_CENTS` in lib/data/limits.ts.
+alter table public.jobs drop constraint if exists jobs_budget_ceiling;
+alter table public.jobs
+  add constraint jobs_budget_ceiling check (budget_cents <= 10000000) not valid;
+
+create or replace function public.bids_fit_their_bounty()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_job       public.jobs;
+  v_fit       boolean := tg_op = 'INSERT'
+                         or new.amount_cents is distinct from old.amount_cents
+                         or new.eta_seconds is distinct from old.eta_seconds
+                         or new.job_id is distinct from old.job_id;
+  v_goes_live boolean := new.status = 'pending'
+                         and (tg_op = 'INSERT'
+                              or old.status is distinct from new.status
+                              or new.job_id is distinct from old.job_id
+                              or new.agent_id is distinct from old.agent_id);
+begin
+  -- A status change that is not a bid going live (accept, reject, withdraw)
+  -- checks nothing and locks nothing.
+  if not (v_fit or v_goes_live) then
+    return new;
+  end if;
+
+  -- Lock the bounty: two bids from one agent then queue here, and the second
+  -- sees the first (READ COMMITTED takes a fresh snapshot per statement).
+  select * into v_job from public.jobs j where j.id = new.job_id for no key update;
+  if not found then
+    return new;  -- the foreign key reports it
+  end if;
+
+  if v_fit and new.amount_cents > v_job.budget_cents then
+    raise exception 'bid cap: a bid can be at most the bounty''s budget (% cents)',
+      v_job.budget_cents using errcode = '23514';
+  end if;
+  if v_fit and new.eta_seconds > v_job.deadline_seconds then
+    raise exception 'bid cap: delivery has to fit the bounty''s deadline (% seconds)',
+      v_job.deadline_seconds using errcode = '23514';
+  end if;
+
+  if v_goes_live and exists (
+    select 1 from public.bids b
+     where b.job_id = new.job_id
+       and b.agent_id = new.agent_id
+       and b.status = 'pending'
+       and b.id <> new.id
+  ) then
+    raise exception 'one live bid: that agent already has a live bid on this bounty'
+      using errcode = '23505';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke execute on function public.bids_fit_their_bounty() from public, anon, authenticated;
+
+drop trigger if exists bids_fit_their_bounty on public.bids;
+create trigger bids_fit_their_bounty
+  before insert or update of amount_cents, eta_seconds, job_id, agent_id, status on public.bids
+  for each row execute function public.bids_fit_their_bounty();

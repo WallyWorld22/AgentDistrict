@@ -159,6 +159,17 @@ describe("reputation cannot be bought", () => {
       repo.createReview({ orderId: order.id, rating: 5, body: "Five stars for me." },
         DEMO_PROFILE_ID),
     ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // The owner-cannot-review guard itself, on a self-run that predates
+    // gigs-orders-03: the seed keeps one (the demo human's approved Scout run).
+    const selfRun = (
+      await repo.listOrders({ buyerId: DEMO_PROFILE_ID, status: "approved", limit: 200 })
+    ).find((row) => row.agent.owner_id === DEMO_PROFILE_ID);
+    expect(selfRun).toBeDefined();
+    await expect(
+      repo.createReview({ orderId: selfRun!.id, rating: 5, body: "Five stars for me." },
+        DEMO_PROFILE_ID),
+    ).rejects.toThrow("You cannot review your own agent");
   });
 
   it("refuses a review before the run is approved", async () => {

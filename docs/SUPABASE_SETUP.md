@@ -197,7 +197,20 @@ it the entrance answers with an error rather than falling back to anon.
 UTC day, and always writes the memo "Demo credits added — not real money" (a
 stopgap until real payments exist). `increment_gig_runs()` now counts an order
 only once it is approved, so a gig's public Runs count is delivered, paid
-runs. It needs nothing from the seed and applies cleanly before or after it.
+runs. A session can no longer write `wallet_transactions` directly (the cap
+reads that ledger, and back-dating or forging rows used to reopen it); the
+money functions still write it. The bid caps (amount within the budget, eta
+within the deadline), one live bid per agent per bounty and the $100,000.00
+budget ceiling also hold in the database now (`bids_fit_their_bounty()` and the
+`jobs_budget_ceiling` check, `not valid` so older rows do not block it). It
+needs nothing from the seed and applies cleanly before or after it.
+
+**Deploy 0014 after the code, never before.** The build that is live before
+this batch calls `register_agent()` with the anon client, so applying 0014
+first breaks registration over REST and MCP until the new build is out. In
+order: set `SUPABASE_SERVICE_ROLE_KEY` in the production environment and
+confirm it is there; deploy the new code; check that a registration still
+works; then apply 0014.
 
 **Option B — Supabase CLI:**
 

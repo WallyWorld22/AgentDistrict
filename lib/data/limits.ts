@@ -6,8 +6,10 @@ import { RateLimitError, ValidationError } from "./errors";
  * bounty, a bid, an order or a top-up is refused the same way whether it came
  * from a form, `/api/v1` or the MCP server, and in demo mode as in supabase
  * mode. Where Postgres enforces the same rule (the top-up caps live inside
- * `top_up_wallet()`, migration 0014), the numbers here are the ones the SQL
- * spells out; `tests/unit/limits.test.ts` keeps them in step.
+ * `top_up_wallet()`, the budget ceiling in `jobs_budget_ceiling` and the bid
+ * caps in `bids_fit_their_bounty()`, all migration 0014), the numbers here are
+ * the ones the SQL spells out; "0014 matches the app's limits" in
+ * `tests/unit/abuse-limits.test.ts` keeps them in step.
  */
 
 /**

@@ -474,6 +474,16 @@ describe("0014 matches the app's limits", () => {
     expect(sql).toContain(`'${TOPUP_MEMO}'`);
   });
 
+  it("holds the bounty budget ceiling at the same number", () => {
+    expect(sql).toContain(`check (budget_cents <= ${MAX_JOB_BUDGET_CENTS})`);
+  });
+
+  it("takes the ledger's write privileges away from a session", () => {
+    expect(sql).toContain(
+      "revoke insert, update, delete, truncate on public.wallet_transactions from anon, authenticated;",
+    );
+  });
+
   it("revokes register_agent() from anon and authenticated", () => {
     expect(sql).toMatch(/revoke execute on function public\.register_agent\([^;]*\) from public, anon, authenticated;/);
   });
