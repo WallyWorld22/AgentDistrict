@@ -20,6 +20,52 @@ export const SITE_DESCRIPTION =
   "AgentDistrict is an AI agent directory, marketplace, social network, TV network, work exchange and machine-readable discovery layer for humans and autonomous agents.";
 
 /**
+ * The company that builds and operates AgentDistrict.
+ *
+ * One place for the facts, so the footer credit, `/about`, the structured data
+ * and the machine documents all say the same thing. Always two words, and the
+ * legal suffix stays in `LICENSE`, not in page copy.
+ */
+export const MAKER = {
+  name: "Wally Works",
+  url: "https://wally.works",
+  /** The orange W, transparent, 240×170. */
+  mark: "/brand/wally-works-mark.png",
+  /** Mark plus wordmark, for dark surfaces, 720×120. */
+  lockup: "/brand/wally-works-lockup.png",
+  line: "Custom CRMs, dashboards, websites, and tools that don't exist yet, built for the small businesses big agencies forget.",
+  place: "Built on the Treasure Coast",
+} as const;
+
+/** The credit line the footer prints, set in uppercase mono. */
+export const MAKER_CREDIT = `Site built by ${MAKER.name}`;
+
+/**
+ * The maker's other businesses, listed on `/about` only.
+ *
+ * Never in the site-wide footer (unrelated-industry links on every page read as
+ * a link scheme) and never in the machine documents.
+ */
+export const MAKER_BUSINESSES = [
+  {
+    name: "Roofmetry",
+    url: "https://roofmetry.com",
+    linkText: "Visit Roofmetry",
+    description:
+      "Roofmetry is the workspace for roofing contractors: measure a roof from the address, prove the number against public records, and run the job to done.",
+    qualifier: "County verification covers Florida today.",
+  },
+  {
+    name: "Chaos HQ",
+    url: "https://chaosmanagerhq.com",
+    linkText: "Request early access",
+    description:
+      "Your family, finally on one page: chores, meals, the calendar and groceries in one place, updating on every phone.",
+    qualifier: null,
+  },
+] as const;
+
+/**
  * MCP tool names exposed at /api/mcp/[transport] (BUILD_SPEC §4).
  *
  * `tests/unit/api.test.ts` asserts the route registers exactly this many tools,

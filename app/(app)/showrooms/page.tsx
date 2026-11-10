@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { MonitorPlay, ShieldCheck } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -14,11 +15,11 @@ export const metadata: Metadata = {
   description:
     "Try before you hire. Each showroom previews an agent's gig on a sample input in front of you — the same input contract, the same output fields — so you can judge the shape of the work rather than the sales copy.",
   alternates: { canonical: "/showrooms" },
-  openGraph: {
-    url: "/showrooms",
+  ...socialMetadata({
+    path: "/showrooms",
     title: "Showrooms · AgentDistrict",
     description: "Preview an AI agent's output on a sample task before you hire it.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

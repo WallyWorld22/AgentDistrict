@@ -19,7 +19,7 @@ import { isLeagueFighter } from "@/lib/data/league";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import type { Agent, Cents, GigWithAgent } from "@/lib/data/types";
 import type { DocPage } from "@/lib/docs";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+import { MAKER, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
 /** A schema.org node. `@type` is always present; the rest is vocabulary. */
 export type JsonLdNode = { "@type": string } & Record<string, unknown>;
@@ -115,7 +115,32 @@ export function earnedAggregateRating(
 /* Site-wide nodes (home)                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** The District itself. `@id` is stable so other nodes can reference it. */
+/** The maker's node id: its own site, so every graph that names it agrees. */
+export const MAKER_ID = `${MAKER.url}/#organization`;
+
+/**
+ * Wally Works, the company that builds and operates the District (brand-04).
+ *
+ * The logo is served from this site — it is the one copy this deployment can
+ * vouch for — while `url` and `@id` are the maker's own address.
+ */
+export function makerSchema(origin: string): JsonLdNode {
+  return {
+    "@type": "Organization",
+    "@id": MAKER_ID,
+    name: MAKER.name,
+    url: MAKER.url,
+    logo: absolute(origin, MAKER.mark),
+    description: MAKER.line,
+  };
+}
+
+/**
+ * The District itself. `@id` is stable so other nodes can reference it.
+ *
+ * Its parent organization is the maker, inlined so the graph on any page that
+ * carries this node is complete on its own.
+ */
 export function organizationSchema(origin: string): JsonLdDocument {
   return {
     "@context": CONTEXT,
@@ -127,6 +152,7 @@ export function organizationSchema(origin: string): JsonLdDocument {
     image: absolute(origin, "/opengraph-image"),
     slogan: SITE_TAGLINE,
     description: SITE_DESCRIPTION,
+    parentOrganization: makerSchema(origin),
     knowsAbout: [
       "AI agents",
       "agent marketplace",
@@ -134,6 +160,25 @@ export function organizationSchema(origin: string): JsonLdDocument {
       "A2A agent interoperability",
       "autonomous agent hiring",
     ],
+  };
+}
+
+/**
+ * `/about` — an `AboutPage` whose subject is the District, which names its
+ * maker as its parent organization (brand-03).
+ */
+export function aboutPageSchema(origin: string): JsonLdDocument {
+  const url = absolute(origin, "/about");
+  return {
+    "@context": CONTEXT,
+    "@type": "AboutPage",
+    "@id": `${url}#page`,
+    url,
+    name: `About ${SITE_NAME}`,
+    inLanguage: "en",
+    isPartOf: { "@id": absolute(origin, "/#website") },
+    about: { "@id": absolute(origin, "/#organization") },
+    creator: { "@id": MAKER_ID },
   };
 }
 
@@ -151,7 +196,9 @@ export function webSiteSchema(origin: string): JsonLdDocument {
     alternateName: SITE_TAGLINE,
     description: SITE_DESCRIPTION,
     inLanguage: "en",
-    publisher: { "@id": absolute(origin, "/#organization") },
+    // Built and published by the maker; the site name stays AgentDistrict.
+    creator: { "@id": MAKER_ID },
+    publisher: { "@id": MAKER_ID },
     potentialAction: {
       "@type": "SearchAction",
       target: {

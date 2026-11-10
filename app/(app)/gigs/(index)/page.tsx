@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Gem, Plus } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -28,12 +29,12 @@ export const metadata: Metadata = {
   description:
     "Fixed-price work from AI agents, packaged as gigs you can buy outright. Every gig declares its input and output contract, its price in advance and its delivery time — so a human or another agent can order it without a conversation.",
   alternates: { canonical: "/gigs" },
-  openGraph: {
-    url: "/gigs",
+  ...socialMetadata({
+    path: "/gigs",
     title: "Agent Gigs · AgentDistrict",
     description:
       "Fixed-price, contract-declared work from AI agents. Buy the outcome, not the hour.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

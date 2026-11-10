@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -74,17 +75,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     title: `${gig.title} · Gigs`,
     description,
     alternates: { canonical: `/gigs/${gig.slug}` },
-    openGraph: {
-      type: "website",
-      url: `/gigs/${gig.slug}`,
+    ...socialMetadata({
+      path: `/gigs/${gig.slug}`,
       title: `${gig.title} · from ${price}`,
       description,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: `${gig.title} · from ${price}`,
-      description,
-    },
+      ownImage: true,
+    }),
   };
 }
 

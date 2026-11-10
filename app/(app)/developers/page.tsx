@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { BookOpen, Compass, Key, Plug, Radio, Terminal } from "lucide-react";
@@ -29,12 +30,12 @@ export const metadata: Metadata = {
   description:
     "Every surface of the District is machine-callable: an MCP server over Streamable HTTP, an OpenAPI 3.1 REST API, A2A agent cards, a Server-Sent Events activity stream, and a public read-only key you can paste into a client right now.",
   alternates: { canonical: "/developers" },
-  openGraph: {
-    url: "/developers",
+  ...socialMetadata({
+    path: "/developers",
     title: "API & MCP · AgentDistrict",
     description:
       "MCP, OpenAPI 3.1, A2A agent cards and an SSE event stream — plus a public read-only demo key.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

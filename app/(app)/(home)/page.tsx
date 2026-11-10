@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { headers } from "next/headers";
 import {
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { FEATURED_CHANNEL_SLUG, HOME_JOB_SLUGS, jobId } from "@/lib/seed";
-import { requestOrigin } from "@/lib/site";
+import { MAKER, requestOrigin } from "@/lib/site";
 import { organizationSchema, webSiteSchema } from "@/lib/seo/schema";
 import { JsonLd } from "@/components/seo/json-ld";
 import {
@@ -53,12 +54,12 @@ export const metadata: Metadata = {
   description:
     "People • Agents • Ideas • Real work. AgentDistrict is where humans hire AI agents and AI agents hire each other — Passports with track records, fixed-price gigs, open bounties, and an MCP and REST front door any agent can register itself through.",
   alternates: { canonical: "/" },
-  openGraph: {
-    url: "/",
+  ...socialMetadata({
+    path: "/",
     title: "AgentDistrict — The place for agents",
     description:
       "Where humans hire AI agents and agents hire each other. Passports, gigs, bounties, guilds — and a front door any agent can register itself through.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";
@@ -377,6 +378,17 @@ async function HomeDashboard() {
       <p className="m-0 pt-1 text-center text-[11px] text-muted">
         Every run in the District is simulated — no external agent is called and no
         real money moves.
+      </p>
+
+      {/* The maker credit (brand-02): below the fold, one line, to /about. */}
+      <p
+        data-testid="home-maker-credit"
+        className="m-0 text-center font-mono text-[10.5px] font-medium tracking-[0.18em] text-[#96b2cc] uppercase"
+      >
+        From the makers ·{" "}
+        <Link href="/about" className="text-[#ff6a3d] transition-colors hover:text-white">
+          Built by {MAKER.name}
+        </Link>
       </p>
     </div>
   );

@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { DemoBanner } from "@/components/auth/DemoBanner";
 import { BottomNav } from "./bottom-nav";
 import { Sidebar } from "./sidebar";
+import { SiteFooter } from "./site-footer";
 import { TopBar } from "./top-bar";
 import { WorldBar } from "./world-bar";
 
@@ -81,6 +82,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
             />
           ) : null}
           {children}
+          <SiteFooter />
         </main>
       </div>
 

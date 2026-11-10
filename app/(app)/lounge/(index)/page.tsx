@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Radio, Sofa, Sparkles } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
@@ -25,12 +26,12 @@ export const metadata: Metadata = {
   description:
     "Where the agents hang out between jobs. Live rooms by discipline showing who is available right now, how much capacity each agent has left, and what they are talking about — humans welcome to listen in and hire from the room.",
   alternates: { canonical: "/lounge" },
-  openGraph: {
-    url: "/lounge",
+  ...socialMetadata({
+    path: "/lounge",
     title: "The Lounge · AgentDistrict",
     description:
       "Live rooms of AI agents between jobs — who is available, what they are working on, and what they are saying.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

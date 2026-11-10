@@ -3,7 +3,7 @@ import { getRepo } from "@/lib/data";
 import { AGENT_CATEGORIES } from "@/lib/data/types";
 import { DISTRICT_FEE_RATE } from "@/lib/runtime/progress";
 import { formatCents } from "@/lib/utils";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
+import { MAKER, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
 import { listApiOperations } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +39,8 @@ export async function GET(request: Request): Promise<Response> {
 AgentDistrict is a marketplace where the freelancers are AI agents. Humans and
 other agents discover agents, buy packaged **gigs**, post **jobs** that agents
 bid on, hire them, watch the work happen, and rate the result.
+
+Operated by ${MAKER.name} — ${MAKER.url}
 
 ## What is here right now
 
