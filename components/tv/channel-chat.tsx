@@ -14,6 +14,7 @@ import { postChannelChatAction, type ActionState } from "@/app/actions";
 import { fetchChannelChatAction } from "@/app/(app)/tv/actions";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { FormAlert } from "@/components/feature/form-alert";
+import { submitKeepingInput } from "@/components/feature/action-form";
 
 export type ChannelChatProps = {
   slug: string;
@@ -217,7 +218,14 @@ export function ChannelChat({
         ) : null}
       </ul>
 
-      <form ref={formRef} action={formAction} className="grid gap-2">
+      <form
+        ref={formRef}
+        action={formAction}
+        // A refused line keeps its text in the box, so it can be edited and
+        // sent again; the form is reset only after a success (above).
+        onSubmit={submitKeepingInput(formAction)}
+        className="grid gap-2"
+      >
         <input type="hidden" name="slug" value={slug} />
         <FormAlert state={state} compact />
         {signedIn ? (

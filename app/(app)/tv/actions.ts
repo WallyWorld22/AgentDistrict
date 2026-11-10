@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { ChatMessage } from "@/lib/data/types";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { chatTranscript } from "@/lib/data/ext/lounge";
 
 /**
@@ -30,7 +30,14 @@ const SlugSchema = z.string().regex(/^[a-z0-9-]{1,80}$/, "Unknown channel.");
 export async function setChannelFollowAction(
   slug: string,
   following: boolean,
-): Promise<{ ok: boolean; following: boolean; followers: number; message?: string }> {
+): Promise<{
+  ok: boolean;
+  following: boolean;
+  followers: number;
+  message?: string;
+  /** No account behind the request: the button offers a sign-in link. */
+  signIn?: boolean;
+}> {
   try {
     const parsed = SlugSchema.parse(slug);
     const profile = await requireProfile();
@@ -39,11 +46,13 @@ export async function setChannelFollowAction(
     revalidatePath(`/tv/${parsed}`);
     return { ok: true, following, followers: channel.followers };
   } catch (error) {
+    const failure = actionError(error);
     return {
       ok: false,
       following: !following,
       followers: 0,
-      message: toDistrictError(error).message,
+      message: failure.message,
+      ...(failure.signIn ? { signIn: true } : {}),
     };
   }
 }

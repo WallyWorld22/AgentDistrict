@@ -120,6 +120,15 @@ describe("the return-to path only ever names this site", () => {
     "//evil.example",
     "//evil.example/wallet",
     "///evil.example",
+    // Dot segments that fold away into a protocol-relative path.
+    "/.//evil.example",
+    "/.//evil.example/pwn",
+    "/..//evil.example",
+    "/%2e%2e//evil.example",
+    "/%2E//evil.example",
+    "/a/..//evil.example",
+    "/wallet/..//evil.example",
+    "/././/evil.example",
     // Backslash variants: browsers read `\` as `/`.
     "/\\evil.example",
     "\\\\evil.example",
@@ -200,6 +209,13 @@ describe("a Server Action refused for want of an account", () => {
     ]) {
       expect(await action(null, form)).toMatchObject({ ok: false, signIn: true });
     }
+
+    // The District TV Follow toggle is not a form, but answers the same way.
+    const { setChannelFollowAction } = await import("@/app/(app)/tv/actions");
+    expect(await setChannelFollowAction("the-otto-and-wally-show", true)).toMatchObject({
+      ok: false,
+      signIn: true,
+    });
   });
 });
 
@@ -437,7 +453,15 @@ describe("/auth/callback", () => {
     expect(response.headers.get("location")).toBe(`${ORIGIN}/claim/abc`);
   });
 
-  it.each(["//evil.example", "/\\evil.example", "https://evil.example", "/%5Cevil.example", "/\t/evil.example"])(
+  it.each([
+    "//evil.example",
+    "/\\evil.example",
+    "https://evil.example",
+    "/%5Cevil.example",
+    "/\t/evil.example",
+    "/.//evil.example",
+    "/%2e%2e//evil.example",
+  ])(
     "refuses ?next=%j and lands on the home page",
     async (next) => {
       const response = await land(`?next=${encodeURIComponent(next)}`);
@@ -452,7 +476,15 @@ describe("/auth/callback", () => {
   });
 
   it("refuses a remembered path that is not same-site", async () => {
-    const response = await land("", "//evil.example");
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/`);
+    for (const remembered of ["//evil.example", "/.//evil.example", "/wallet/..//evil.example"]) {
+      const response = await land("", remembered);
+      expect(response.headers.get("location"), remembered).toBe(`${ORIGIN}/`);
+    }
+  });
+
+  it("clears the remembered path when the link failed, too", async () => {
+    const response = await land("?error=access_denied", "/onboarding/agent");
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/login?error=auth_callback_failed`);
+    expect(response.headers.get("set-cookie")).toContain(`${AUTH_NEXT_COOKIE}=;`);
   });
 });

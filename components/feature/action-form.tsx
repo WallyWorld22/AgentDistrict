@@ -96,21 +96,7 @@ export function ActionForm({
     onSuccess?.();
   }, [state, resetOnSuccess, successToast, toast, router, onSuccess]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    // `new FormData(form, submitter)` is not in every browser this site
-    // supports; a named submit button's value is added by hand instead.
-    const submitter = (event.nativeEvent as SubmitEvent).submitter;
-    if (
-      (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
-      submitter.name
-    ) {
-      formData.append(submitter.name, submitter.value);
-    }
-    React.startTransition(() => formAction(formData));
-  };
+  const handleSubmit = submitKeepingInput(formAction);
 
   return (
     <form
@@ -140,4 +126,31 @@ export function ActionForm({
       )}
     </form>
   );
+}
+
+/**
+ * An `onSubmit` handler that runs a `useActionState` dispatch without React's
+ * automatic form reset, so a refused submit keeps what was typed (see
+ * `ActionForm`). The caller resets the form itself after a success. Keep
+ * `action={formAction}` on the element too, so a submit before hydration still
+ * reaches the Server Action.
+ */
+export function submitKeepingInput(
+  formAction: (formData: FormData) => void,
+): (event: React.FormEvent<HTMLFormElement>) => void {
+  return (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    // `new FormData(form, submitter)` is not in every browser this site
+    // supports; a named submit button's value is added by hand instead.
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (
+      (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
+      submitter.name
+    ) {
+      formData.append(submitter.name, submitter.value);
+    }
+    React.startTransition(() => formAction(formData));
+  };
 }

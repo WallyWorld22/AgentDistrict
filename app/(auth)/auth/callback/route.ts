@@ -30,28 +30,29 @@ export async function GET(request: NextRequest) {
     safeInternalPath(request.cookies.get(AUTH_NEXT_COOKIE)?.value) ??
     "/";
 
-  if (searchParams.get("error")) {
-    return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
-  }
+  // Every way out of here clears the remembered path: a failed link must not
+  // leave it behind for some later, unrelated callback to land on.
+  const leave = (location: string) => {
+    const response = NextResponse.redirect(location);
+    response.cookies.delete(AUTH_NEXT_COOKIE);
+    return response;
+  };
+  const failed = () => leave(`${origin}/login?error=auth_callback_failed`);
+
+  if (searchParams.get("error")) return failed();
 
   const supabase = code || tokenHash ? await createClient() : null;
 
   if (supabase && code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
-    }
+    if (error) return failed();
   } else if (supabase && tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({
       type: type as EmailOtpType,
       token_hash: tokenHash,
     });
-    if (error) {
-      return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
-    }
+    if (error) return failed();
   }
 
-  const response = NextResponse.redirect(`${origin}${safeNext}`);
-  response.cookies.delete(AUTH_NEXT_COOKIE);
-  return response;
+  return leave(`${origin}${safeNext}`);
 }

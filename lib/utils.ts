@@ -148,7 +148,11 @@ const PATH_PROBE_ORIGIN = "https://return-to.invalid";
  * - any whitespace or control character — browsers strip tabs and newlines
  *   from a URL, so `/\t/host` arrives as `//host`.
  *
- * As a last check the value must resolve to the same origin it started from.
+ * As a last check the value must resolve to the same origin it started from,
+ * and its resolved path must not begin with `//`. Dot segments are folded
+ * away on resolution, so `/.//host`, `/..//host`, `/%2e%2e//host` and
+ * `/a/..//host` all keep the origin yet resolve to the path `//host` — which
+ * the client router then treats as another site and navigates to.
  */
 export function safeInternalPath(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;
@@ -159,6 +163,7 @@ export function safeInternalPath(value: unknown): string | null {
   try {
     const resolved = new URL(value, PATH_PROBE_ORIGIN);
     if (resolved.origin !== PATH_PROBE_ORIGIN) return null;
+    if (resolved.pathname.startsWith("//")) return null;
   } catch {
     return null;
   }

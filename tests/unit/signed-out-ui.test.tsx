@@ -45,6 +45,7 @@ vi.mock("next/link", () => ({
 const actions = vi.hoisted(() => ({
   postLounge: vi.fn<(state: unknown, form: FormData) => Promise<unknown>>(),
   postChannel: vi.fn<(state: unknown, form: FormData) => Promise<unknown>>(),
+  follow: vi.fn<(slug: string, following: boolean) => Promise<unknown>>(),
 }));
 vi.mock("@/app/actions", () => ({
   postLoungeMessageAction: (state: unknown, form: FormData) => actions.postLounge(state, form),
@@ -56,6 +57,7 @@ vi.mock("@/app/(app)/lounge/actions", () => ({
 }));
 vi.mock("@/app/(app)/tv/actions", () => ({
   fetchChannelChatAction: vi.fn(async () => []),
+  setChannelFollowAction: (slug: string, following: boolean) => actions.follow(slug, following),
 }));
 vi.mock("@/app/(app)/guilds/actions", () => ({
   hireGuildAction: vi.fn(async () => null),
@@ -84,6 +86,7 @@ import { ActionForm } from "@/components/feature/action-form";
 import { LoungeChatPanel as HomeLoungeChat } from "@/components/home/lounge-chat-panel";
 import { LoungeChatPanel as RoomLoungeChat } from "@/components/lounge/lounge-chat-panel";
 import { ChannelChat } from "@/components/tv/channel-chat";
+import { FollowButton } from "@/components/tv/follow-button";
 import { JoinRoomForm } from "@/components/lounge/join-room-form";
 import { HireTeamForm } from "@/components/guilds/hire-team-form";
 import { OnboardingWizard } from "@/components/agents/onboarding-wizard";
@@ -103,6 +106,7 @@ afterEach(() => {
   push.mockReset();
   actions.postLounge.mockReset();
   actions.postChannel.mockReset();
+  actions.follow.mockReset();
 });
 
 function withToasts(node: React.ReactNode) {
@@ -212,6 +216,56 @@ describe.each(Object.entries(CHATS))("%s", (_name, chat) => {
       expect(screen.getByRole("alert")).toHaveTextContent("Messages are 280 characters at most."),
     );
     expect(within(chat.list()).queryByText("too long, apparently")).toBeNull();
+    // ...but the text stays in the box, to be shortened and sent again.
+    expect(screen.getByRole("textbox")).toHaveValue("too long, apparently");
+  });
+
+  it("clears the box after a line is accepted", async () => {
+    const user = userEvent.setup();
+    chat.action.mockResolvedValue({ ok: true });
+    chat.render(true);
+    await user.type(screen.getByRole("textbox"), "hello there");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+  });
+});
+
+/* ------------------------------------------------- District TV Follow */
+
+describe("the District TV Follow button, signed out", () => {
+  it("offers a sign-in that returns to this channel, not a bare toast", async () => {
+    const user = userEvent.setup();
+    route.pathname = "/tv/the-otto-and-wally-show";
+    window.history.replaceState(null, "", "/tv/the-otto-and-wally-show");
+    actions.follow.mockResolvedValue({
+      ok: false,
+      following: false,
+      followers: 0,
+      message: "Sign in to continue",
+      signIn: true,
+    });
+    render(withToasts(<FollowButton slug="the-otto-and-wally-show" title="The Otto & Wally Show" />));
+
+    await user.click(screen.getByRole("button", { name: "Follow The Otto & Wally Show" }));
+    expect(await screen.findByText("Sign in to follow channels.")).toBeInTheDocument();
+    // The optimistic flip is undone.
+    expect(screen.getByRole("button", { name: "Follow The Otto & Wally Show" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(push).toHaveBeenCalledWith(
+      `/login?next=${encodeURIComponent("/tv/the-otto-and-wally-show")}`,
+    );
+  });
+
+  it("still shows any other failure as it is", async () => {
+    const user = userEvent.setup();
+    actions.follow.mockResolvedValue({ ok: false, following: false, followers: 0, message: "Unknown channel." });
+    render(withToasts(<FollowButton slug="nope" title="Nope" />));
+    await user.click(screen.getByRole("button", { name: "Follow Nope" }));
+    expect(await screen.findByText("Unknown channel.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
   });
 });
 

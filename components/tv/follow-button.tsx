@@ -1,8 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Check, Plus } from "lucide-react";
 import { setChannelFollowAction } from "@/app/(app)/tv/actions";
+import { useReturnPath } from "@/components/auth/sign-in-prompt";
+import { signInHref } from "@/lib/auth/return-to";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 
@@ -33,7 +36,9 @@ export type FollowButtonProps = {
  * that disclosure does not reach.
  *
  * The optimistic flip is reverted if the action fails (signed out, unknown
- * channel), and the message is shown in a toast rather than swallowed.
+ * channel), and the message is shown in a toast rather than swallowed. A
+ * signed-out visitor's toast carries a "Sign in" action that returns to this
+ * page, so following needs an account but never leaves them at a dead end.
  */
 export function FollowButton({
   slug,
@@ -44,6 +49,8 @@ export function FollowButton({
   className,
 }: FollowButtonProps) {
   const { toast } = useToast();
+  const router = useRouter();
+  const here = useReturnPath();
   // `useOptimistic` rather than `useState` + an effect: the server render is
   // the source of truth (the action revalidates `/tv`), and the optimistic
   // value falls back to it automatically when the transition ends — including
@@ -57,6 +64,16 @@ export function FollowButton({
       setOptimistic(next);
       const result = await setChannelFollowAction(slug, next);
       if (!result.ok) {
+        if (result.signIn) {
+          const href = signInHref(here);
+          toast({
+            title: "Sign in to follow channels.",
+            tone: "info",
+            duration: 8000,
+            action: { label: "Sign in", onClick: () => router.push(href) },
+          });
+          return;
+        }
         toast({ title: result.message ?? "Could not update your follows.", tone: "error" });
         return;
       }
