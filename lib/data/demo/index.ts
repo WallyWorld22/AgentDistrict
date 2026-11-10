@@ -26,6 +26,15 @@ import {
   hashClaimToken,
 } from "../hash";
 import { districtNow } from "../clock";
+import {
+  SELF_ORDER_REFUSAL,
+  TOPUP_MEMO,
+  assertBidFitsJob,
+  assertFreeOrderAllowance,
+  assertJobBudget,
+  assertTopUp,
+  liveBidRefusal,
+} from "../limits";
 import { countInto, emptySeries } from "../analytics";
 import {
   boutLoserId,
@@ -1248,8 +1257,18 @@ export class DemoRepository implements Repository {
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
     }
+    // Ordering your own gig pays yourself, burns the fee and fakes a hire.
+    if (agent.owner_id === input.buyerId) throw new ForbiddenError(SELF_ORDER_REFUSAL);
     const brief = input.brief.trim();
     if (!brief) throw new ValidationError("A brief is required");
+    if (pkg.price_cents === 0) {
+      assertFreeOrderAllowance(
+        this.db.orders
+          .filter((row) => row.buyer_id === input.buyerId && row.amount_cents === 0)
+          .map((row) => Date.parse(row.created_at)),
+        this.now(),
+      );
+    }
 
     const timestamp = this.nowIso();
     const order: Order = {
@@ -1296,7 +1315,8 @@ export class DemoRepository implements Repository {
       { approved: input.approved },
     );
     this.db.orders.unshift(order);
-    gig.runs_count += 1;
+    // `runs_count` is public ("Runs", the Trending sort), so it moves when the
+    // buyer approves the delivery — see `approveOrder` — not on the order.
 
     await this.publishEvent({
       kind: "hired",
@@ -1367,7 +1387,7 @@ export class DemoRepository implements Repository {
   }
 
   async createJob(input: CreateJobInput, posterId: UUID): Promise<Job> {
-    if (input.budget_cents <= 0) throw new ValidationError("Budget must be greater than zero");
+    assertJobBudget(input.budget_cents);
     const timestamp = this.nowIso();
     const job: Job = {
       id: this.id(),
@@ -1412,12 +1432,24 @@ export class DemoRepository implements Repository {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
     }
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
+    // A bid answers the bounty as posted: no more than its budget, no slower
+    // than its deadline (jobs-03). Every bid path lands here.
+    assertBidFitsJob(job, input.amountCents, input.etaSeconds);
     // The reverse auction only means anything if the poster is not also the
     // seller: post → bid → award → approve would otherwise mint a completed job
     // for the price of one cent. The friendlier wording lives in the form
     // action; this is the trust boundary, so every caller hits it.
     if (job.poster_id === agent.owner_id) {
       throw new ForbiddenError("You cannot bid on your own bounty");
+    }
+    // One live bid per agent per bounty: a second one is noise on the board,
+    // and a loop of them buried every other bidder (machine-surface-07).
+    if (
+      this.db.bids.some(
+        (row) => row.job_id === job.id && row.agent_id === agent.id && row.status === "pending",
+      )
+    ) {
+      throw new ConflictError(liveBidRefusal(agent.name));
     }
 
     const guild = input.guildSlug
@@ -1662,6 +1694,11 @@ export class DemoRepository implements Repository {
     // Reputation.
     agent.jobs_completed += 1;
     agent.updated_at = timestamp;
+    const gig = order.gig_id ? this.db.gigs.find((row) => row.id === order.gig_id) : undefined;
+    if (gig) {
+      gig.runs_count += 1;
+      gig.updated_at = timestamp;
+    }
     if (agent.store_id) {
       const store = this.db.stores.find((row) => row.id === agent.store_id);
       if (store) {
@@ -2200,8 +2237,17 @@ export class DemoRepository implements Repository {
   }
 
   async topUp(profileId: UUID, amountCents: number): Promise<Wallet> {
-    if (amountCents <= 0) throw new ValidationError("Top-up must be greater than zero");
     const wallet = this.requireWallet(profileId);
+    // The 0014 caps, as `top_up_wallet()` enforces them: per top-up and per
+    // UTC day.
+    const today = this.today();
+    const toppedUpToday = this.db.walletTransactions
+      .filter(
+        (tx) =>
+          tx.profile_id === profileId && tx.kind === "topup" && tx.created_at.slice(0, 10) === today,
+      )
+      .reduce((sum, tx) => sum + tx.amount_cents, 0);
+    assertTopUp(amountCents, toppedUpToday);
     wallet.balance_cents += amountCents;
     wallet.updated_at = this.nowIso();
     this.db.walletTransactions.unshift({
@@ -2210,7 +2256,7 @@ export class DemoRepository implements Repository {
       kind: "topup",
       amount_cents: amountCents,
       order_id: null,
-      memo: "Added credits — demo top-up",
+      memo: TOPUP_MEMO,
       created_at: this.nowIso(),
     });
     return wallet;

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus } from "lucide-react";
 import { formatCents } from "@/lib/utils";
 import { TOPUP_PRESETS } from "@/lib/data/ext/economy";
+import { TOPUP_DAILY_MAX_CENTS, TOPUP_MAX_CENTS } from "@/lib/data/limits";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -96,7 +97,9 @@ export function AddCreditsButton({
 
           <p className="m-0 text-[11px] leading-relaxed text-muted">
             Demo only — no real money movement. Credits are a number on your wallet row
-            that the same hold-and-release path uses as production would.
+            that the same hold-and-release path uses as production would. Up to{" "}
+            {formatCents(TOPUP_MAX_CENTS, { compact: true })} per top-up and{" "}
+            {formatCents(TOPUP_DAILY_MAX_CENTS, { compact: true })} a day.
           </p>
         </ActionForm>
       </Sheet>

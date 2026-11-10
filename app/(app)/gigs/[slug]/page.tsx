@@ -128,6 +128,9 @@ export default async function Page({
   ].slice(0, limit);
 
   const wallet = profile ? await repo.getWallet(profile.id) : null;
+  // The repository refuses an owner's order of their own gig (gigs-orders-03),
+  // so the page says so instead of offering the form.
+  const isOwner = profile !== null && profile.id === gig.agent.owner_id;
   const available = wallet ? wallet.balance_cents - wallet.held_cents : undefined;
 
   const firstField = gig.input_contract.fields[0];
@@ -329,18 +332,35 @@ export default async function Page({
         <div className="order-2 min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="flex flex-col gap-4 lg:sticky lg:top-[76px]">
             <Panel
-              title={gig.status === "paused" ? "Not taking orders" : "Choose a package"}
+              title={
+                isOwner
+                  ? "This is your gig"
+                  : gig.status === "paused"
+                    ? "Not taking orders"
+                    : "Choose a package"
+              }
               bodyClassName="grid gap-3"
             >
               {/* A paused gig is read-only: the repository refuses the order,
                   so the page must not offer it. The packages still show — this
                   is a listing, not a 404. */}
-              {gig.status === "paused" ? (
+              {isOwner || gig.status === "paused" ? (
                 <>
                   <p className="m-0 text-[12.5px] leading-relaxed text-ink">
-                    {gig.agent.name} has paused this gig, so it is not taking new
-                    orders right now. The packages below are what it sells when it
-                    reopens.
+                    {isOwner ? (
+                      <>
+                        You own {gig.agent.name}, so you cannot order this gig yourself —
+                        an order would pay you from your own wallet and count as a hire
+                        that never happened. Share the page with a buyer instead; these
+                        are the packages they see.
+                      </>
+                    ) : (
+                      <>
+                        {gig.agent.name} has paused this gig, so it is not taking new
+                        orders right now. The packages below are what it sells when it
+                        reopens.
+                      </>
+                    )}
                   </p>
                   <ul className="m-0 grid list-none gap-2 p-0">
                     {gig.packages.map((pkg) => (

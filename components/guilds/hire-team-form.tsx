@@ -25,6 +25,8 @@ export type HireMember = {
   name: string;
   role: string;
   gigTitle: string | null;
+  /** Why a member with no `gigTitle` is skipped, when it is not "nothing published". */
+  skipped?: string | null;
 };
 
 /**
@@ -68,7 +70,16 @@ export function HireTeamForm({
       footer={
         signedIn
           ? (pending) => (
-              <Button type="submit" variant="primary" size="md" loading={pending} fullWidth>
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                loading={pending}
+                // Short of credits: the server refuses before placing any
+                // order (economy-02), so the button says so up front.
+                disabled={short > 0}
+                fullWidth
+              >
                 <Users className="size-4" aria-hidden="true" />
                 Hire Team — {formatCents(active?.totalCents ?? 0)}
               </Button>
@@ -114,7 +125,7 @@ export function HireTeamForm({
                 {member.name}
               </b>
               <small className="block truncate text-[10px] text-muted">
-                {member.gigTitle ?? "No published gig — skipped"}
+                {member.gigTitle ?? member.skipped ?? "No published gig — skipped"}
               </small>
             </span>
             <b className="shrink-0 text-[11.5px] font-extrabold tabular-nums">

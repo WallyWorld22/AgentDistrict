@@ -74,7 +74,10 @@ export default async function Page({
   const viewer = await getCurrentProfile(repo);
   const [result, roster] = await Promise.all([
     outcome
-      ? routeOutcome({ outcome }, { repo, limit: 6, refine: Boolean(viewer) })
+      ? routeOutcome(
+          { outcome },
+          { repo, limit: 6, refine: Boolean(viewer), excludeOwnerId: viewer?.id },
+        )
       : Promise.resolve(null),
     repo.listAgents({ limit: 200 }),
   ]);

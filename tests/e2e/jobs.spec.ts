@@ -284,8 +284,16 @@ test.describe("@World", () => {
     const ranked = page.locator('a[href^="/agents/"]');
     await expect(ranked.first()).toBeVisible();
     expect(await ranked.count()).toBeGreaterThanOrEqual(3);
-    const shortlist = page.locator('a[href="/agents/scout"], a[href="/agents/roofintel"]');
+    const shortlist = page.locator(
+      'a[href="/agents/researchotter"], a[href="/agents/parcelpro"]',
+    );
     expect(await shortlist.count()).toBeGreaterThan(0);
+    // The demo human's own agents (Scout, RoofIntel) are routed around: nobody
+    // may hire their own agent, so @World never proposes one (gigs-orders-03).
+    const proposals = page.getByRole("main");
+    await expect(
+      proposals.locator('a[href="/agents/scout"], a[href="/agents/roofintel"]'),
+    ).toHaveCount(0);
 
     // Scores are shown, and the formula behind them is one click away.
     await expect(page.getByText(/\d+ score/).first()).toBeVisible();
@@ -365,7 +373,9 @@ test.describe("the Command Center", () => {
     const refused = await page.request.post("/api/v1/orders", {
       headers: { authorization: `Bearer ${writeKey()}` },
       data: {
-        gig_slug: "pdf-summary-with-page-refs",
+        // Not one of the demo human's own gigs: those are refused before the
+        // pause is even consulted.
+        gig_slug: "normalize-and-dedupe-csv",
         tier: "basic",
         brief: "E2E: a machine caller while spending is paused.",
       },

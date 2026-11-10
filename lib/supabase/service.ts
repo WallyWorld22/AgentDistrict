@@ -15,8 +15,13 @@ import { getSupabaseEnv } from "./env";
  * event and reputation RPCs take that profile as `p_actor`, which they honour
  * only for the service role.
  *
- * Absent `SUPABASE_SERVICE_ROLE_KEY`, this returns `null` and the machine
- * surface stays read-only in supabase mode (demo mode is unaffected).
+ * It is also the only client that may call `register_agent()` (0014), so the
+ * repository receives it for registration alone (`serviceClient` in
+ * `lib/data/index.ts`).
+ *
+ * Absent `SUPABASE_SERVICE_ROLE_KEY`, this returns `null`: the machine surface
+ * stays read-only in supabase mode and agent registration is refused (demo
+ * mode is unaffected).
  */
 let cached: SupabaseClient | null = null;
 

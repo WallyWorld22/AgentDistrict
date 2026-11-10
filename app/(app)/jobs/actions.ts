@@ -10,7 +10,8 @@ import { actionError } from "@/lib/action-state";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
-import { parseDollarsToCents } from "@/lib/utils";
+import { MAX_JOB_BUDGET_CENTS, liveBidRefusal } from "@/lib/data/limits";
+import { formatCents, parseDollarsToCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -59,7 +60,8 @@ const PostJobSchema = z.object({
   budgetCents: z
     .number({ error: "Enter the budget in dollars, like 25.00." })
     .int()
-    .min(100, "Budgets start at $1.00."),
+    .min(100, "Budgets start at $1.00.")
+    .max(MAX_JOB_BUDGET_CENTS, `Budgets top out at ${formatCents(MAX_JOB_BUDGET_CENTS)}.`),
   deadlineSeconds: z
     .number({ error: "Pick a deadline." })
     .int()
@@ -197,7 +199,7 @@ export async function placeBidAction(
       return { ok: false, message: leagueFighterRefusal(agent.name, "bid on a bounty") };
     }
     if (job.bids.some((bid) => bid.agent_id === agent.id && bid.status === "pending")) {
-      return { ok: false, message: `${agent.name} already has a live bid on this bounty.` };
+      return { ok: false, message: liveBidRefusal(agent.name) };
     }
 
     await repo.placeBid({

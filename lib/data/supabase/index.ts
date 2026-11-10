@@ -42,6 +42,16 @@ const TRENDING_POOL = 240;
 import { sha1Hex } from "@/lib/seed/uuid";
 import { isUuid } from "../ids";
 import {
+  FREE_ORDERS_PER_HOUR,
+  SELF_ORDER_REFUSAL,
+  assertBidFitsJob,
+  assertFreeOrderAllowance,
+  assertJobBudget,
+  liveBidRefusal,
+  topUpDailyMessage,
+  topUpPerTopUpMessage,
+} from "../limits";
+import {
   LEAGUE_FIGHTER_COLUMNS,
   asRow,
   asRows,
@@ -196,18 +206,27 @@ export type SupabaseRepositoryOptions = {
    * `p_actor`, which they honour only for the service role.
    */
   actAs?: UUID;
+  /**
+   * The service-role client, for the one write that must not run as the
+   * caller: `register_agent()` (0014 revokes it from `anon` and
+   * `authenticated`, so the app's rate-limited entrances are the only way in).
+   * Absent, registration is refused rather than attempted as anon.
+   */
+  serviceClient?: () => Promise<SupabaseClient | null>;
 };
 
 export class SupabaseRepository implements Repository {
   readonly mode: RepositoryMode = "supabase";
 
   private readonly actAs: UUID | null;
+  private readonly serviceClientFactory: (() => Promise<SupabaseClient | null>) | null;
 
   constructor(
     private readonly clientFactory: () => Promise<SupabaseClient | null>,
     options: SupabaseRepositoryOptions = {},
   ) {
     this.actAs = options.actAs ?? null;
+    this.serviceClientFactory = options.serviceClient ?? null;
   }
 
   /** The id the SECURITY DEFINER functions should treat as the caller. */
@@ -894,18 +913,26 @@ export class SupabaseRepository implements Repository {
    * is also the only way the five rows land in a single transaction — a half
    * registration would leave a Passport nobody holds the key to.
    *
-   * Both entrances (`POST /api/v1/agents/register` and the MCP tool) reach this
-   * through `getRepo()`, i.e. the cookie-bound **anon-key** client, never the
-   * service role — which is why `anon` keeps EXECUTE on the function and why
-   * the function body, not this caller, is the trust boundary.
+   * Since 0014 the function is **server-only**: EXECUTE belongs to the
+   * service role alone, so a direct PostgREST call with the public anon key —
+   * which skipped the per-IP budget both entrances spend
+   * (`POST /api/v1/agents/register` and the MCP tool, `RATE_BUDGETS.register`)
+   * — is refused. The call therefore goes through the service-role client,
+   * and without one registration is unavailable rather than attempted as
+   * anon.
    */
   async registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent> {
     const handle = slugify(input.handle);
     if (!handle) throw new ValidationError("A handle is required");
 
+    const client = this.serviceClientFactory ? await this.serviceClientFactory() : null;
+    if (!client) {
+      throw new UpstreamError(
+        "Agent registration is unavailable: the server has no service-role key configured",
+      );
+    }
     const rawApiKey = generateApiKey();
     const claimToken = generateClaimToken();
-    const client = await this.client();
 
     const { data, error } = await client.rpc("register_agent", {
       p_handle: handle,
@@ -928,8 +955,7 @@ export class SupabaseRepository implements Repository {
       p_token_hash: await hashClaimToken(claimToken),
       // No `p_registry_handle`: the holding profile is not the caller's to
       // pick. Since 0011 the function pins it to `district-registry` and
-      // refuses any other value, because the function is callable straight
-      // through PostgREST with the public anon key, not only from here.
+      // refuses any other value.
     });
     if (error) {
       const message = error.message ?? "";
@@ -1257,10 +1283,26 @@ export class SupabaseRepository implements Repository {
     if (isLeagueFighter(gig.agent)) {
       throw new ForbiddenError(leagueFighterRefusal(gig.agent.name, "be hired"));
     }
+    // See the demo adapter (gigs-orders-03).
+    if (gig.agent.owner_id === input.buyerId) throw new ForbiddenError(SELF_ORDER_REFUSAL);
     const brief = input.brief.trim();
     if (!brief) throw new ValidationError("A brief is required");
 
     const client = await this.client();
+    if (pkg.price_cents === 0) {
+      // The newest few free orders are all the allowance needs to see.
+      const recent = await this.many(
+        client
+          .from("orders")
+          .select("created_at")
+          .eq("buyer_id", input.buyerId)
+          .eq("amount_cents", 0)
+          .order("created_at", { ascending: false })
+          .limit(FREE_ORDERS_PER_HOUR),
+        (row) => Date.parse(String(row.created_at ?? "")),
+      );
+      assertFreeOrderAllowance(recent, Date.now());
+    }
     const timestamp = this.nowIso();
     const order = await this.one(
       client
@@ -1313,9 +1355,7 @@ export class SupabaseRepository implements Repository {
       await client.from("orders").delete().eq("id", order.id);
       throw error;
     }
-    // 0008: the bump is bound to the order that earned it, so it can neither
-    // be aimed at a stranger's gig nor replayed.
-    await client.rpc("increment_gig_runs", { p_gig_id: gig.id, p_order_id: order.id });
+    // `runs_count` moves on approval, not here (see `approveOrder`).
 
     await this.publishEventBestEffort({
       kind: "hired",
@@ -1429,7 +1469,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async createJob(input: CreateJobInput, posterId: UUID): Promise<Job> {
-    if (input.budget_cents <= 0) throw new ValidationError("Budget must be greater than zero");
+    assertJobBudget(input.budget_cents);
     const client = await this.client();
     const job = await this.one(
       client
@@ -1515,6 +1555,8 @@ export class SupabaseRepository implements Repository {
     if (!job) throw new NotFoundError("Job");
     if (job.status !== "open") throw new ConflictError("This job is no longer open for bids");
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
+    // See the demo adapter (jobs-03).
+    assertBidFitsJob(job, input.amountCents, input.etaSeconds);
     const agent = await this.requireAgentByHandle(input.agentHandle);
     // See the demo adapter; 0012's `bids_no_league_fighters` refuses it in the
     // database too.
@@ -1526,6 +1568,19 @@ export class SupabaseRepository implements Repository {
     if (job.poster_id === agent.owner_id) {
       throw new ForbiddenError("You cannot bid on your own bounty");
     }
+    // See the demo adapter: one live bid per agent per bounty
+    // (machine-surface-07).
+    const live = await this.many(
+      client
+        .from("bids")
+        .select("id")
+        .eq("job_id", job.id)
+        .eq("agent_id", agent.id)
+        .eq("status", "pending")
+        .limit(1),
+      (row) => String(row.id ?? ""),
+    );
+    if (live.length > 0) throw new ConflictError(liveBidRefusal(agent.name));
 
     const guildId = input.guildSlug
       ? await this.one(
@@ -1833,6 +1888,11 @@ export class SupabaseRepository implements Repository {
     });
 
     await client.rpc("increment_agent_jobs", { p_agent_id: agent.id, p_order_id: order.id });
+    // 0008/0014: bound to the order that earned it, and only once it is
+    // approved — a public "Runs" count is a count of delivered, paid runs.
+    if (order.gig_id) {
+      await client.rpc("increment_gig_runs", { p_gig_id: order.gig_id, p_order_id: order.id });
+    }
     if (agent.store_id) {
       const store = await this.one(
         client.from("stores").select("hires_count").eq("id", agent.store_id).maybeSingle(),
@@ -2638,14 +2698,22 @@ export class SupabaseRepository implements Repository {
   async topUp(profileId: UUID, amountCents: number): Promise<Wallet> {
     if (amountCents <= 0) throw new ValidationError("Top-up must be greater than zero");
     const client = await this.client();
+    // The caps and the ledger memo live in `top_up_wallet()` (0014): the
+    // function is callable with the anon key and a session, so it is the trust
+    // boundary. `p_memo` is ignored there; it stays in the signature only.
     const { data, error } = await client.rpc("top_up_wallet", {
       p_amount: amountCents,
-      p_memo: "Added credits",
       p_actor: this.actor(),
     });
     if (error) {
-      if (/wallet not found/i.test(error.message ?? "")) throw new NotFoundError("Wallet");
-      throw new UpstreamError(error.message);
+      const message = error.message ?? "";
+      if (/wallet not found/i.test(message)) throw new NotFoundError("Wallet");
+      if (/top-up cap: per top-up/i.test(message)) {
+        throw new ValidationError(topUpPerTopUpMessage());
+      }
+      const daily = /top-up cap: daily, (\d+) left/i.exec(message);
+      if (daily) throw new ValidationError(topUpDailyMessage(Number(daily[1])));
+      throw new UpstreamError(message);
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (row) return toWallet(asRow(row));

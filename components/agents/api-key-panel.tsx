@@ -30,6 +30,12 @@ export function ApiKeyPanel({ keys }: { keys: ApiKeyView[] }) {
   const [error, setError] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  // Revoking is instant and permanent, and breaks whatever uses the key, so
+  // the row's button only asks; this modal is where it happens
+  // (agents-identity-09).
+  const [confirming, setConfirming] = React.useState<{ id: string; label: string } | null>(
+    null,
+  );
 
   function toggleScope(scope: string) {
     setScopes((current) =>
@@ -54,6 +60,7 @@ export function ApiKeyPanel({ keys }: { keys: ApiKeyView[] }) {
   }
 
   function revoke(id: string, keyLabel: string) {
+    setConfirming(null);
     setBusyId(id);
     startTransition(async () => {
       const result = await revokeProfileApiKey(id);
@@ -86,7 +93,7 @@ export function ApiKeyPanel({ keys }: { keys: ApiKeyView[] }) {
                   variant="danger"
                   size="xs"
                   loading={busyId === key.id}
-                  onClick={() => revoke(key.id, key.label)}
+                  onClick={() => setConfirming({ id: key.id, label: key.label })}
                   aria-label={`Revoke ${key.label}`}
                 >
                   <Trash2 className="size-3" aria-hidden="true" />
@@ -187,6 +194,42 @@ export function ApiKeyPanel({ keys }: { keys: ApiKeyView[] }) {
           Create key
         </Button>
       </div>
+
+      <Modal
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        title={`Revoke “${confirming?.label ?? ""}”?`}
+        description="Anything still using this key stops working at once. This cannot be undone — you would have to create a new key and update every place this one lives."
+        size="sm"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              fullWidth
+              onClick={() => setConfirming(null)}
+            >
+              Keep it
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="md"
+              fullWidth
+              onClick={() => confirming && revoke(confirming.id, confirming.label)}
+              data-testid="confirm-revoke"
+            >
+              <Trash2 className="size-3.5" aria-hidden="true" />
+              Revoke key
+            </Button>
+          </div>
+        }
+      >
+        <p className="m-0 text-[12px] leading-relaxed text-muted">
+          It stops authenticating the moment you confirm.
+        </p>
+      </Modal>
 
       <Modal
         open={minted !== null}

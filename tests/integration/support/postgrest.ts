@@ -145,9 +145,11 @@ function translate(url: URL): { sql: string; params: unknown[] } {
 }
 
 type Scalar = string | number | boolean | null;
+/** An RPC argument as `pg` sends it: a scalar, an array (a Postgres array) or JSON text. */
+type RpcParam = Scalar | Scalar[];
 
 /** `POST /rest/v1/rpc/<fn>` with a JSON object body → one named-argument call. */
-function translateRpc(url: URL, body: unknown): { name: string; sql: string; params: Scalar[] } {
+function translateRpc(url: URL, body: unknown): { name: string; sql: string; params: RpcParam[] } {
   const path = /^\/rest\/v1\/rpc\/([^/]+)$/.exec(url.pathname);
   if (!path) throw new Unsupported(`path ${url.pathname}`);
   const name = path[1];
@@ -155,12 +157,18 @@ function translateRpc(url: URL, body: unknown): { name: string; sql: string; par
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
     throw new Unsupported("rpc body that is not a JSON object");
   }
-  const params: Scalar[] = [];
+  const params: RpcParam[] = [];
+  const isScalar = (value: unknown): value is Scalar =>
+    value === null || ["string", "number", "boolean"].includes(typeof value);
   const args = Object.entries(body as Record<string, unknown>).map(([key, value]) => {
-    if (value !== null && !["string", "number", "boolean"].includes(typeof value)) {
-      throw new Unsupported(`rpc argument ${key} that is not a scalar`);
-    }
-    params.push(value as Scalar);
+    // PostgREST hands a JSON array to a Postgres array parameter and a JSON
+    // object to a json/jsonb one. `pg` sends a JS array as an array literal
+    // and the object goes as its JSON text; both resolve against the
+    // function's declared parameter types.
+    if (Array.isArray(value) && value.every(isScalar)) params.push(value);
+    else if (isScalar(value)) params.push(value);
+    else if (typeof value === "object" && !Array.isArray(value)) params.push(JSON.stringify(value));
+    else throw new Unsupported(`rpc argument ${key} of this shape`);
     return `${identifier(key)} => $${params.length}`;
   });
   return {
@@ -239,7 +247,7 @@ async function callRpc(
   url: URL,
   rawBody: string,
 ): Promise<Response> {
-  let statement: { name: string; sql: string; params: Scalar[] };
+  let statement: { name: string; sql: string; params: RpcParam[] };
   try {
     statement = translateRpc(url, rawBody === "" ? {} : JSON.parse(rawBody));
   } catch (error) {

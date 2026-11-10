@@ -101,7 +101,10 @@ test.describe("guild hire", () => {
       balanceBefore + quoteCents,
     );
     expect(await creditsPill(page)).toBe(pillBefore + quoteCents);
-    await expect(page.getByRole("cell", { name: /Added credits/ }).first()).toBeVisible();
+    // The ledger line is fixed and says what it is (economy-01).
+    await expect(
+      page.getByRole("cell", { name: "Demo credits added — not real money" }).first(),
+    ).toBeVisible();
   });
 
   test("hiring a guild starts one run per member and holds exactly the quote", async ({

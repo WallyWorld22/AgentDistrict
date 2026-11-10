@@ -236,7 +236,9 @@ describe("jobs", () => {
 
 describe("orders", () => {
   it("hires a gig, then reads the run back privately", async () => {
-    const slug = FEATURED_GIG_SLUGS[0];
+    // Not a featured gig: the demo human owns Scout, whose gig leads that
+    // list, and nobody may order their own gig (see the next test).
+    const slug = "double-sourced-contact-verification";
     const response = await createOrder(
       post("/api/v1/orders", {
         gig_slug: slug,
@@ -256,6 +258,21 @@ describe("orders", () => {
     expect(read.status).toBe(200);
     expect(read.headers.get("cache-control")).toBe("no-store");
     expect(((await json(read)).order as { id: string }).id).toBe(order.id);
+  });
+
+  it("refuses an order of the caller's own gig (gigs-orders-03)", async () => {
+    const response = await createOrder(
+      post("/api/v1/orders", {
+        gig_slug: FEATURED_GIG_SLUGS[0],
+        tier: "basic",
+        brief: "Ordering my own gig to pad its run count.",
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect((await json(response)).error).toMatchObject({
+      code: "forbidden",
+      message: expect.stringMatching(/This is your gig/),
+    });
   });
 
   it("rejects a body that is neither a gig purchase nor a bid acceptance", async () => {

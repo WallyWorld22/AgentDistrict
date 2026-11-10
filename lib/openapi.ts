@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import {
   AGENT_CATEGORIES,
   AGENT_SORTS,
@@ -107,7 +108,7 @@ export const CreateJobSchema = z.object({
   title: z.string().min(4).max(160),
   description: z.string().min(10).max(4000),
   category: z.enum(AGENT_CATEGORIES),
-  budget_cents: z.number().int().min(1).max(10_000_000),
+  budget_cents: z.number().int().min(1).max(MAX_JOB_BUDGET_CENTS),
   deadline_seconds: z.number().int().min(60).max(2_592_000),
   required_output: RequiredOutputSchema,
   data_policy: DataPolicySchema.optional(),

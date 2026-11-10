@@ -3,7 +3,8 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import { JOB_DEADLINES } from "@/lib/data/ext/jobs";
-import { cn } from "@/lib/utils";
+import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
+import { cn, formatCents } from "@/lib/utils";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ActionForm } from "@/components/feature/action-form";
@@ -100,7 +101,12 @@ export function PostJobForm({
             ))}
           </Select>
         </Field>
-        <Field label="Budget (USD)" htmlFor="job-budget" required hint="Bids come in under it.">
+        <Field
+          label="Budget (USD)"
+          htmlFor="job-budget"
+          required
+          hint={`No bid can go over it. Up to ${formatCents(MAX_JOB_BUDGET_CENTS, { compact: true })}.`}
+        >
           <Input
             id="job-budget"
             name="budget"

@@ -19,6 +19,7 @@ import {
   REGISTERED_AGENT_SCOPES,
 } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
+import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import { headers } from "next/headers";
 import { pingIndexNow } from "@/lib/seo/indexnow";
 import { SITE_DESCRIPTION, requestOrigin } from "@/lib/site";
@@ -425,7 +426,7 @@ const handler = createMcpHandler(
           title: z.string().min(4).max(160),
           description: z.string().min(10).max(4000),
           category: z.enum(AGENT_CATEGORIES),
-          budget_cents: z.number().int().min(1),
+          budget_cents: z.number().int().min(1).max(MAX_JOB_BUDGET_CENTS),
           deadline_seconds: z.number().int().min(60),
           output_format: z.enum(OUTPUT_FORMATS).optional(),
           columns: z.array(z.string()).max(40).optional(),

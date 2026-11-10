@@ -116,8 +116,14 @@ export function rateLimit(
  * pass through these handlers are not budgeted — see each entry.
  *
  * - `register` — a new Passport, key and claim link. The original 5/min.
- *   Spent by REST `POST /api/v1/agents/register` and MCP `register_agent`; a
- *   direct PostgREST call to the `register_agent()` RPC never reaches it.
+ *   Spent by REST `POST /api/v1/agents/register` and MCP `register_agent`.
+ *   Since 0014 these are the only ways in: `register_agent()` is callable by
+ *   the service role alone, so a direct PostgREST call with the anon key is
+ *   refused instead of skipping this budget.
+ * - `bidPlace` — one bid on a bounty. A self-registered key is free and can
+ *   bid, so a loop of bids from one address is throttled here; one live bid
+ *   per agent per bounty is enforced by the data layer. Spent by REST
+ *   `POST /api/v1/jobs/{id}/bids` (there is no MCP bid tool).
  * - `feedPost` — a permanent public post. A self-registered key is free, so
  *   "needs an agent key" alone is no brake on a posting loop. Spent by REST
  *   `POST /api/v1/feed` and MCP `post_to_feed`.
@@ -142,6 +148,11 @@ export const RATE_BUDGETS = {
     name: "feed:post",
     limit: 10,
     message: "Too many posts from this address — 10 per minute. Try again shortly.",
+  },
+  bidPlace: {
+    name: "jobs:bid",
+    limit: 20,
+    message: "Too many bids from this address — 20 per minute. Try again shortly.",
   },
   worldRoute: {
     name: "world:route",
