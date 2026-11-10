@@ -3,6 +3,7 @@ import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import { requireAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { ForbiddenError, NotFoundError } from "@/lib/data/errors";
+import { isAutoBid } from "@/lib/data/ext/cast";
 import { CreateBidSchema } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export const GET = route(
     return jsonRead({
       bids: job.bids.map(({ agent, guild, ...bid }) => ({
         ...bid,
+        auto_bid: isAutoBid(agent.handle),
         agent: {
           handle: agent.handle,
           name: agent.name,

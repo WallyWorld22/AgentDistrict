@@ -15,7 +15,7 @@ import { seedId } from "../../lib/seed";
  *    runs afterwards. Nothing else in this file spends.
  * 2. **The inbox reply uses a thread that is already read.** `sendMessage`
  *    zeroes `unread_count` for the sender's thread, and `smoke.spec.ts` pins
- *    "Notifications — 3 unread"; replying on an unread thread would drop it.
+ *    "Inbox — 3 unread"; replying on an unread thread would drop it.
  *
  * `next start` hydrates lazily (the shell prefetches every sidebar route), so
  * `hydrated()` waits for React to attach before any click.
@@ -168,24 +168,26 @@ test.describe("district market", () => {
     await expect(page.getByRole("link", { name: /Florida Parcel Toolkit/ })).toBeVisible();
   });
 
-  test("an item can be added to the toolkit and stays added", async ({ page }) => {
+  test("an item can be bookmarked and stays bookmarked", async ({ page }) => {
     await page.goto("/market/florida-parcel-toolkit");
     await hydrated(page, "button");
 
     await expect(page.getByRole("heading", { name: "What's included" })).toBeVisible();
-    const add = page.getByRole("button", { name: "Add to my toolkit" });
+    const add = page.getByRole("button", { name: "Bookmark", exact: true });
     await add.click();
 
-    const added = page.getByRole("button", { name: "In your toolkit" });
+    const added = page.getByRole("button", { name: "Bookmarked" });
     await expect(added).toBeVisible();
-    await expect(page.getByText(/added to your toolkit/i).first()).toBeVisible();
+    // There is no toolkit page, so nothing says "toolkit" any more.
+    await expect(page.getByText(/bookmarked/i).first()).toBeVisible();
+    await expect(page.getByText(/your toolkit/i)).toHaveCount(0);
 
     await page.reload();
-    await expect(page.getByRole("button", { name: "In your toolkit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Bookmarked" })).toBeVisible();
 
     // Leave the browser profile as we found it.
-    await page.getByRole("button", { name: "In your toolkit" }).click();
-    await expect(page.getByRole("button", { name: "Add to my toolkit" })).toBeVisible();
+    await page.getByRole("button", { name: "Bookmarked" }).click();
+    await expect(page.getByRole("button", { name: "Bookmark", exact: true })).toBeVisible();
   });
 });
 
@@ -229,21 +231,25 @@ test.describe("workplace gateway", () => {
     await page.goto("/workplace");
     await hydrated(page, '[role="switch"]');
 
-    const toggle = page.getByRole("switch", { name: "Unverified agents" });
+    const toggle = page.getByRole("switch", { name: "Open to brand-new Passports" });
     await expect(toggle).toHaveAttribute("aria-checked", "false");
+    // Nothing reads these switches, so none may read as a rule: each is a
+    // stated preference and says it is not enforced.
+    await expect(page.getByText("Not enforced yet.")).toHaveCount(3);
+    await expect(page.getByText(/cannot bid on your jobs|are blocked from every brief/)).toHaveCount(0);
 
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
 
     await page.reload();
     await expect(
-      page.getByRole("switch", { name: "Unverified agents" }),
+      page.getByRole("switch", { name: "Open to brand-new Passports" }),
     ).toHaveAttribute("aria-checked", "true");
 
     // Restore the default so a later run starts from the seeded posture.
-    await page.getByRole("switch", { name: "Unverified agents" }).click();
+    await page.getByRole("switch", { name: "Open to brand-new Passports" }).click();
     await expect(
-      page.getByRole("switch", { name: "Unverified agents" }),
+      page.getByRole("switch", { name: "Open to brand-new Passports" }),
     ).toHaveAttribute("aria-checked", "false");
   });
 
@@ -313,10 +319,14 @@ test.describe("creator stores", () => {
   test("a storefront lists its agents, gigs and follow state", async ({ page }) => {
     await page.goto("/stores");
     await expect(page.getByRole("heading", { level: 1, name: "Creator Stores" })).toBeVisible();
+    // Stores are curated; registering an agent does not open one.
+    await expect(page.getByText(/Curated by the District for now/)).toBeVisible();
 
     await page.getByRole("link", { name: /WallyWorks Labs/ }).first().click();
     await expect(page).toHaveURL(/\/stores\/wallyworks-labs/);
     await expect(page.getByRole("heading", { level: 1, name: "WallyWorks Labs" })).toBeVisible();
+    // The store's numbers came with the founding cast, and the header says so.
+    await expect(page.getByTestId("store-founding-cast")).toContainText("track record simulated");
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Gigs" })).toBeVisible();
     expect(await page.locator('a[href^="/agents/"]').count()).toBeGreaterThan(0);
@@ -325,6 +335,10 @@ test.describe("creator stores", () => {
     const follow = page.getByRole("button", { name: "Follow" });
     await follow.click();
     await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
+    // Following only saves a flag in this browser; the toast says exactly that
+    // rather than promising the store's work will "surface first".
+    await expect(page.getByText("Saved in this browser only. Nothing else reads it yet.").first()).toBeVisible();
+    await expect(page.getByText(/surface first/)).toHaveCount(0);
     await page.getByRole("button", { name: "Following" }).click();
     await expect(page.getByRole("button", { name: "Follow" })).toBeVisible();
   });

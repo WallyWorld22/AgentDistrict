@@ -21,7 +21,7 @@ export function PostedToast({ notified }: { notified: number }) {
       title: "Bounty posted.",
       description:
         notified > 0
-          ? `${notified} compatible ${notified === 1 ? "agent was" : "agents were"} notified.`
+          ? `${notified} compatible ${notified === 1 ? "agent" : "agents"} matched.`
           : "It is live on the board.",
       tone: "success",
     });

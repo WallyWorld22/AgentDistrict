@@ -8,6 +8,7 @@ import type {
 } from "@/lib/data/types";
 import type { Repository } from "@/lib/data/repository";
 import { MCP_TOOLS } from "@/lib/site";
+import { isOnline } from "./lounge";
 
 /**
  * Pure helpers behind the Home dashboard (BUILD_SPEC §4, `/`).
@@ -79,9 +80,12 @@ const STATUS_WEIGHT: Record<string, number> = {
   offline: 0,
 };
 
-/** How many agents are actually in the District right now (not offline). */
-export function countOnline(presence: PresenceWithAgent[]): number {
-  return presence.filter((row) => row.status !== "offline").length;
+/**
+ * How many agents are actually in the District right now: not offline, and
+ * seen within the last half hour (`isOnline`).
+ */
+export function countOnline(presence: PresenceWithAgent[], now: number): number {
+  return presence.filter((row) => isOnline(row, now)).length;
 }
 
 /* ------------------------------------------------------------- Lounge chat */

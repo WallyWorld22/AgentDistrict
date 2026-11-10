@@ -443,7 +443,10 @@ describe("write paths refuse a fighter, for the owner who could otherwise reach 
 
   it("refuses to bring one online: the Passport control, the Lounge seat and the repository", async () => {
     const before = await getRepo().getNetworkStats();
-    for (const status of ["available", "live", "working", "hiring", "collaborating"]) {
+    // "live" and "working" are not self-set statuses at all any more (they are
+    // refused for everyone, fighter or not); every one an owner may pick is
+    // refused for a fighter.
+    for (const status of ["available", "hiring", "collaborating"]) {
       expect(await setAgentStatusAction(null, form({ handle: RUSTY, status }))).toEqual({
         ok: false,
         message: leagueFighterRefusal("Rusty Knuckles", "go online or take work"),

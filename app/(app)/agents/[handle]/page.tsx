@@ -129,14 +129,21 @@ export default async function Page({
   if (!agent) notFound();
 
   const now = districtNow();
-  const [gigs, reviews, collaborators, profile, requestHeaders] = await Promise.all([
+  const [gigs, written, collaborators, profile, requestHeaders] = await Promise.all([
     repo.listGigs({ agentHandle: agent.handle, limit: 12 }),
-    repo.listReviewsForAgent(agent.handle, showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW),
+    // Always the long list, so the header can count the written reviews
+    // apart from the rating count (agents-identity-10); the preview slices it.
+    repo.listReviewsForAgent(agent.handle, REVIEW_ALL),
     repo.listCollaborators(agent.handle, 4),
     getCurrentProfile(repo),
     headers(),
   ]);
 
+  const reviews = showAllReviews ? written : written.slice(0, REVIEW_PREVIEW);
+  const writtenLabel = written.length >= REVIEW_ALL ? `${REVIEW_ALL}+` : String(written.length);
+  // An agent with no runs has no track record: the tiles say "New" rather than
+  // a default (95% and 2 min in demo mode, 0% — "always fails" — in Postgres).
+  const fresh = agent.jobs_completed === 0;
   const origin = requestOrigin(requestHeaders);
   const cardHref = `/agents/${agent.handle}/agent-card.json`;
   const cardUrl = `${origin}${cardHref}`;
@@ -290,9 +297,13 @@ export default async function Page({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          value={agent.rating_avg.toFixed(2)}
+          value={agent.rating_count > 0 ? agent.rating_avg.toFixed(2) : "New"}
           label="Rating"
-          hint={`${agent.rating_count.toLocaleString("en-US")} reviews`}
+          hint={
+            agent.rating_count > 0
+              ? `${agent.rating_count.toLocaleString("en-US")} ratings`
+              : "No ratings yet"
+          }
           tone="yellow"
           icon="★"
         />
@@ -304,14 +315,14 @@ export default async function Page({
           icon="✓"
         />
         <StatTile
-          value={`${Math.round(agent.reliability * 100)}%`}
+          value={fresh ? "New" : `${Math.round(agent.reliability * 100)}%`}
           label="Reliability"
-          hint={`${(agent.dispute_rate * 100).toFixed(1)}% disputed`}
+          hint={fresh ? "No runs yet" : `${(agent.dispute_rate * 100).toFixed(1)}% disputed`}
           tone="blue"
           icon="◎"
         />
         <StatTile
-          value={formatDuration(agent.avg_latency_sec)}
+          value={fresh ? "New" : formatDuration(agent.avg_latency_sec)}
           label="Avg. latency"
           hint={featured ? `Fastest gig ${formatDuration(featured.delivery_seconds)}` : "No gig SLA yet"}
           tone="cyan"
@@ -326,8 +337,8 @@ export default async function Page({
           </Panel>
 
           <Panel
-            title="Verified skills"
-            subtitle="Claimed on the Passport and exercised by every approved run."
+            title="Skills"
+            subtitle="Declared on the Passport by its owner. Nothing here verifies them."
             icon={<Sparkles className="size-4" aria-hidden="true" />}
           >
             <div className="flex flex-wrap gap-1.5">
@@ -377,8 +388,8 @@ export default async function Page({
 
           <div id="reviews" className="scroll-mt-20">
             <Panel
-              title={`Reviews (${agent.rating_count.toLocaleString("en-US")})`}
-              subtitle="Left by buyers after they approved and paid for a run."
+              title={`Reviews (${writtenLabel} written · ${agent.rating_count.toLocaleString("en-US")} ratings)`}
+              subtitle="Written by buyers after they approved a run. A rating can come without a review."
               action={
                 reviews.length > 0 ? (
                   <Link
@@ -501,20 +512,10 @@ export default async function Page({
                 count={gigs.length}
               />
               <CodeBlock label="curl" code={readPassportCurl(origin, agent.handle)} />
-              {agent.mcp_tools.length > 0 ? (
-                <Inset>
-                  <small className="block text-[10.5px] font-extrabold tracking-[0.05em] text-muted uppercase">
-                    MCP tools
-                  </small>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {agent.mcp_tools.map((tool) => (
-                      <Pill key={tool} variant="purple" size="sm">
-                        {tool}
-                      </Pill>
-                    ))}
-                  </div>
-                </Inset>
-              ) : null}
+              {/* Per-agent MCP tools are not callable: the District's MCP
+                  server serves its own tools only, so listing an agent's
+                  as chips promised calls that answer "Tool not found"
+                  (owner decision 10). */}
               {endpoints.length > 0 ? (
                 <Inset>
                   <small className="block text-[10.5px] font-extrabold tracking-[0.05em] text-muted uppercase">

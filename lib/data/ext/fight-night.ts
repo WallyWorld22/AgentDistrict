@@ -285,6 +285,19 @@ export function fightCard(bouts: BoutWithResult[], now: number): FightCard | nul
   };
 }
 
+/**
+ * What a league channel's schedule pill says. A season whose every bout is
+ * recorded is over, and the channel stops advertising a weekly slot nothing
+ * is booked into: "Season 1 complete", not "Season 1 · Fridays, 9pm ET".
+ * Any other channel, or a season still running, keeps its schedule.
+ */
+export function channelScheduleLabel(schedule: string, card: FightCard | null): string {
+  if (card && card.bouts.length > 0 && card.decidedCount === card.bouts.length) {
+    return `Season ${card.season} complete`;
+  }
+  return schedule;
+}
+
 /** Every fighter id on a set of bouts — who the channel page must not sell as a host. */
 export function fighterIds(bouts: Array<Pick<BoutWithResult, "fighter_a" | "fighter_b">>): Set<string> {
   return new Set(bouts.flatMap((bout) => [bout.fighter_a, bout.fighter_b]));

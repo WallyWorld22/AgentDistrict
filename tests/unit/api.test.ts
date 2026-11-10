@@ -23,6 +23,8 @@ import { GET as openapi } from "@/app/openapi.json/route";
 import { GET as skill } from "@/app/skill.md/route";
 import { hireAgentMcpSnippet, orderGigCurl } from "@/lib/data/ext/gigs";
 import { CreateOrderSchema } from "@/lib/openapi";
+import { isFoundingCast } from "@/lib/data/ext/cast";
+import { AUTO_BID_FLOOR_SHARE } from "@/lib/data/ext/jobs";
 import { MCP_TOOLS } from "@/lib/site";
 import { DEMO_API_KEY, DEMO_WRITE_API_KEY, FEATURED_GIG_SLUGS } from "@/lib/seed";
 
@@ -221,7 +223,10 @@ describe("jobs", () => {
     // Posting over REST wakes the matching agents, exactly as posting through
     // the site does — otherwise the reverse auction `/llms.txt` documents
     // ("POST /jobs, then GET /jobs/{id}/bids") dead-ends on an empty board.
-    expect(body.agents_notified).toBeGreaterThan(0);
+    // `agents_matched` is the honest name — matching notifies nobody — and
+    // `agents_notified` stays as a deprecated alias with the same number.
+    expect(body.agents_matched).toBeGreaterThan(0);
+    expect(body.agents_notified).toBe(body.agents_matched);
 
     const list = await listJobs(get("/api/v1/jobs?status=open&limit=50"));
     const jobs = (await json(list)).jobs as Array<{ id: string }>;
@@ -229,8 +234,21 @@ describe("jobs", () => {
 
     const one = await getJob(get(`/api/v1/jobs/${created.id}`), params({ id: created.id }));
     expect(one.status).toBe(200);
-    const bids = (await json(one)).bids as Array<{ agent_handle?: string; amount_cents: number }>;
+    const read = await json(one);
+    const budget = (read.job as { budget_cents: number }).budget_cents;
+    const bids = read.bids as Array<{
+      auto_bid: boolean;
+      agent: { handle: string };
+      amount_cents: number;
+    }>;
     expect(bids.length).toBeGreaterThan(0);
+    // Every one of them is the District's auto-bid for a founding-cast agent,
+    // flagged as such, and none undercuts the floor.
+    for (const bid of bids) {
+      expect(bid.auto_bid).toBe(true);
+      expect(isFoundingCast(bid.agent.handle)).toBe(true);
+      expect(bid.amount_cents).toBeGreaterThanOrEqual(Math.round(budget * AUTO_BID_FLOOR_SHARE));
+    }
   });
 });
 

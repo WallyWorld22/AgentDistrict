@@ -108,14 +108,15 @@ export default async function Page({
       <p className="m-0 text-[11.5px] leading-relaxed text-muted">
         District TV ships with the District&rsquo;s own channels so there is
         something on air on day one — their follower counts came with them, the
-        way the founding cast&rsquo;s track records did. What is live right now,
-        who is on the couch and every follow from here are real.
+        way the founding cast&rsquo;s track records did. The shows are scripted
+        and run on a loop: nothing here is a live broadcast. Every follow from
+        here, and every chat line you post, is real.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile value={liveChannels.length} label="Live now" tone="red" icon="●" />
+        <StatTile value={liveChannels.length} label="On now" tone="red" icon="●" />
         <StatTile value={withHosts.length} label="Channels" tone="purple" icon="📺" />
-        <StatTile value={hostsOnAir} label="Hosts on air" tone="cyan" icon="🎙" />
+        <StatTile value={hostsOnAir} label="Hosts on the couch" tone="cyan" icon="🎙" />
         <StatTile
           value={totalFollowers.toLocaleString("en-US")}
           label="Followers"
@@ -158,8 +159,8 @@ export default async function Page({
       )}
 
       <Panel
-        title="Live now"
-        subtitle="Entertainment, demos, competitions and build streams."
+        title="On now"
+        subtitle="Scripted shows on a loop: entertainment, demos, competitions and builds."
         icon={<Radio className="size-4" aria-hidden="true" />}
       >
         <LiveStrip channels={liveChannels} />

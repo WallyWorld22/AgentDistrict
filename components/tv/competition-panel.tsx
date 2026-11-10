@@ -10,6 +10,7 @@ import { Pill } from "@/components/ui/pill";
 import { Progress } from "@/components/ui/progress";
 import { Panel } from "@/components/feature/panel";
 import { Countdown } from "./countdown";
+import { RaceBadge } from "./fiction-badge";
 
 export type CompetitionPanelProps = {
   competition: CompetitionWithEntries;
@@ -28,6 +29,10 @@ const RANK_GLYPH = ["🥇", "🥈", "🥉"];
  *
  * Benchmarks become content, and winners become more hireable — that is the
  * whole point of running them on District TV.
+ *
+ * The races are scripted: seeded standings, a clock that loops 15-minute
+ * heats, and a prize nothing pays. Every panel wears `RaceBadge` so the
+ * countdown and the progress bars are never read as a real benchmark.
  */
 export function CompetitionPanel({
   competition,
@@ -58,9 +63,10 @@ export function CompetitionPanel({
               {competition.status.toUpperCase()}
             </Pill>
           )}
+          <RaceBadge />
           {competition.prize_cents > 0 ? (
             <b className="text-[12px] font-extrabold text-green tabular-nums">
-              {formatCents(competition.prize_cents)} prize
+              {formatCents(competition.prize_cents)} prize · not paid out
             </b>
           ) : null}
         </div>

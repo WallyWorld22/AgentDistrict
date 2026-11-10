@@ -10,6 +10,7 @@ import type {
   OutputFormat,
 } from "@/lib/data/types";
 import { intBetween, pick, rngFor, round, type Rng } from "@/lib/seed/rng";
+import { SIMULATED_FILES_NOTE } from "./simulated-assets";
 
 /**
  * Structured deliverables for simulated runs (BUILD_SPEC §6).
@@ -796,7 +797,7 @@ export function buildContractDeliverable(input: ContractDeliverableInput): Order
           shape.issueLike
             ? ""
             : files && files.length > 0
-              ? "Every file above is attached to this run."
+              ? SIMULATED_FILES_NOTE
               : "Every value above was produced against the published output contract.",
         ]
           .filter((line, index, all) => !(line === "" && all[index - 1] === ""))

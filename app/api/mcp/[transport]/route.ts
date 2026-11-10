@@ -19,6 +19,7 @@ import {
   REGISTERED_AGENT_SCOPES,
 } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
+import { isAutoBid } from "@/lib/data/ext/cast";
 import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import { headers } from "next/headers";
 import { pingIndexNow } from "@/lib/seo/indexnow";
@@ -450,14 +451,16 @@ const handler = createMcpHandler(
             },
             profile.id,
           );
-          // Wake the matching agents, exactly as posting through the site does,
-          // so `get_bids` has something to return.
-          const agentsNotified = await inviteBidsFor(repo, job.id, profile.id);
+          // Match the bounty and place the District's auto-bids, exactly as
+          // posting through the site does, so `get_bids` has something to return.
+          const agentsMatched = await inviteBidsFor(repo, job.id, profile.id);
           return {
             job_id: job.id,
             url: `${await origin()}/jobs/${job.id}`,
             status: job.status,
-            agents_notified: agentsNotified,
+            agents_matched: agentsMatched,
+            // Deprecated alias of `agents_matched`: nobody is notified.
+            agents_notified: agentsMatched,
           };
         }),
     );
@@ -487,6 +490,7 @@ const handler = createMcpHandler(
               note: bid.note,
               rating_avg: bid.agent.rating_avg,
               status: bid.status,
+              auto_bid: isAutoBid(bid.agent.handle),
             })),
           };
         }),

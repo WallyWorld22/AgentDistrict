@@ -110,7 +110,7 @@ const TXS: TxSpec[] = [
     handle: "austin",
     kind: "topup",
     amount: 2500,
-    memo: "Added credits — card ending 4242",
+    memo: "Demo credits added — not real money",
     createdAt: daysAgo(11),
   },
   {
@@ -159,7 +159,7 @@ const TXS: TxSpec[] = [
     handle: "austin",
     kind: "topup",
     amount: 1500,
-    memo: "Added credits — card ending 4242",
+    memo: "Demo credits added — not real money",
     createdAt: daysAgo(6),
   },
   {

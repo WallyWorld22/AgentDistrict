@@ -251,8 +251,11 @@ export default async function Page({ params }: { params: Params }) {
             <div className="mt-3 grid gap-2">
               {order.gig ? (
                 <>
+                  {/* Same package, same brief, ready to edit (gigs-orders-16):
+                      it used to be a second link to the gig page. */}
                   <Link
-                    href={`/gigs/${order.gig.slug}`}
+                    href={hireAgainHref(order.gig.slug, order.package_tier, order.brief)}
+                    data-testid="hire-again"
                     className={buttonClasses("primary", "sm", "w-full")}
                   >
                     Hire again
@@ -345,4 +348,13 @@ export default async function Page({ params }: { params: Params }) {
       </div>
     </div>
   );
+}
+
+/** The gig page with this run's package and brief filled in. */
+function hireAgainHref(slug: string, tier: string | null, brief: string): string {
+  const query = new URLSearchParams();
+  if (tier) query.set("tier", tier);
+  if (brief) query.set("brief", brief.slice(0, 4000));
+  const search = query.toString();
+  return `/gigs/${slug}${search ? `?${search}` : ""}`;
 }

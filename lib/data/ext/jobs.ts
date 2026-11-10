@@ -40,6 +40,7 @@ export const JOB_STATUS_FILTERS = [
   { value: "awarded", label: "Awarded" },
   { value: "in_progress", label: "In progress" },
   { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
 ] as const;
 
 export type JobStatusFilter = (typeof JOB_STATUS_FILTERS)[number]["value"];
@@ -48,7 +49,9 @@ export const JOB_SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
   { value: "budget", label: "Budget" },
   { value: "bids", label: "Most bids" },
-  { value: "deadline", label: "Ending soonest" },
+  // It sorts by the length of the deadline window, not by time left, so it
+  // says that (jobs-08).
+  { value: "deadline", label: "Shortest deadline" },
 ] as const satisfies ReadonlyArray<{ value: JobSort; label: string }>;
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
@@ -171,6 +174,7 @@ function countStatuses(jobs: JobWithBidCount[]): Record<JobStatusFilter, number>
     awarded: 0,
     in_progress: 0,
     completed: 0,
+    cancelled: 0,
   };
   for (const job of jobs) {
     if (job.status in counts) counts[job.status as JobStatusFilter] += 1;
@@ -333,10 +337,10 @@ export const JOB_DEADLINES = [
 ] as const;
 
 /**
- * Agents that would be notified when this bounty is published: everyone in the
- * job's category who is not offline, plus anyone whose skills match the words
- * in the brief. This is the number `/jobs/new` promises and the job page
- * reports back ("6 compatible agents were notified").
+ * Agents a bounty matches when it is published: everyone in the job's category
+ * who is not offline, plus anyone whose skills match the words in the brief.
+ * This is the number `/jobs/new` previews and the job page reports back
+ * ("6 compatible agents matched"). Matching notifies nobody.
  */
 export function compatibleAgents(agents: Agent[], job: Pick<Job, "title" | "description" | "category">): Agent[] {
   const intent = extractIntent(`${job.title} ${job.description}`);
@@ -359,14 +363,28 @@ export type AutoBidPlan = {
 };
 
 /**
- * The bids the District's matching agents place seconds after a bounty goes up.
+ * Data residency and subcontracting on a bounty are advisory (owner decision
+ * 6): the policy travels with the job, but nothing checks a bid or a run
+ * against them yet. Every place that shows them says so.
+ */
+export const ADVISORY_NOTE =
+  "Data residency and subcontracting are advisory, not enforced: any agent can still bid, and nothing checks the run against them yet.";
+
+/**
+ * No auto-bid goes in under this share of the budget. Priced from a Passport
+ * alone, a one-cent-per-row agent offered "50 verified plumbers" for $0.15 on
+ * a $15 bounty — a price no one would quote, shown as if someone had.
+ */
+export const AUTO_BID_FLOOR_SHARE = 0.4;
+
+/**
+ * The auto-bids the District places for its founding-cast agents seconds
+ * after a bounty goes up (see `inviteBidsFor`).
  *
- * A bounty board with no bids is not a market, and in the demo there is no
- * second human to bid — so posting a job wakes the best-matched agents and they
- * answer, exactly like the "6 compatible agents were notified" promise the
- * legacy prototype made. Deterministic (no randomness): each agent bids its own
- * estimate for the job, clamped under the budget, and quotes its typical
- * latency, staggered so the three offers are genuinely different.
+ * Deterministic (no randomness): each agent bids its own estimate for the
+ * job, clamped between `AUTO_BID_FLOOR_SHARE` of the budget and a ceiling
+ * under it, and quotes its typical latency, staggered so the three offers are
+ * genuinely different.
  */
 export function planAutoBids(
   job: Pick<Job, "title" | "description" | "category" | "budget_cents" | "deadline_seconds">,
@@ -380,7 +398,8 @@ export function planAutoBids(
     // A hungry first bidder undercuts; later bidders price their extras in.
     const ceiling = Math.round(job.budget_cents * (0.55 + index * 0.15));
     const list = Math.max(1, agent.starting_price_cents * volume);
-    const amount = Math.max(1, Math.min(ceiling, list === 1 ? ceiling : list));
+    const floor = Math.round(job.budget_cents * AUTO_BID_FLOOR_SHARE);
+    const amount = Math.max(1, floor, Math.min(ceiling, list === 1 ? ceiling : list));
     const eta = Math.max(
       60,
       Math.min(

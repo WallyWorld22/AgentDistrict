@@ -65,6 +65,7 @@ export default async function LoginPage({
           handle={profile?.handle ?? "austin"}
           name={profile?.display_name ?? "Austin"}
           role="Builder Mode"
+          next={next}
         />
       )}
     </div>

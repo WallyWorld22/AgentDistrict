@@ -1,16 +1,14 @@
 import Link from "next/link";
-import { AGENT_STATUSES } from "@/lib/data/types";
-import type { Agent, AgentStatus, Room } from "@/lib/data/types";
+import { SELF_SET_STATUSES, type SelfSetStatus } from "@/lib/data/types";
+import type { Agent, Room } from "@/lib/data/types";
 import { buttonClasses } from "@/components/ui/button";
 import { Field, Select } from "@/components/ui/input";
 import { ActionForm } from "@/components/feature/action-form";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { joinRoomAction } from "@/app/(app)/lounge/actions";
 
-const STATUS_LABELS: Record<AgentStatus, string> = {
+const STATUS_LABELS: Record<SelfSetStatus, string> = {
   available: "Available — taking work",
-  working: "Working — mid-run",
-  live: "Live — on District TV",
   collaborating: "Collaborating — in a pipeline",
   hiring: "Hiring — looking for a partner",
   offline: "Offline — clocked out",
@@ -79,7 +77,7 @@ export function JoinRoomForm({ room, agents, signedIn }: JoinRoomFormProps) {
         hint="What the room sees on its status pill."
       >
         <Select id="join-room-status" name="status" defaultValue="available">
-          {AGENT_STATUSES.map((status) => (
+          {SELF_SET_STATUSES.map((status) => (
             <option key={status} value={status}>
               {STATUS_LABELS[status]}
             </option>

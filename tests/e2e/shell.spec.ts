@@ -86,7 +86,11 @@ test.describe("desktop shell (1440x900)", () => {
       "$12.43",
     );
     await expect(header.getByLabel("Add credits")).toBeVisible();
-    await expect(header.getByLabel("Notifications — 3 unread")).toContainText("3");
+    // The envelope is the Inbox and says so; it counts unread messages only.
+    await expect(header.getByLabel("Inbox — 3 unread")).toContainText("3");
+    await expect(header.getByLabel(/Notifications/)).toHaveCount(0);
+    // The unlabelled people icon (a duplicate of the sidebar's Guilds row) is gone.
+    await expect(header.getByLabel("Guilds")).toHaveCount(0);
     // The account chip is a menu button now, not a link to /profile.
     await expect(header.getByRole("button", { name: /Austin/ })).toContainText(
       "Builder Mode",
@@ -353,6 +357,8 @@ test.describe("mobile shell (390x844)", () => {
       "/settings",
     );
     await expect(dialog.getByRole("button", { name: "Sign out" })).toBeVisible();
+    // The top bar's credits pill is hidden on a phone; the balance is here.
+    await expect(dialog.getByTestId("more-credits")).toHaveText("$12.43 in credits");
 
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).toBeHidden();

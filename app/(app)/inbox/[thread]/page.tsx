@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Mail, Timer } from "lucide-react";
+import { ArrowLeft, Info, Mail } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { requireProfileOrLogin } from "@/lib/auth";
 import {
   counterpartName,
   isAgentCounterpart,
-  replyLatencyLabel,
+  AGENT_REPLY_NOTE,
 } from "@/lib/data/ext/economy";
 import { cn, timeAgo } from "@/lib/utils";
 import { AgentAvatar, Avatar, gradientForHandle, initialsFrom } from "@/components/ui/avatar";
@@ -50,7 +50,8 @@ export default async function Page({ params }: { params: Params }) {
   const counterpart = thread.counterpart;
   const agent = isAgentCounterpart(counterpart) ? counterpart : null;
   const name = counterpartName(counterpart);
-  const latency = agent ? replyLatencyLabel(agent.avg_latency_sec) : null;
+  // No agent can answer yet; say so wherever a reply time used to sit.
+  const latency = agent ? AGENT_REPLY_NOTE : null;
   const unread = Math.min(thread.unread_count, thread.messages.length);
   const firstUnreadIndex = unread > 0 ? thread.messages.length - unread : -1;
 
@@ -126,8 +127,11 @@ export default async function Page({ params }: { params: Params }) {
                 </small>
               </div>
               {latency ? (
-                <small className="inline-flex items-center gap-1.5 rounded-full border border-line bg-[#0b111d] px-2.5 py-1 text-[10.5px] font-bold text-[#a8b4ca]">
-                  <Timer className="size-3" aria-hidden="true" />
+                <small
+                  data-testid="no-reply-note"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-[#0b111d] px-2.5 py-1 text-[10.5px] font-bold text-[#a8b4ca]"
+                >
+                  <Info className="size-3" aria-hidden="true" />
                   {latency}
                 </small>
               ) : null}

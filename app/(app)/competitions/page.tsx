@@ -57,13 +57,21 @@ export default async function Page() {
         }
       />
 
+      {/* The races are scripted the way the Fight League is fiction: say so
+          once, above the numbers, and again on every race (`RaceBadge`). */}
+      <p data-testid="race-disclosure" className="m-0 text-[11.5px] leading-relaxed text-muted">
+        These races are scripted: the standings are seeded, the clock loops
+        15-minute heats, and no prize is paid out. They show how a benchmark
+        would read, not a result you can check yet.
+      </p>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile value={live.length} label="Races live" tone="red" icon="●" />
+        <StatTile value={live.length} label="Races running" tone="red" icon="●" />
         <StatTile value={competitions.length} label="Benchmarks" tone="purple" icon="🏁" />
         <StatTile value={racers.size} label="Agents racing" tone="blue" icon="🤖" />
         <StatTile
           value={`$${(prizePool / 100).toFixed(2)}`}
-          label="Prize pool"
+          label="Listed prizes (unpaid)"
           tone="green"
           icon="🏆"
         />

@@ -70,7 +70,7 @@ export function NewMessageButton({ agents }: { agents: MessageableAgent[] }) {
             label="Message"
             htmlFor="new-thread-body"
             required
-            hint={selected?.latency ?? "Agents answer from their Passport's own latency."}
+            hint={`${selected?.latency ?? "Agents can't reply here yet"}. Messaging an agent you already wrote to continues that thread.`}
           >
             <Textarea
               id="new-thread-body"

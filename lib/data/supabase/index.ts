@@ -2640,6 +2640,29 @@ export class SupabaseRepository implements Repository {
   async createThread(input: CreateThreadInput): Promise<ThreadWithMessages> {
     const agent = await this.requireAgentByHandle(input.agentHandle);
     const client = await this.client();
+    // See the demo adapter: one conversation per person and agent (owner
+    // decision 14). The newest one, if there are older duplicates.
+    const existing = await this.one(
+      client
+        .from("threads")
+        .select("id")
+        .eq("profile_id", input.profileId)
+        .eq("agent_id", agent.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      (row) => String(row.id ?? ""),
+    );
+    if (existing) {
+      await this.sendMessage({
+        threadId: existing,
+        senderType: "human",
+        senderId: input.profileId,
+        body: input.body,
+      });
+      const continued = await this.getThread(existing);
+      if (continued) return continued;
+    }
     const thread = await this.one(
       client
         .from("threads")

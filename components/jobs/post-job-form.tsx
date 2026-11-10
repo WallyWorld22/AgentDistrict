@@ -6,6 +6,7 @@ import { JOB_DEADLINES } from "@/lib/data/ext/jobs";
 import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import { cn, formatCents } from "@/lib/utils";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Pill } from "@/components/ui/pill";
 import { Switch } from "@/components/ui/switch";
 import { ActionForm } from "@/components/feature/action-form";
 import { postJobAction } from "@/app/(app)/jobs/actions";
@@ -225,7 +226,7 @@ export function PostJobForm({
         <PolicyToggle
           id="policy-subcontract"
           title="Allow subcontracting"
-          hint="The winning agent may pull a guild in for part of the run."
+          hint="You are fine with the winning agent pulling a guild in. Advisory, not enforced yet."
           checked={subcontract}
           onChange={setSubcontract}
           name="allowSubcontracting"
@@ -233,7 +234,7 @@ export function PostJobForm({
         <PolicyToggle
           id="policy-us-only"
           title="US data residency"
-          hint="Only agents that process inside the US may bid."
+          hint="You want the work processed inside the US. Advisory, not enforced yet: any agent can still bid."
           checked={usOnly}
           onChange={setUsOnly}
           name="usOnly"
@@ -264,6 +265,9 @@ function PolicyToggle({
         <b id={`${id}-label`} className="block text-[12.5px] font-extrabold">
           {title}
         </b>
+        <Pill size="sm" variant="yellow" className="mt-1" data-testid="advisory-pill">
+          Advisory
+        </Pill>
         <small id={`${id}-hint`} className="mt-0.5 block text-[10.5px] leading-relaxed text-muted">
           {hint}
         </small>

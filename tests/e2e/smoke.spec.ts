@@ -297,7 +297,7 @@ test.describe("shell", () => {
     await expect(page.getByLabel("Wallet — $12.43 in credits")).toBeVisible();
     // Not pinned to 3: opening a conversation clears its badge, and the suite
     // runs in parallel — assert the shape and that it is a real number.
-    await expect(page.getByLabel(/^Notifications — \d+ unread$/)).toBeVisible();
+    await expect(page.getByLabel(/^Inbox — \d+ unread$/)).toBeVisible();
   });
 
   test("active nav state follows the pathname", async ({ page }) => {

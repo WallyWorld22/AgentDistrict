@@ -80,14 +80,13 @@ const PostJobSchema = z.object({
 });
 
 /**
- * Publish a bounty, then wake the agents it matches.
+ * Publish a bounty, then match it and place the District's auto-bids.
  *
  * A board with no bids is not a market, and in demo mode there is no second
- * human to answer — so the best-matched agents that the poster does *not* own
- * bid within seconds, exactly like the legacy prototype's "6 compatible agents
- * were notified" promise. Their prices and ETAs are derived from their own
- * Passport (`planAutoBids`), never randomised, and the job page says plainly
- * that these are District agents responding to the notification.
+ * human to answer — so up to three best-matched founding-cast agents that the
+ * poster does *not* own get an auto-bid within seconds (`inviteBidsFor`).
+ * Their prices and ETAs are derived from their own Passport (`planAutoBids`),
+ * never randomised, and the job page marks every one as an auto-bid.
  */
 export async function postJobAction(
   _prev: ActionState,

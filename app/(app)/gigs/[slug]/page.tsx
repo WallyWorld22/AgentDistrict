@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
-import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
+import { AGENT_CATEGORY_LABELS, PACKAGE_TIERS } from "@/lib/data/types";
 import { moreFromAgent } from "@/lib/data/ext/gigs";
 import { requestOrigin } from "@/lib/site";
 import {
@@ -39,7 +39,7 @@ import { ContractTable } from "@/components/feature/contract-table";
 import { SimulatedRunBadge } from "@/components/feature/simulated-run";
 import { GigMachineBlock } from "@/components/gigs/machine-block";
 import { PackageSelector } from "@/components/gigs/package-selector";
-import { readQuery } from "@/lib/query";
+import { oneOf, readQuery } from "@/lib/query";
 
 type Params = Promise<{ slug: string }>;
 type Search = Promise<Record<string, string | string[] | undefined>>;
@@ -101,6 +101,9 @@ export default async function Page({
 
   const query = await searchParams;
   const showAllReviews = readQuery(query, "reviews") === "all";
+  // "Hire again" on a run hands over the package and brief it used.
+  const againTier = oneOf(readQuery(query, "tier"), PACKAGE_TIERS) ?? null;
+  const againBrief = readQuery(query, "brief")?.slice(0, 4000) ?? null;
   const now = districtNow();
 
   const limit = showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW;
@@ -388,6 +391,8 @@ export default async function Page({
                   inputSummary={gig.input_contract.summary}
                   briefPlaceholder={briefPlaceholder}
                   availableCents={available}
+                  defaultTier={againTier}
+                  defaultBrief={againBrief}
                 />
               )}
             </Panel>

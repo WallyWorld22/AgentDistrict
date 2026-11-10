@@ -216,13 +216,32 @@ export function openSlots(row: PresenceWithAgent): number {
   return Math.max(0, row.capacity - row.queue_len);
 }
 
-/** Headline numbers over the hall. */
+/**
+ * How recently a presence must have been seen to count as online. A presence
+ * row keeps its last status forever; without a window, an agent last seen
+ * weeks ago still counted, and the hall read "28 online" over rooms where
+ * every row said "seen 18d ago".
+ */
+export const ONLINE_WINDOW_MS = 30 * 60_000;
+
+/** Not offline, and seen within `ONLINE_WINDOW_MS` of `now`. */
+export function isOnline(
+  row: { status: string; updated_at: string },
+  now: number,
+): boolean {
+  if (row.status === "offline") return false;
+  const seen = Date.parse(row.updated_at);
+  return Number.isFinite(seen) && now - seen <= ONLINE_WINDOW_MS;
+}
+
+/** Headline numbers over the hall. `online` counts recently seen rows only. */
 export function loungeTotals(
   rooms: RoomWithCounts[],
   presence: PresenceWithAgent[],
+  now: number,
 ): { online: number; collaborating: number; working: number; openSlots: number } {
   return {
-    online: presence.filter((row) => row.status !== "offline").length,
+    online: presence.filter((row) => isOnline(row, now)).length,
     collaborating: presence.filter((row) => row.status === "collaborating").length,
     working: presence.filter((row) => row.status === "working" || row.status === "live")
       .length,
@@ -356,7 +375,7 @@ export type TvFilter = {
  */
 export const TV_FILTERS: TvFilter[] = [
   { label: "All" },
-  { label: "Live", live: true },
+  { label: "On now", live: true },
   { label: "Talk", kind: "talk" },
   { label: "Build", kind: "build" },
   { label: "Demos", kind: "demo" },
@@ -716,6 +735,13 @@ export type ShowroomResult = {
 
 const STORM_RISK = ["Low", "Moderate", "Elevated", "High"] as const;
 const VOICES = ["direct", "warm", "urgent", "plain-spoken"] as const;
+/** WebBuilder's sections, in build order: the readout names as many as it counts. */
+const PAGE_SECTIONS = ["hero", "proof", "offer", "FAQ", "CTA", "pricing", "gallery", "contact"];
+
+/** "a direct voice", "an urgent voice". */
+function withArticle(word: string): string {
+  return `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
+}
 
 /**
  * Run a showroom demo. Deterministic in the input string, so the same address
@@ -728,8 +754,11 @@ export function runShowroom(handle: string, rawInput: string): ShowroomResult | 
   const input = rawInput.trim().replace(/\s+/g, " ").slice(0, 120);
   if (input.length === 0) return null;
 
-  const confidence = hashInRange(input, "confidence", 88, 99) / 100;
-  const durationSeconds = hashInRange(input, "duration", 18, 96);
+  // Keyed by agent as well as input: hashed from the input alone, every demo
+  // reported the same time and confidence for the same address
+  // (social-media-11).
+  const confidence = hashInRange(`${handle}:${input}`, "confidence", 88, 99) / 100;
+  const durationSeconds = hashInRange(`${handle}:${input}`, "duration", 18, 96);
 
   if (handle === "roofintel") {
     const area = hashInRange(input, "area", 1420, 3260);
@@ -795,7 +824,7 @@ export function runShowroom(handle: string, rawInput: string): ShowroomResult | 
       agentName: spec.agentName,
       input,
       fields: [
-        { label: "Sections", value: `${sections} — hero, proof, offer, FAQ, CTA` },
+        { label: "Sections", value: `${sections} — ${PAGE_SECTIONS.slice(0, sections).join(", ")}` },
         {
           label: "Lighthouse",
           value: `${hashInRange(input, "lh", 92, 100)} / 100 / 100 / ${hashInRange(input, "seo", 90, 100)}`,
@@ -830,7 +859,7 @@ export function runShowroom(handle: string, rawInput: string): ShowroomResult | 
       },
       {
         label: "Subhead",
-        value: `One address in, a straight answer out. No sales call to get a number.`,
+        value: `${subject.charAt(0).toUpperCase()}${subject.slice(1)}, explained in plain words. No sales call to get a number.`,
       },
       {
         label: "Proof",
@@ -848,7 +877,7 @@ export function runShowroom(handle: string, rawInput: string): ShowroomResult | 
       { label: "Voice", value: voice },
       { label: "Variants", value: `${hashInRange(input, "variants", 2, 5)} angles to test` },
     ],
-    summary: `written in a ${voice} voice · every claim carries a source line`,
+    summary: `written in ${withArticle(voice)} voice · every claim carries a source line`,
     durationSeconds,
     confidence,
   };

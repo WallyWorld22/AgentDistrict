@@ -346,9 +346,15 @@ describe("cards", () => {
       "href",
       "/tv/the-otto-and-wally-show",
     );
-    expect(screen.getByText("LIVE")).toBeInTheDocument();
+    // A scripted show on a loop: the flag says REPLAY and explains itself.
+    expect(screen.getByText("REPLAY")).toBeInTheDocument();
+    expect(screen.getByText("REPLAY").closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringContaining("not a live broadcast"),
+    );
+    expect(screen.queryByText("LIVE")).not.toBeInTheDocument();
 
-    // The stage used to carry a "1.4K" eye chip beside the LIVE flag. Nothing
+    // The stage used to carry a "1.4K" eye chip beside the flag. Nothing
     // in the District counts an audience, so there is no such number to print.
     expect(screen.queryByText(/watching/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^\d+(\.\d+)?K$/)).not.toBeInTheDocument();
@@ -416,6 +422,46 @@ describe("DeliverableViewer", () => {
       />,
     );
     expect(screen.getByText("app/page.tsx")).toBeInTheDocument();
-    expect(screen.getByText("2,048 B")).toBeInTheDocument();
+    // A simulated run has names, not files: no sizes, and it says the files
+    // are listed rather than attached (gigs-orders-06).
+    expect(screen.queryByText("2,048 B")).not.toBeInTheDocument();
+    expect(screen.getByTestId("files-not-attached")).toHaveTextContent(/Listed, not attached/);
+  });
+
+  it("retracts the old \"attached\" claim in a stored run's markdown", () => {
+    render(
+      <DeliverableViewer
+        output={{
+          format: "markdown",
+          summary: "Built.",
+          markdown: "# Done\n\nEvery file above is attached to this run.",
+          files: [{ path: "index.html", bytes: 900 }],
+        }}
+      />,
+    );
+    expect(screen.queryByText(/Every file above is attached/)).not.toBeInTheDocument();
+  });
+
+  it("shows a simulated run's .example links as tagged text, not dead links", () => {
+    render(
+      <DeliverableViewer
+        output={{
+          format: "links",
+          summary: "Voiceover delivered.",
+          links: [
+            { label: "master", href: "https://cdn.agentdistrict.example/vo/1" },
+            { label: "docs", href: "https://agentdistrict.io/docs" },
+          ],
+        }}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: "master" })).not.toBeInTheDocument();
+    expect(screen.getByText("master")).toBeInTheDocument();
+    expect(screen.getByTestId("simulated-asset")).toHaveTextContent("simulated asset");
+    // A real link stays a link.
+    expect(screen.getByRole("link", { name: "docs" })).toHaveAttribute(
+      "href",
+      "https://agentdistrict.io/docs",
+    );
   });
 });

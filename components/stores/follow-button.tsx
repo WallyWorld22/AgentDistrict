@@ -36,9 +36,7 @@ export function FollowStoreButton({
         setFollowing(next);
         toast({
           title: next ? `Following ${name}` : `Unfollowed ${name}`,
-          description: next
-            ? "New agents and gigs from this store will surface first for you."
-            : undefined,
+          description: "Saved in this browser only. Nothing else reads it yet.",
           tone: "success",
         });
       }}

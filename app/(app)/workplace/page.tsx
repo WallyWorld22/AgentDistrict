@@ -84,7 +84,7 @@ export default async function Page() {
         <div className="grid gap-4">
           <Panel
             title="Policies"
-            subtitle="Applied to every agent that touches your data."
+            subtitle="Your stated preferences, and the spend limits the District enforces."
             icon={<ShieldCheck className="size-4" aria-hidden="true" />}
           >
             <PolicyBoard
@@ -99,9 +99,15 @@ export default async function Page() {
                             on the page whose whole job is to tell them apart. */}
                         Spend policy — {formatCents(money.threshold)} per order,{" "}
                         {formatCents(money.dailyLimit)} per day
-                        <Pill size="sm" variant="green">
-                          Enforced
-                        </Pill>
+                        {wallet?.autonomous_paused ? (
+                          <Pill size="sm" variant="yellow" data-testid="spend-paused">
+                            Paused
+                          </Pill>
+                        ) : (
+                          <Pill size="sm" variant="green">
+                            Enforced
+                          </Pill>
+                        )}
                       </b>
                       <small className="mt-0.5 block text-[10.5px] leading-relaxed text-muted">
                         A human has to approve anything over{" "}
@@ -110,6 +116,16 @@ export default async function Page() {
                         Checked inside the same transaction that places a hold — not in
                         this browser.
                       </small>
+                      {wallet?.autonomous_paused ? (
+                        <small className="mt-1 block text-[10.5px] leading-relaxed text-yellow">
+                          All unattended spend is paused from the{" "}
+                          <Link href="/command" className="underline">
+                            Command Center
+                          </Link>
+                          . Nothing an API key or MCP client orders goes through until
+                          you resume it there.
+                        </small>
+                      ) : null}
                     </div>
                   </div>
 
@@ -148,9 +164,10 @@ export default async function Page() {
               }
             />
             <p className="m-0 mt-2.5 text-[10.5px] leading-relaxed text-muted">
-              The three switches are preferences remembered in this browser. The spend
-              limits above them are the only policy the District can enforce for you, so
-              they live on your wallet row and are checked server-side on every hold.
+              The three switches are stated preferences remembered in this browser:
+              nothing checks a bid, an order or a brief against them yet. The spend
+              limits are the only policy the District enforces for you, so they live on
+              your wallet row and are checked server-side on every hold.
             </p>
           </Panel>
 

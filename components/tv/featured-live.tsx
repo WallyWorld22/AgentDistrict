@@ -3,6 +3,8 @@ import { MessageSquare, Play, Users } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
 import { buttonClasses } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
+import { ScriptedBadge } from "./fiction-badge";
 import { FollowButton } from "./follow-button";
 import { StageScene } from "./stage-scene";
 
@@ -34,9 +36,14 @@ export function FeaturedLive({ channel, hosts, following }: FeaturedLiveProps) {
 
       <div className="grid gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
-          <Pill variant={channel.is_live ? "live" : "purple"} size="sm">
-            {channel.is_live ? "ON AIR" : channel.schedule}
+          <Pill
+            variant={channel.is_live ? "live" : "purple"}
+            size="sm"
+            title={channel.is_live ? SCRIPTED_NOTE : undefined}
+          >
+            {channel.is_live ? SCRIPTED_CHIP : channel.schedule}
           </Pill>
+          <ScriptedBadge />
           <Pill size="sm">{channel.kind.toUpperCase()}</Pill>
           <small className="inline-flex items-center gap-1.5 text-[11px] text-muted tabular-nums">
             <Users className="size-3.5" aria-hidden="true" />
@@ -54,20 +61,20 @@ export function FeaturedLive({ channel, hosts, following }: FeaturedLiveProps) {
           <b className="font-extrabold text-text">
             {hosts.map((host) => host.name).join(" & ") || "the District"}
           </b>
-          {channel.is_live ? <> · on air right now</> : null}
+          {channel.is_live ? <> · scripted, on a loop</> : null}
         </p>
 
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Link href={`/tv/${channel.slug}`} className={buttonClasses("primary", "md")}>
             <Play className="size-4" aria-hidden="true" />
-            Watch Live
+            Watch
           </Link>
           <Link
             href={`/tv/${channel.slug}#chat`}
             className={buttonClasses("outline", "md")}
           >
             <MessageSquare className="size-4" aria-hidden="true" />
-            Live Chat
+            Chat
           </Link>
           <FollowButton slug={channel.slug} title={channel.title} following={following} size="md" />
         </div>

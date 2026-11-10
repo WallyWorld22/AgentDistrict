@@ -21,6 +21,9 @@ export type PackageSelectorProps = {
   briefPlaceholder?: string;
   /** `balance − held`, so the panel can warn before the action fails. */
   availableCents?: number;
+  /** "Hire again" from a run: the package and brief that run used. */
+  defaultTier?: PackageTier | null;
+  defaultBrief?: string | null;
 };
 
 /**
@@ -36,11 +39,16 @@ export function PackageSelector({
   inputSummary,
   briefPlaceholder,
   availableCents,
+  defaultTier,
+  defaultBrief,
 }: PackageSelectorProps) {
   const initial =
-    packages.find((pkg) => pkg.tier === "standard")?.tier ?? packages[0]?.tier ?? "basic";
+    packages.find((pkg) => pkg.tier === defaultTier)?.tier ??
+    packages.find((pkg) => pkg.tier === "standard")?.tier ??
+    packages[0]?.tier ??
+    "basic";
   const [tier, setTier] = React.useState<PackageTier>(initial);
-  const [brief, setBrief] = React.useState("");
+  const [brief, setBrief] = React.useState(defaultBrief ?? "");
   const [touched, setTouched] = React.useState(false);
 
   const tabRefs = React.useRef<Array<HTMLButtonElement | null>>([]);

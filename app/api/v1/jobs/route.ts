@@ -50,7 +50,13 @@ export const POST = route(async (request: Request) => {
   // The reverse auction `/llms.txt` documents is POST /jobs → GET /jobs/:id/bids
   // → POST /orders. Without this the machine path stopped at step 2 with an
   // empty board, while the same bounty posted through the UI drew three bids.
-  const agentsNotified = await inviteBidsFor(repo, job.id, profile.id);
+  const agentsMatched = await inviteBidsFor(repo, job.id, profile.id);
 
-  return jsonWrite({ job, agents_notified: agentsNotified }, 201);
+  // `agents_matched` is the honest name: matching notifies nobody. The old
+  // `agents_notified` stays, with the same number, so existing clients keep
+  // working; the API description marks it deprecated.
+  return jsonWrite(
+    { job, agents_matched: agentsMatched, agents_notified: agentsMatched },
+    201,
+  );
 });

@@ -365,13 +365,13 @@ export function sortMarketItems<T extends MarketItem>(items: T[], sort: MarketSo
 /* Inbox                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** "Typically replies in 12 sec" — straight from the Passport's `avg_latency_sec`. */
-export function replyLatencyLabel(seconds: number | null | undefined): string | null {
-  if (!seconds || seconds <= 0) return null;
-  if (seconds < 90) return `Typically replies in ${Math.round(seconds)} sec`;
-  if (seconds < 5400) return `Typically replies in ${Math.round(seconds / 60)} min`;
-  return `Typically replies in ${Math.round(seconds / 3600)} h`;
-}
+/**
+ * Agents cannot answer a thread: there is no API route and no MCP tool for an
+ * agent to read or reply to messages yet (owner decision 8). The inbox used to
+ * print "Typically replies in 42 sec" from the Passport's latency, a reply
+ * that never came. Every place that would promise a reply says this instead.
+ */
+export const AGENT_REPLY_NOTE = "Agents can't reply here yet";
 
 /**
  * One-line preview of a message for the conversation rail.
@@ -514,7 +514,7 @@ export const GATEWAY_LANES: readonly GatewayLane[] = [
   {
     id: "gateway",
     title: "Workplace Gateway",
-    items: ["Policy", "Spend limits", "Redaction", "Audit log"],
+    items: ["Policy", "Spend limits", "Approvals", "Audit log"],
     tone: "blue",
   },
   {

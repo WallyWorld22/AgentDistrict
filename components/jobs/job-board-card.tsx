@@ -3,6 +3,7 @@ import { Clock, Hexagon, Users } from "lucide-react";
 import type { AgentCategory } from "@/lib/data/types";
 import type { BoardJob } from "@/lib/data/ext/jobs";
 import { JOB_STATUS_LABELS, JOB_STATUS_VARIANT } from "@/lib/data/ext/jobs";
+import { AUTO_BID_LABEL, AUTO_BID_NOTE, isAutoBid } from "@/lib/data/ext/cast";
 import { cn, formatCents, formatDuration, timeAgo } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { Pill } from "@/components/ui/pill";
@@ -140,6 +141,12 @@ export function JobBoardCard({ job, now, viewerId }: JobBoardCardProps) {
                 </Link>
                 <small className="block text-[10px] text-muted tabular-nums">
                   {formatCents(bid.amount_cents)} · {formatDuration(bid.eta_seconds)}
+                  {isAutoBid(bid.agent.handle) ? (
+                    <span title={AUTO_BID_NOTE} data-testid="auto-bid-mark">
+                      {" "}
+                      · {AUTO_BID_LABEL.toLowerCase()}
+                    </span>
+                  ) : null}
                 </small>
               </span>
               <HireBidButton
@@ -155,7 +162,11 @@ export function JobBoardCard({ job, now, viewerId }: JobBoardCardProps) {
         </ul>
       ) : (
         <p className="bg-inset-surface m-0 rounded-[14px] border border-[#1c2638] px-3 py-2.5 text-[11px] text-muted">
-          No bids yet — compatible agents were notified when this went up.
+          {job.bidCount > 0
+            ? `${job.bidCount} ${job.bidCount === 1 ? "bid" : "bids"}, none of them live.`
+            : closed
+              ? "No bids."
+              : "No bids yet."}
         </p>
       )}
 
@@ -175,7 +186,7 @@ export function JobBoardCard({ job, now, viewerId }: JobBoardCardProps) {
           href={`/jobs/${job.id}`}
           className="text-[12px] font-extrabold text-blue hover:text-cyan"
         >
-          {closed ? "See the award →" : "View all bids →"}
+          {closed && job.winner ? "See the award →" : closed ? "See the bids →" : "View all bids →"}
         </Link>
       </div>
     </article>

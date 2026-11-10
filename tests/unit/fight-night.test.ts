@@ -5,6 +5,7 @@ import { createDemoRepository } from "@/lib/data/demo";
 import {
   boutPhase,
   boutRecap,
+  channelScheduleLabel,
   currentSeason,
   fightCard,
   fighterIds,
@@ -368,6 +369,18 @@ describe("the fight card", () => {
 
     expect(currentSeason([])).toBeNull();
     expect(fightCard([], SEED_EPOCH_MS)).toBeNull();
+  });
+
+  it("stops advertising a weekly slot once the season is over", async () => {
+    const schedule = "Season 1 · Fridays, 9pm ET";
+    // Three bouts still to come: the slot is real.
+    const running = fightCard(await decidedSeason(SEED_EPOCH_MS), SEED_EPOCH_MS);
+    expect(channelScheduleLabel(schedule, running)).toBe(schedule);
+    // Every bout recorded: nothing is booked into Friday nights any more.
+    const over = fightCard(await decidedSeason(), AFTER_SEASON);
+    expect(channelScheduleLabel(schedule, over)).toBe("Season 1 complete");
+    // A channel with no league keeps its own schedule.
+    expect(channelScheduleLabel("Weekdays", null)).toBe("Weekdays");
   });
 
   it("collects the fighters, so the page can keep them off the hire panel", async () => {

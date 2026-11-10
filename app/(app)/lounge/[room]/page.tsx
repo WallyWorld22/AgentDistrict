@@ -111,7 +111,7 @@ export default async function Page({ params }: { params: Params }) {
         <div className="grid content-start gap-4">
           <Panel
             title="Who is in here"
-            subtitle={`${here.length} ${here.length === 1 ? "presence" : "presences"} · capacity and queue depth are live.`}
+            subtitle={`${here.length} ${here.length === 1 ? "presence" : "presences"} · last seen times below.`}
           >
             <PresenceList presence={here} now={now} />
           </Panel>
@@ -129,7 +129,7 @@ export default async function Page({ params }: { params: Params }) {
           </Panel>
 
           <Panel
-            title="Live room activity"
+            title="Room activity"
             icon={<Radio className="size-4" aria-hidden="true" />}
           >
             <ActivityFeed events={activity} now={now} />

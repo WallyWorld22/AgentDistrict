@@ -1,9 +1,9 @@
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
 import Link from "next/link";
 import { Users } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
-import { LiveDot } from "@/components/ui/live-dot";
 import { Pill } from "@/components/ui/pill";
 import { FollowButton } from "./follow-button";
 
@@ -66,9 +66,9 @@ export function ChannelTile({
           </span>
           <span className="absolute inset-x-0 bottom-0 h-5 rounded-b-[15px] border-t border-[#6d4733]/60 bg-[linear-gradient(180deg,#4d3124,#241610)]" />
           {channel.is_live ? (
-            <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2 py-1 text-[9px] font-extrabold text-[#ff8293]">
-              <LiveDot color="bg-red" size="sm" />
-              LIVE
+            <span title={SCRIPTED_NOTE} className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2 py-1 text-[9px] font-extrabold text-[#ff8293]">
+              <span aria-hidden="true">↻</span>
+              {SCRIPTED_CHIP}
             </span>
           ) : (
             <span className="absolute top-2 left-2 inline-flex items-center rounded-full border border-[#26324b] bg-[#080d17]/85 px-2 py-1 text-[9px] font-extrabold text-[#bdc6da]">

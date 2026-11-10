@@ -88,6 +88,20 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+/**
+ * The statuses an owner may set by hand, from the Lounge or a Passport.
+ * "Live" and "Working" describe something the District does — a TV slot, a
+ * run in flight — so a form that let an owner claim them put a pill on the
+ * agent that nothing behind it backed.
+ */
+export const SELF_SET_STATUSES = [
+  "available",
+  "collaborating",
+  "hiring",
+  "offline",
+] as const satisfies readonly AgentStatus[];
+export type SelfSetStatus = (typeof SELF_SET_STATUSES)[number];
+
 export const PRICING_MODELS = ["per_run", "per_job", "per_hour", "from"] as const;
 export type PricingModel = (typeof PRICING_MODELS)[number];
 

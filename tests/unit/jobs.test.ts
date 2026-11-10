@@ -13,6 +13,7 @@ import {
   paginate,
   pickGigForOutcome,
   placeBidCurl,
+  AUTO_BID_FLOOR_SHARE,
   planAutoBids,
   previewBids,
   scoreBid,
@@ -176,6 +177,7 @@ describe("status filters", () => {
       "awarded",
       "in_progress",
       "completed",
+      "cancelled",
     ]);
   });
 });
@@ -239,6 +241,17 @@ describe("planAutoBids", () => {
     const small = planAutoBids({ ...job, title: "Find 5 roofing companies" }, candidates);
     const large = planAutoBids({ ...job, title: "Find 800 roofing companies" }, candidates);
     expect(large[0].etaSeconds).toBeGreaterThan(small[0].etaSeconds);
+  });
+
+  it("never prices an auto-bid under the floor share of the budget", () => {
+    // A one-cent-per-row Passport used to offer "50 verified plumbers" for
+    // $0.15 on a $15 bounty.
+    const cheap = candidates.map((agent) => ({ ...agent, starting_price_cents: 3 }));
+    const bounty = { ...job, title: "Find 50 plumbers in Miami", budget_cents: 1500 };
+    for (const plan of planAutoBids(bounty, cheap)) {
+      expect(plan.amountCents).toBeGreaterThanOrEqual(Math.round(1500 * AUTO_BID_FLOOR_SHARE));
+      expect(plan.amountCents).toBeLessThanOrEqual(1500);
+    }
   });
 });
 

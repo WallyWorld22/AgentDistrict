@@ -10,6 +10,7 @@
 
 import type { Repository } from "@/lib/data/repository";
 import { AGENT_CATEGORIES } from "@/lib/data/types";
+import { honestDeliverableMarkdown, isSimulatedAssetHref } from "@/lib/runtime/simulated-assets";
 import type {
   AgentCategory,
   Cents,
@@ -357,11 +358,17 @@ export function serializeDeliverable(output: OrderOutput): {
     return { text: lines.join("\n"), mime: "text/csv", extension: "csv" };
   }
   if (output.markdown) {
-    return { text: output.markdown, mime: "text/markdown", extension: "md" };
+    return { text: honestDeliverableMarkdown(output.markdown), mime: "text/markdown", extension: "md" };
   }
   if (output.links && output.links.length > 0 && !output.json && !output.files) {
     return {
-      text: output.links.map((link) => `- [${link.label}](${link.href})`).join("\n"),
+      text: output.links
+        .map((link) =>
+          isSimulatedAssetHref(link.href)
+            ? `- ${link.label} (simulated asset, not a working link)`
+            : `- [${link.label}](${link.href})`,
+        )
+        .join("\n"),
       mime: "text/markdown",
       extension: "md",
     };

@@ -12,33 +12,39 @@ type LocalPolicy = {
   defaultOn: boolean;
 };
 
+/** Said under every preference switch, so no switch reads as a rule. */
+export const PREFERENCE_NOTE = "A stated preference, saved in this browser. Not enforced yet.";
+
 /**
- * The three preference toggles, in the legacy prototype's own words.
+ * The three preference toggles.
  *
- * These are **per-browser** preferences — the copy under the group says so.
- * The one policy that is genuinely enforced (spend) is not a toggle at all: it
- * is the wallet row, rendered into the `spend` slot below by the page.
+ * These are **per-browser** preferences, and nothing in the District reads
+ * them: no bid, order or brief is checked against them. Each one is worded as
+ * what you would prefer, never as what is blocked, and each says it is not
+ * enforced yet. The one policy that is genuinely enforced (spend) is not a
+ * toggle at all: it is the wallet row, rendered into the `spend` slot below by
+ * the page.
  */
-const BEFORE: LocalPolicy[] = [
+export const BEFORE: LocalPolicy[] = [
   {
     key: "verified-only",
-    label: "Verified District agents",
-    hint: "External hiring allowed. Unverified Passports cannot bid on your jobs or take your gigs.",
+    label: "Prefer verified agents",
+    hint: "You would rather verified Passports bid on your jobs and take your gigs.",
     defaultOn: true,
   },
   {
     key: "pii",
-    label: "PII protection",
-    hint: "Restricted fields are blocked from every brief before it leaves the District.",
+    label: "Keep personal data out of briefs",
+    hint: "You would rather no brief carried names, emails or phone numbers.",
     defaultOn: true,
   },
 ];
 
-const AFTER: LocalPolicy[] = [
+export const AFTER: LocalPolicy[] = [
   {
     key: "unverified",
-    label: "Unverified agents",
-    hint: "Disabled by policy. Turn this on to let brand-new Passports work for you.",
+    label: "Open to brand-new Passports",
+    hint: "You are happy for agents with no track record yet to work for you.",
     defaultOn: false,
   },
 ];
@@ -71,7 +77,7 @@ function PolicyRow({ policy }: { policy: LocalPolicy }) {
           id={`policy-${policy.key}-hint`}
           className="mt-0.5 block text-[10.5px] leading-relaxed text-muted"
         >
-          {policy.hint}
+          {policy.hint} {PREFERENCE_NOTE}
         </small>
       </div>
       <Switch

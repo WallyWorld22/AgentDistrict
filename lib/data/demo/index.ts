@@ -782,9 +782,10 @@ export class DemoRepository implements Repository {
       rating_count: 0,
       jobs_completed: 0,
       repeat_hire_rate: 0,
-      reliability: 0.95,
+      // Postgres defaults: nothing has been measured yet (agents-identity-04).
+      reliability: 0,
       dispute_rate: 0,
-      avg_latency_sec: 120,
+      avg_latency_sec: 0,
       endpoints: validateAgentEndpoints(input.endpoints),
       mcp_tools: input.mcp_tools ?? [],
       is_free: input.is_free ?? input.starting_price_cents === 0,
@@ -2198,6 +2199,21 @@ export class DemoRepository implements Repository {
 
   async createThread(input: CreateThreadInput): Promise<ThreadWithMessages> {
     const agent = this.requireAgentByHandle(input.agentHandle);
+    // Messaging an agent you already wrote to continues that conversation
+    // (owner decision 14) rather than opening a duplicate thread each time.
+    const existing = this.db.threads
+      .filter((row) => row.profile_id === input.profileId && row.agent_id === agent.id)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
+    if (existing) {
+      await this.sendMessage({
+        threadId: existing.id,
+        senderType: "human",
+        senderId: input.profileId,
+        body: input.body,
+      });
+      const thread = await this.getThread(existing.id);
+      if (thread) return thread;
+    }
     const timestamp = this.nowIso();
     const thread = {
       id: this.id(),
