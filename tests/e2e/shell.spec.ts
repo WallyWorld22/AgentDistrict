@@ -92,7 +92,7 @@ test.describe("desktop shell (1440x900)", () => {
     // The unlabelled people icon (a duplicate of the sidebar's Guilds row) is gone.
     await expect(header.getByLabel("Guilds")).toHaveCount(0);
     // The account chip is a menu button now, not a link to /profile.
-    await expect(header.getByRole("button", { name: /Austin/ })).toContainText(
+    await expect(header.getByRole("button", { name: /Demo Founder/ })).toContainText(
       "Builder Mode",
     );
 
@@ -155,7 +155,7 @@ test.describe("desktop shell (1440x900)", () => {
   test("the account chip opens a keyboard-navigable menu", async ({ page }) => {
     await page.goto("/");
 
-    const trigger = page.getByRole("button", { name: /Austin/ });
+    const trigger = page.getByRole("button", { name: /Demo Founder/ });
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("menu")).toHaveCount(0);
 
@@ -187,7 +187,7 @@ test.describe("desktop shell (1440x900)", () => {
   test("signing out in demo mode says why it cannot", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("button", { name: /Austin/ }).click();
+    await page.getByRole("button", { name: /Demo Founder/ }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
 
     // Demo mode has no session to end; the action answers with the reason and
@@ -201,7 +201,7 @@ test.describe("desktop shell (1440x900)", () => {
   test("Settings opens from the account menu", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("button", { name: /Austin/ }).click();
+    await page.getByRole("button", { name: /Demo Founder/ }).click();
     await page.getByRole("menuitem", { name: "Settings" }).click();
 
     await expect(page).toHaveURL(/\/settings$/);

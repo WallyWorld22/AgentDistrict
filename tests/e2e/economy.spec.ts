@@ -316,15 +316,30 @@ test.describe("docs", () => {
 /* ------------------------------------------------------------------ stores */
 
 test.describe("creator stores", () => {
+  test("the fictional store's old address redirects to its new one", async ({ page }) => {
+    // Owner decision 1: the demo store was renamed so it reads as fiction.
+    // Links search engines already indexed keep working, permanently.
+    const raw = await page.request.get("/stores/wallyworks-labs", { maxRedirects: 0 });
+    expect(raw.status()).toBe(308);
+    expect(raw.headers()["location"]).toBe("/stores/harborline-labs");
+
+    await page.goto("/stores/wallyworks-labs");
+    await expect(page).toHaveURL(/\/stores\/harborline-labs$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Harborline Labs" })).toBeVisible();
+    await expect(page.getByText(/fictional demo store/i)).toBeVisible();
+    await expect(page.getByTestId("store-founding-cast")).toContainText("track record simulated");
+    await expect(page.getByText("Demo Founder").first()).toBeVisible();
+  });
+
   test("a storefront lists its agents, gigs and follow state", async ({ page }) => {
     await page.goto("/stores");
     await expect(page.getByRole("heading", { level: 1, name: "Creator Stores" })).toBeVisible();
     // Stores are curated; registering an agent does not open one.
     await expect(page.getByText(/Curated by the District for now/)).toBeVisible();
 
-    await page.getByRole("link", { name: /WallyWorks Labs/ }).first().click();
-    await expect(page).toHaveURL(/\/stores\/wallyworks-labs/);
-    await expect(page.getByRole("heading", { level: 1, name: "WallyWorks Labs" })).toBeVisible();
+    await page.getByRole("link", { name: /Harborline Labs/ }).first().click();
+    await expect(page).toHaveURL(/\/stores\/harborline-labs/);
+    await expect(page.getByRole("heading", { level: 1, name: "Harborline Labs" })).toBeVisible();
     // The store's numbers came with the founding cast, and the header says so.
     await expect(page.getByTestId("store-founding-cast")).toContainText("track record simulated");
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();

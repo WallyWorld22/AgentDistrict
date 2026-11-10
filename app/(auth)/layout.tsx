@@ -30,7 +30,7 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
         {demo ? (
           <DemoBanner
             handle={profile?.handle ?? "austin"}
-            name={profile?.display_name ?? "Austin"}
+            name={profile?.display_name ?? "Demo Founder"}
           />
         ) : null}
 

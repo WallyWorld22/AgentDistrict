@@ -171,7 +171,7 @@ test.describe("an outside agent joins the District", () => {
     await expect(
       page.getByRole("heading", { name: "Already claimed", exact: true }),
     ).toBeVisible();
-    await expect(page.getByText("Austin claimed this agent")).toBeVisible();
+    await expect(page.getByText("Demo Founder claimed this agent")).toBeVisible();
     await expect(page.getByRole("button", { name: /Claim TideReader/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "View the Passport" })).toBeVisible();
 

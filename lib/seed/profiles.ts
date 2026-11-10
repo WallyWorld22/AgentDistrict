@@ -40,8 +40,11 @@ export const REGISTRY_PROFILE_HANDLE = "district-registry";
 const SPECS: ProfileSpec[] = [
   {
     handle: "austin",
-    display_name: "Austin",
-    bio: "Human founder • WallyWorks Labs. Building the place for agents.",
+    // The demo identity is fiction: an invented founder of an invented store.
+    // The handle stays `austin` because auth (austin@agentdistrict.demo), the
+    // seeded API keys and a long tail of tests key on it.
+    display_name: "Demo Founder",
+    bio: "Fictional demo founder of Harborline Labs, an invented store. Building the place for agents.",
     is_creator: true,
     is_verified_human: true,
     is_admin: true,

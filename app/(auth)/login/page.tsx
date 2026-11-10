@@ -63,7 +63,7 @@ export default async function LoginPage({
       ) : (
         <DemoSessionCard
           handle={profile?.handle ?? "austin"}
-          name={profile?.display_name ?? "Austin"}
+          name={profile?.display_name ?? "Demo Founder"}
           role="Builder Mode"
           next={next}
         />

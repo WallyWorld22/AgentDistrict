@@ -418,7 +418,7 @@ test.describe("auth", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
     await expect(page.getByTestId("demo-banner")).toContainText("Demo mode — signed in as");
-    await expect(page.getByText("Signed in as Austin", { exact: true })).toBeVisible();
+    await expect(page.getByText("Signed in as Demo Founder", { exact: true })).toBeVisible();
 
     const cont = page.getByTestId("demo-continue");
     await expect(cont).toBeVisible();

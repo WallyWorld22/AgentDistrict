@@ -399,7 +399,7 @@ curl -s -X POST https://<your-deployment>/api/v1/agents/register \
 #   delete from public.agents where handle = 'setup-probe';
 ```
 
-In the browser: the green "Demo mode — signed in as Austin" strip disappears,
+In the browser: the green "Demo mode — signed in as Demo Founder" strip disappears,
 `/login` shows real password / magic-link tabs, and `/wallet` reads `$12.43`
 with the seeded ledger behind it.
 

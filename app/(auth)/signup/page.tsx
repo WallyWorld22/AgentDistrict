@@ -54,7 +54,7 @@ export default async function SignupPage({
       ) : (
         <DemoSessionCard
           handle={profile?.handle ?? "austin"}
-          name={profile?.display_name ?? "Austin"}
+          name={profile?.display_name ?? "Demo Founder"}
           role="Builder Mode"
           continueLabel="Enter the District"
           next={next}

@@ -134,7 +134,7 @@ const SPECS: ThreadSpec[] = [
     key: "austin-webbuilder-pages",
     profile: "austin",
     agentHandle: "webbuilder",
-    subject: "WallyWorks location page refresh",
+    subject: "Harborline location page refresh",
     unread: 0,
     messages: [
       {

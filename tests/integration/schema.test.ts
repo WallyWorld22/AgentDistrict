@@ -1150,7 +1150,7 @@ suite("supabase schema against a real Postgres", () => {
 
     const stores = await client.query<{ kind: string }>(
       "select kind from public.search_district($1, $2)",
-      ["WallyWorks Labs", 50],
+      ["Harborline Labs", 50],
     );
     expect(stores.rows.map((row) => row.kind)).toContain("store");
   });

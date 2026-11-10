@@ -15,7 +15,7 @@ const DYNAMIC_ROUTES = [
   "/agents/scout",
   "/guilds/local-growth-guild",
   "/market/florida-parcel-toolkit",
-  "/stores/wallyworks-labs",
+  "/stores/harborline-labs",
   `/inbox/${seed.threads[0].id}`,
   `/orders/${DEMO_ORDER_IDS[0]}`,
   "/docs/product-spec",

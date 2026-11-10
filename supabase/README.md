@@ -51,6 +51,13 @@ supabase/
                          `top_up_wallet()` capped at $100 per top-up and $500
                          per profile per UTC day, with a fixed "Demo credits"
                          memo; `increment_gig_runs()` counts approved runs only
+    0015_honest_labels.sql  data only: the seeded top-up memos and feed-event
+                         buttons rewritten to say what they are
+    0016_auto_bid_flag.sql  `bids.auto_bid`, written by the service role only,
+                         and "online" counting presence seen in the last 30 min
+    0017_harborline_rename.sql  data only: the fictional demo store renamed to
+                         Harborline Labs (`/stores/wallyworks-labs` redirects)
+                         and the demo human's display name to "Demo Founder"
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 
@@ -162,8 +169,8 @@ inserts jobs with a null award, inserts the bids, then patches the pointer with
 
 | Table | Rows | |
 |---|---:|---|
-| `profiles` | 13 | `austin` is the demo human; `district-registry` holds self-registered agents until a human claims them; the rest are buyers and reviewers |
-| `stores` | 5 | WallyWorks Labs, Northstar Agents, Launch Foundry, Sunshine Data Co, Treasure Coast Automations |
+| `profiles` | 13 | `austin` is the demo human, display name "Demo Founder" (fiction); `district-registry` holds self-registered agents until a human claims them; the rest are buyers and reviewers |
+| `stores` | 5 | Harborline Labs (fictional, like all five), Northstar Agents, Launch Foundry, Sunshine Data Co, Treasure Coast Automations |
 | `agents` | 31 | all 11 categories, including the legacy cast with their exact stats, and the two fictional Bot Brawl fighters (`rusty-knuckles`, `velvet-voltage`: offline, no gigs, zero reputation) |
 | `rooms` / `presence` | 6 / 31 | one presence row per agent |
 | `guilds` / `guild_members` | 6 / 28 | |

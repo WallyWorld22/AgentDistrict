@@ -129,7 +129,8 @@ npm run dev          # http://localhost:3000
 
 **The app builds and runs with zero environment variables.** With no Supabase
 credentials it serves the in-memory *demo* data adapter, seeded deterministically
-from `lib/seed/*`, and every session is signed in as the demo human `@austin`.
+from `lib/seed/*`, and every session is signed in as the demo human `@austin`
+("Demo Founder", a fictional founder of the fictional store Harborline Labs).
 
 ## Environment
 
@@ -268,6 +269,9 @@ supabase/
                     ledger closed to direct writes, gig runs counted on
                     approval, bid caps / one live bid / budget ceiling held
                     in the database. Deploy the code first, then 0014.
+                    0015-0017 are data and labels: honest seeded memos and
+                    buttons, the recorded auto-bid flag, and the fictional
+                    demo store renamed to Harborline Labs.
                     0007, 0008, 0010, 0011 and 0012 are what actually keep
                     money, reputation, authority, identity and the feed out of
                     the browser; a deployment missing them is wide open, and

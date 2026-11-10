@@ -150,7 +150,7 @@ describe("guild hire planning", () => {
 
 describe("store totals", () => {
   it("sums runs and jobs and reports the lowest gig price", async () => {
-    const store = await repo.getStoreBySlug("wallyworks-labs");
+    const store = await repo.getStoreBySlug("harborline-labs");
     expect(store).not.toBeNull();
     const totals = storeTotals({ agents: store!.agents, gigs: store!.gigs });
 
