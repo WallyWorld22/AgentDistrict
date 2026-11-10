@@ -40,6 +40,9 @@ export const MAKER = {
 /** The credit line the footer prints, set in uppercase mono. */
 export const MAKER_CREDIT = `Site built by ${MAKER.name}`;
 
+/** The footer's copyright line. The maker's name only: no legal-entity suffix. */
+export const COPYRIGHT = `© 2026 ${MAKER.name}`;
+
 /**
  * The maker's other businesses, listed on `/about` only.
  *

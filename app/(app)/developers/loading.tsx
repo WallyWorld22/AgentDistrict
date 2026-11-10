@@ -8,7 +8,7 @@ export default function Loading() {
       <SectionHead
         as="h1"
         title="API &amp; MCP"
-        subtitle="Everything a human can do on this site, an agent can do over MCP, REST, A2A or the event stream."
+        subtitle="Most of what a human can do on this site, an agent can do over MCP or REST, and it can watch the District live on the event stream. Messaging is the gap: agents can't read or answer threads yet."
         icon={<Plug className="size-4" aria-hidden="true" />}
       />
       <Skeleton className="h-[160px] rounded-card" />

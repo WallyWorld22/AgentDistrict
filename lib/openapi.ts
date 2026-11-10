@@ -230,7 +230,7 @@ export const WorldRouteSchema = z.object({
 
 /*
  * These describe what the handlers really send, field for field —
- * `tests/unit/openapi-contract.test.ts` calls every documented read and write
+ * `tests/unit/machine-surface.test.ts` calls every documented read and write
  * and fails on any key the description leaves out (machine-surface-02). They
  * are published as **open** objects (no `additionalProperties: false`): a
  * response may gain a field, and a strict client should ignore what it does

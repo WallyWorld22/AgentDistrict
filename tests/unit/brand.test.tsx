@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { Metadata } from "next";
 
-import { MAKER, MAKER_BUSINESSES, MAKER_CREDIT } from "@/lib/site";
+import { COPYRIGHT, MAKER, MAKER_BUSINESSES, MAKER_CREDIT } from "@/lib/site";
 import { DEFAULT_SOCIAL_IMAGE, socialMetadata } from "@/lib/seo/social";
 import {
   MAKER_ID,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/seo/schema";
 import { serializeJsonLd } from "@/components/seo/json-ld";
 import { FOOTER_LINKS, SiteFooter } from "@/components/shell/site-footer";
+import { LEGAL_DATE, LEGAL_DATE_ISO, LegalPage } from "@/components/legal/legal-page";
 
 /**
  * Batch 7: the Wally Works credit, the share metadata every public page
@@ -210,6 +211,16 @@ describe("the site-wide footer (brand-01)", () => {
     // The other businesses belong on /about only.
     expect(footer.textContent).not.toMatch(/Roofmetry|Chaos HQ/);
   });
+
+  it("carries the copyright line in the maker's name, with no entity suffix", () => {
+    render(<SiteFooter />);
+    const footer = screen.getByTestId("site-footer");
+    expect(within(footer).getByTestId("site-copyright").textContent).toBe("© 2026 Wally Works");
+    expect(COPYRIGHT).toBe("© 2026 Wally Works");
+    expect(footer.textContent).not.toMatch(/LLC|WallyWorks/);
+    // The credit line is unchanged beside it.
+    expect(within(footer).getByRole("link", { name: /site built by wally works/i })).toBeTruthy();
+  });
 });
 
 describe("the machine documents (brand-06)", () => {
@@ -244,11 +255,33 @@ describe("the machine documents (brand-06)", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists /about and holds the draft legal pages back", async () => {
+  it("lists /about and the approved legal pages", async () => {
     const { default: sitemap } = await import("@/app/sitemap");
     const urls = (await sitemap()).map((entry) => entry.url);
     expect(urls).toContain(`${ORIGIN}/about`);
-    expect(urls).not.toContain(`${ORIGIN}/privacy`);
-    expect(urls).not.toContain(`${ORIGIN}/terms`);
+    expect(urls).toContain(`${ORIGIN}/privacy`);
+    expect(urls).toContain(`${ORIGIN}/terms`);
+  });
+});
+
+describe("the legal pages (approved text)", () => {
+  it.each([
+    ["/privacy", "@/app/(app)/privacy/page"],
+    ["/terms", "@/app/(app)/terms/page"],
+  ])("%s is indexable and its description no longer says draft", async (_path, module) => {
+    const { metadata } = (await import(/* @vite-ignore */ module)) as { metadata: Metadata };
+    // No page-level robots: the page inherits the root layout's index, follow.
+    expect(metadata.robots).toBeUndefined();
+    expect(String(metadata.description)).not.toMatch(/draft|approval/i);
+  });
+
+  it("shows a plain last-updated line, with no draft label", () => {
+    render(
+      <LegalPage title="Privacy" intro={<p>Intro.</p>} sections={[{ heading: "A", body: "B" }]} />,
+    );
+    const updated = screen.getByTestId("legal-updated");
+    expect(updated.textContent).toBe(`Last updated: ${LEGAL_DATE}`);
+    expect(updated.querySelector("time")?.getAttribute("dateTime")).toBe(LEGAL_DATE_ISO);
+    expect(document.body.textContent).not.toMatch(/draft|awaiting/i);
   });
 });

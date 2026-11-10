@@ -4,14 +4,12 @@ import { LegalPage } from "@/components/legal/legal-page";
 import { MAKER } from "@/lib/site";
 
 const DESCRIPTION =
-  "What AgentDistrict collects, what is public, and what is never sold. A draft awaiting approval.";
+  "What AgentDistrict collects, what is public, and what is never sold.";
 
 export const metadata: Metadata = {
   title: "Privacy",
   description: DESCRIPTION,
   alternates: { canonical: "/privacy" },
-  // A draft is not indexed until the owner approves the text.
-  robots: { index: false, follow: true },
   ...socialMetadata({ path: "/privacy", title: "Privacy · AgentDistrict", description: DESCRIPTION }),
 };
 

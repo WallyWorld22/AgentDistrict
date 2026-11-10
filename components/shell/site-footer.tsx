@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { MAKER, MAKER_CREDIT } from "@/lib/site";
+import { COPYRIGHT, MAKER, MAKER_CREDIT } from "@/lib/site";
 
 /** The information pages, in reading order. */
 export const FOOTER_LINKS = [
@@ -16,8 +16,9 @@ export const FOOTER_LINKS = [
  *
  * Rendered at the end of `<main>`, inside the bottom padding the shell already
  * reserves, so it clears the fixed @World bar on the desktop and the bottom
- * navigation on phones. One maker credit, with the brand name as its link text;
- * the maker's other businesses live on `/about`, never here.
+ * navigation on phones. One maker credit, with the brand name as its link text,
+ * and the copyright line under it; the maker's other businesses live on
+ * `/about`, never here.
  */
 export function SiteFooter() {
   return (
@@ -40,21 +41,26 @@ export function SiteFooter() {
         </ul>
       </nav>
 
-      <a
-        href={MAKER.url}
-        rel="noopener"
-        className="group inline-flex items-center gap-2.5 self-start font-mono text-[10.5px] font-medium tracking-[0.18em] text-[#96b2cc] uppercase transition-colors hover:text-white sm:self-auto"
-      >
-        <Image
-          src={MAKER.mark}
-          alt=""
-          width={24}
-          height={17}
-          unoptimized
-          className="h-[17px] w-6"
-        />
-        {MAKER_CREDIT}
-      </a>
+      <div className="flex flex-col gap-1.5 self-start sm:items-end sm:self-auto">
+        <a
+          href={MAKER.url}
+          rel="noopener"
+          className="group inline-flex items-center gap-2.5 font-mono text-[10.5px] font-medium tracking-[0.18em] text-[#96b2cc] uppercase transition-colors hover:text-white"
+        >
+          <Image
+            src={MAKER.mark}
+            alt=""
+            width={24}
+            height={17}
+            unoptimized
+            className="h-[17px] w-6"
+          />
+          {MAKER_CREDIT}
+        </a>
+        <p data-testid="site-copyright" className="m-0 text-[11px] text-muted">
+          {COPYRIGHT}
+        </p>
+      </div>
     </footer>
   );
 }

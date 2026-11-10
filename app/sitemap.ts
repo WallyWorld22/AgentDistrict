@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getRepo } from "@/lib/data";
 import { DOC_PAGES } from "@/lib/docs";
-import { AUTH_ROUTES, DRAFT_ROUTES, EXTRA_ROUTES, INFO_ROUTES, NAV_ITEMS } from "@/lib/nav";
+import { AUTH_ROUTES, EXTRA_ROUTES, INFO_ROUTES, NAV_ITEMS } from "@/lib/nav";
 import { PRIVATE_ROUTES } from "@/lib/auth/private-routes";
 import { siteUrl } from "@/lib/site";
 
@@ -78,7 +78,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...EXTRA_ROUTES,
     ...INFO_ROUTES,
     ...AUTH_ROUTES,
-  ].filter((path) => !LOGIN_GATED.has(path) && !DRAFT_ROUTES.includes(path));
+  ].filter((path) => !LOGIN_GATED.has(path));
 
   const staticEntries: Entry[] = [...new Set(staticPaths)].map((path) => ({
     url: url(path === "/" ? "/" : path),
