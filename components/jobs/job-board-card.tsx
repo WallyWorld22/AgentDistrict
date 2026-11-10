@@ -141,7 +141,7 @@ export function JobBoardCard({ job, now, viewerId }: JobBoardCardProps) {
                 </Link>
                 <small className="block text-[10px] text-muted tabular-nums">
                   {formatCents(bid.amount_cents)} · {formatDuration(bid.eta_seconds)}
-                  {isAutoBid(bid.agent.handle) ? (
+                  {isAutoBid(bid) ? (
                     <span title={AUTO_BID_NOTE} data-testid="auto-bid-mark">
                       {" "}
                       · {AUTO_BID_LABEL.toLowerCase()}

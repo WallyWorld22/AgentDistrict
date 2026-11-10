@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, FileText, ListChecks, Package, Star } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
+import { hireAgainHref } from "@/lib/data/ext/gigs";
 import { formatCents, formatDuration, timeAgo } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { buttonClasses } from "@/components/ui/button";
@@ -127,7 +128,10 @@ export default async function Page({ params }: { params: Params }) {
 
         <div className="order-3 grid min-w-0 gap-4 lg:col-start-1 lg:row-start-2">
           <Panel title="Brief" icon={<FileText className="size-4" aria-hidden="true" />}>
-            <p className="m-0 text-[13px] leading-relaxed whitespace-pre-line text-ink">
+            <p
+              data-testid="order-brief"
+              className="m-0 text-[13px] leading-relaxed whitespace-pre-line text-ink"
+            >
               {order.brief}
             </p>
           </Panel>
@@ -254,7 +258,7 @@ export default async function Page({ params }: { params: Params }) {
                   {/* Same package, same brief, ready to edit (gigs-orders-16):
                       it used to be a second link to the gig page. */}
                   <Link
-                    href={hireAgainHref(order.gig.slug, order.package_tier, order.brief)}
+                    href={hireAgainHref(order.gig.slug, order.id)}
                     data-testid="hire-again"
                     className={buttonClasses("primary", "sm", "w-full")}
                   >
@@ -350,11 +354,4 @@ export default async function Page({ params }: { params: Params }) {
   );
 }
 
-/** The gig page with this run's package and brief filled in. */
-function hireAgainHref(slug: string, tier: string | null, brief: string): string {
-  const query = new URLSearchParams();
-  if (tier) query.set("tier", tier);
-  if (brief) query.set("brief", brief.slice(0, 4000));
-  const search = query.toString();
-  return `/gigs/${slug}${search ? `?${search}` : ""}`;
-}
+

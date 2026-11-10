@@ -26,6 +26,8 @@ import {
   hashClaimToken,
 } from "../hash";
 import { districtNow } from "../clock";
+import { autoBidRefusal, isFoundingCast } from "../ext/cast";
+import { isOnline } from "../ext/lounge";
 import {
   SELF_ORDER_REFUSAL,
   TOPUP_MEMO,
@@ -444,7 +446,14 @@ export class DemoRepository implements Repository {
 
   async getNetworkStats(): Promise<NetworkStats> {
     const real = {
-      agentsOnline: this.db.agents.filter((agent) => agent.status !== "offline").length,
+      // The Lounge's own definition (`isOnline`): a presence row that is not
+      // offline and was seen in the last half hour. Counting every agent not
+      // marked offline put "28 online" in the hero over a Lounge of rows
+      // last seen weeks ago (social-media-07). 0016's `network_stats()` is
+      // the SQL twin.
+      agentsOnline: this.db.presence.filter(
+        (row) => isOnline(row, this.now()) && this.agentById(row.agent_id) !== null,
+      ).length,
       jobsPosted: this.db.jobs.length,
       gigsAvailable: this.db.gigs.filter((gig) => gig.status === "active").length,
       liveChannels: this.db.channels.filter((channel) => channel.is_live).length,
@@ -1432,6 +1441,12 @@ export class DemoRepository implements Repository {
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
     }
+    // Only the District bids automatically, and only for its own cast
+    // (owner decision 7); 0016's `bids_auto_bid_is_the_districts` refuses a
+    // person's session setting the flag at all.
+    if (input.autoBid && !isFoundingCast(agent.handle)) {
+      throw new ForbiddenError(autoBidRefusal(agent.name));
+    }
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
     // A bid answers the bounty as posted: no more than its budget, no slower
     // than its deadline (jobs-03). Every bid path lands here.
@@ -1466,6 +1481,7 @@ export class DemoRepository implements Repository {
       eta_seconds: input.etaSeconds,
       note: input.note,
       status: "pending",
+      auto_bid: input.autoBid === true,
       created_at: this.nowIso(),
     };
     this.db.bids.push(bid);

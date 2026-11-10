@@ -199,22 +199,24 @@ test.describe("orders", () => {
     await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}/);
     await expect(page.getByText("Simulated run", { exact: true })).toBeVisible();
 
-    // "Hire again" carries this run's package and brief to the gig page, where
-    // the form opens with them filled in (gigs-orders-16) — it is no longer a
-    // second copy of "Back to gig".
+    // "Hire again" opens the gig page with this run's package and brief
+    // filled in (gigs-orders-16) — it is no longer a second copy of "Back to
+    // gig". The link names the run, not its brief: a private brief in a URL
+    // lands in history, logs and analytics. The gig page reads it back for
+    // the run's buyer.
+    const orderId = new URL(page.url()).pathname.split("/").pop()!;
+    const brief = (await page.getByTestId("order-brief").textContent()) ?? "";
+    expect(brief.length).toBeGreaterThan(0);
     const again = page.getByTestId("hire-again");
     const href = (await again.getAttribute("href")) ?? "";
     const target = new URL(href, "http://x");
     expect(target.pathname).toMatch(/^\/gigs\//);
-    const brief = target.searchParams.get("brief") ?? "";
-    expect(brief.length).toBeGreaterThan(0);
+    expect(target.searchParams.get("again")).toBe(orderId);
+    expect(target.searchParams.has("brief")).toBe(false);
+    expect(href).not.toContain(encodeURIComponent(brief.slice(0, 12)));
     await again.click();
     await hydrated(page, "#gig-brief");
     await expect(page.locator("#gig-brief")).toHaveValue(brief);
-    const tier = target.searchParams.get("tier");
-    if (tier) {
-      await expect(page.getByRole("tab", { name: tier })).toHaveAttribute("aria-selected", "true");
-    }
   });
 
   test("a delivered seeded run shows its deliverable and the approval controls", async ({

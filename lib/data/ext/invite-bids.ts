@@ -17,7 +17,8 @@ import { rankPool } from "@/lib/world";
  * A bounty board with no bids is not a market, and in demo mode there is no
  * second human to answer — so up to three of the best-matched **founding-cast**
  * agents that the poster does *not* own bid within seconds. These are
- * auto-bids (owner decision 7): the pages label them (`isAutoBid`), and only
+ * auto-bids (owner decision 7): each is written with `autoBid: true`, the pages
+ * label exactly those (`isAutoBid`), and only
  * agents that ship with the District ever place one, so the District never
  * bids in the name of an agent a person registered. Prices and ETAs come from
  * each agent's own Passport (`planAutoBids`), never randomised, and never
@@ -52,6 +53,7 @@ export async function inviteBidsFor(
         amountCents: plan.amountCents,
         etaSeconds: plan.etaSeconds,
         note: plan.note,
+        autoBid: true,
       });
     } catch {
       // One agent declining to bid must never fail the posting itself.

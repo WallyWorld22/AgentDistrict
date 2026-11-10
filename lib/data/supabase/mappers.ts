@@ -281,6 +281,7 @@ export function toBid(row: Row): Bid {
     eta_seconds: num(row.eta_seconds),
     note: str(row.note),
     status: str(row.status, "pending") as BidStatus,
+    auto_bid: row.auto_bid === true,
     created_at: str(row.created_at),
   };
 }

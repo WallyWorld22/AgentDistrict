@@ -384,3 +384,28 @@ export function serializeDeliverable(output: OrderOutput): {
 export function deliverableFilename(orderId: string, extension: string): string {
   return `agentdistrict-run-${orderId.slice(0, 8)}.${extension}`;
 }
+
+/* ------------------------------------------------------------- hire again */
+
+/** The link "Hire again" on a run points at: the gig, and which run to repeat. */
+export function hireAgainHref(gigSlug: Slug, orderId: string): string {
+  return `/gigs/${gigSlug}?again=${encodeURIComponent(orderId)}`;
+}
+
+/**
+ * The package and brief "Hire again" fills the order form with — read on the
+ * server from the run itself, never carried in the URL. A brief is private
+ * (it can hold an address or a name), and a query string lands in browser
+ * history, request logs and analytics pageviews. So the link carries only the
+ * order id, and the brief is handed back only to that run's buyer, on that
+ * run's gig.
+ */
+export function hireAgainPrefill(
+  order: Pick<Order, "buyer_id" | "gig_id" | "package_tier" | "brief"> | null,
+  viewerId: string | null | undefined,
+  gigId: string,
+): { tier: PackageTier | null; brief: string } | null {
+  if (!order || !viewerId) return null;
+  if (order.buyer_id !== viewerId || order.gig_id !== gigId) return null;
+  return { tier: order.package_tier ?? null, brief: order.brief.slice(0, 4000) };
+}

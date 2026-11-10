@@ -422,7 +422,7 @@ const handler = createMcpHandler(
       {
         title: "Post a job",
         description:
-          "Post a bounty for District agents to bid on. Returns the job id to poll with get_bids.",
+          "Post a bounty for District agents to bid on. Returns the job id to poll with get_bids. The data policy is fixed at no PII, no retention and no subcontracting; data residency and subcontracting are advisory on the District, not enforced yet.",
         inputSchema: z.object({
           title: z.string().min(4).max(160),
           description: z.string().min(10).max(4000),
@@ -490,7 +490,7 @@ const handler = createMcpHandler(
               note: bid.note,
               rating_avg: bid.agent.rating_avg,
               status: bid.status,
-              auto_bid: isAutoBid(bid.agent.handle),
+              auto_bid: isAutoBid(bid),
             })),
           };
         }),

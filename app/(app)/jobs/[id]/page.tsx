@@ -100,7 +100,7 @@ export default async function Page({
   const notified = compatibleAgents(roster, job).filter(
     (agent) => agent.owner_id !== job.poster_id,
   ).length;
-  const autoBids = job.bids.filter((bid) => isAutoBid(bid.agent.handle)).length;
+  const autoBids = job.bids.filter((bid) => isAutoBid(bid)).length;
   const winner = job.bids.find((bid) => bid.status === "accepted") ?? null;
   const pending = job.bids.filter((bid) => bid.status === "pending");
   const canAward = Boolean(isPoster) && job.status === "open";
@@ -284,6 +284,7 @@ export default async function Page({
                 note: bid.note,
                 status: bid.status,
                 placedAgo: timeAgo(bid.created_at, now),
+                auto_bid: bid.auto_bid,
                 guild: bid.guild ? { name: bid.guild.name } : null,
                 agent: {
                   handle: bid.agent.handle,

@@ -10,6 +10,7 @@ import {
   fightCard,
   fighterIds,
   formatBoutTime,
+  withScheduleLabels,
 } from "@/lib/data/ext/fight-night";
 import {
   formatCountdown,
@@ -381,6 +382,42 @@ describe("the fight card", () => {
     expect(channelScheduleLabel(schedule, over)).toBe("Season 1 complete");
     // A channel with no league keeps its own schedule.
     expect(channelScheduleLabel("Weekdays", null)).toBe("Weekdays");
+  });
+
+  it("calls the season over once every bell has rung, even before a page records the results", async () => {
+    // Nobody has opened Bot Brawl since the last bout: rung, not yet decided.
+    const repo = createDemoRepository({ now: () => AFTER_SEASON, dataset: structuredClone(seed) });
+    const undecided = (await repo.listBouts({ channelId: FIGHT_CHANNEL_ID })).map((bout) => ({
+      ...bout,
+      result: null,
+    }));
+    const card = fightCard(undecided, AFTER_SEASON)!;
+    expect(card.decidedCount).toBe(0);
+    expect(channelScheduleLabel("Season 1 · Fridays, 9pm ET", card)).toBe("Season 1 complete");
+  });
+
+  it("labels the league on every channel list, not only on its own page (decision 15)", async () => {
+    // The /tv grid, "Up next" and "More like this" all print `schedule`.
+    const repo = createDemoRepository({ now: () => AFTER_SEASON, dataset: structuredClone(seed) });
+    const channels = await repo.listChannels({ limit: 40 });
+    const brawl = channels.find((channel) => channel.id === FIGHT_CHANNEL_ID)!;
+    expect(brawl.schedule).toMatch(/Fridays/);
+
+    const over = withScheduleLabels(channels, await repo.listBouts(), AFTER_SEASON);
+    expect(over.find((channel) => channel.id === FIGHT_CHANNEL_ID)!.schedule).toBe(
+      "Season 1 complete",
+    );
+    // Every other channel keeps its own schedule, untouched.
+    for (const [index, channel] of over.entries()) {
+      if (channel.id === FIGHT_CHANNEL_ID) continue;
+      expect(channel).toBe(channels[index]);
+    }
+
+    // While the season runs, the weekly slot is real and stays.
+    const running = withScheduleLabels(channels, await repo.listBouts(), SEED_EPOCH_MS);
+    expect(running.find((channel) => channel.id === FIGHT_CHANNEL_ID)!.schedule).toBe(
+      brawl.schedule,
+    );
   });
 
   it("collects the fighters, so the page can keep them off the hire panel", async () => {

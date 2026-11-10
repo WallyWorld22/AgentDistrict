@@ -10,6 +10,7 @@ import {
   currentSeason,
   fightCard,
   fighterIds,
+  withScheduleLabels,
   type FightCard,
 } from "@/lib/data/ext/fight-night";
 import { chatTranscript, raceSecondsRemaining, relatedChannels } from "@/lib/data/ext/lounge";
@@ -57,11 +58,12 @@ export default async function Page({ params }: { params: Params }) {
   const channel = await repo.getChannelBySlug(slug);
   if (!channel) notFound();
 
-  const [profile, competitions, everyChannel, league] = await Promise.all([
+  const [profile, competitions, listed, league, everyBout] = await Promise.all([
     getCurrentProfile(),
     channel.competition ? repo.listCompetitions() : Promise.resolve([]),
     repo.listChannels({ limit: 40 }),
     readLeague(channel.id),
+    readEveryBout(),
   ]);
 
   // A Fight League fighter is a character, not a service: it sits on the stage
@@ -78,6 +80,9 @@ export default async function Page({ params }: { params: Params }) {
   const nowIso = districtNowIso();
   const card: FightCard | null = league ? fightCard(league.bouts, now) : null;
   const schedule = channelScheduleLabel(channel.schedule, card);
+  // "Up next" and "More like this" print other channels' schedules: a league
+  // whose season is over says so there too, not only on its own page.
+  const everyChannel = withScheduleLabels(listed, everyBout, now);
   const race = competitions.find((entry) => entry.id === channel.competition?.id) ?? null;
   const related = relatedChannels(channel, everyChannel);
   const transcript = chatTranscript(channel.chat, 40);
@@ -273,6 +278,16 @@ type LeagueRead = {
  * still read and a due bout shows as pending; if reading fails (a database
  * without 0012, say), the page renders without the section.
  */
+/** Every bout, for the schedule labels on the channel lists. A failed read labels nothing. */
+async function readEveryBout(): Promise<BoutWithResult[]> {
+  try {
+    return await getRepo().listBouts();
+  } catch (error) {
+    console.error("[tv] reading the bouts for the schedule labels failed", error);
+    return [];
+  }
+}
+
 async function readLeague(channelId: string): Promise<LeagueRead | null> {
   const repo = getRepo();
   try {

@@ -22,6 +22,7 @@ import {
   hashClaimToken,
   sha256Hex,
 } from "../hash";
+import { autoBidRefusal, isFoundingCast } from "../ext/cast";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import {
@@ -1563,6 +1564,11 @@ export class SupabaseRepository implements Repository {
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
     }
+    // See the demo adapter (owner decision 7); 0016 also refuses the flag from
+    // anyone but the service role.
+    if (input.autoBid && !isFoundingCast(agent.handle)) {
+      throw new ForbiddenError(autoBidRefusal(agent.name));
+    }
     // See the demo adapter: bidding on your own bounty is free reputation.
     // `bids_insert_agent_owner` (0008) refuses it in the database too.
     if (job.poster_id === agent.owner_id) {
@@ -1600,6 +1606,9 @@ export class SupabaseRepository implements Repository {
           eta_seconds: input.etaSeconds,
           note: input.note,
           status: "pending",
+          // Only ever sent when true: a database without 0016 then still
+          // takes every bid a person places.
+          ...(input.autoBid ? { auto_bid: true } : {}),
         })
         .select("*")
         .maybeSingle(),

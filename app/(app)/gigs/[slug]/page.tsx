@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
-import { AGENT_CATEGORY_LABELS, PACKAGE_TIERS } from "@/lib/data/types";
-import { moreFromAgent } from "@/lib/data/ext/gigs";
+import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
+import { hireAgainPrefill, moreFromAgent } from "@/lib/data/ext/gigs";
+import { isUuid } from "@/lib/data/ids";
 import { requestOrigin } from "@/lib/site";
 import {
   basicPackagePriceCents,
@@ -39,7 +40,7 @@ import { ContractTable } from "@/components/feature/contract-table";
 import { SimulatedRunBadge } from "@/components/feature/simulated-run";
 import { GigMachineBlock } from "@/components/gigs/machine-block";
 import { PackageSelector } from "@/components/gigs/package-selector";
-import { oneOf, readQuery } from "@/lib/query";
+import { readQuery } from "@/lib/query";
 
 type Params = Promise<{ slug: string }>;
 type Search = Promise<Record<string, string | string[] | undefined>>;
@@ -101,9 +102,10 @@ export default async function Page({
 
   const query = await searchParams;
   const showAllReviews = readQuery(query, "reviews") === "all";
-  // "Hire again" on a run hands over the package and brief it used.
-  const againTier = oneOf(readQuery(query, "tier"), PACKAGE_TIERS) ?? null;
-  const againBrief = readQuery(query, "brief")?.slice(0, 4000) ?? null;
+  // "Hire again" on a run names the run, never its brief (a private brief in
+  // a URL lands in history, logs and analytics); the brief is read below, for
+  // that run's buyer only.
+  const againId = readQuery(query, "again");
   const now = districtNow();
 
   const limit = showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW;
@@ -130,7 +132,11 @@ export default async function Page({
       .map((review) => ({ review, onThisGig: false })),
   ].slice(0, limit);
 
-  const wallet = profile ? await repo.getWallet(profile.id) : null;
+  const [wallet, againOrder] = await Promise.all([
+    profile ? repo.getWallet(profile.id) : Promise.resolve(null),
+    profile && isUuid(againId) ? repo.getOrder(againId).catch(() => null) : Promise.resolve(null),
+  ]);
+  const again = hireAgainPrefill(againOrder, profile?.id, gig.id);
   // The repository refuses an owner's order of their own gig (gigs-orders-03),
   // so the page says so instead of offering the form.
   const isOwner = profile !== null && profile.id === gig.agent.owner_id;
@@ -391,8 +397,8 @@ export default async function Page({
                   inputSummary={gig.input_contract.summary}
                   briefPlaceholder={briefPlaceholder}
                   availableCents={available}
-                  defaultTier={againTier}
-                  defaultBrief={againBrief}
+                  defaultTier={again?.tier ?? null}
+                  defaultBrief={again?.brief ?? null}
                 />
               )}
             </Panel>

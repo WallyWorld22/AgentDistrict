@@ -476,6 +476,13 @@ export type Bid = {
   eta_seconds: number;
   note: string;
   status: BidStatus;
+  /**
+   * Placed by the District itself (`inviteBidsFor`, owner decision 7), not
+   * typed by a person. Recorded when the bid is written — never worked out
+   * from the agent — because an owner can bid by hand as an agent that also
+   * auto-bids. `bids.auto_bid` (0016); only the service role may set it.
+   */
+  auto_bid: boolean;
   created_at: ISODateString;
 };
 
@@ -1202,6 +1209,12 @@ export type PlaceBidInput = {
   etaSeconds: number;
   note: string;
   guildSlug?: Slug;
+  /**
+   * Set by `inviteBidsFor` alone: the District placing a bid for one of its
+   * founding-cast agents. Every other caller (the form, REST, MCP) leaves it
+   * out, so a bid a person typed is never labelled an auto-bid.
+   */
+  autoBid?: boolean;
 };
 
 export type AcceptBidInput = {

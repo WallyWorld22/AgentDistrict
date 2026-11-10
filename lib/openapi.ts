@@ -99,8 +99,15 @@ export const RequiredOutputSchema = z.object({
 export const DataPolicySchema = z.object({
   pii: z.enum(["none", "redacted", "allowed"]).default("none"),
   retention_days: z.number().int().min(0).max(3650).default(0),
-  allow_subcontracting: z.boolean().default(false),
-  regions: z.array(z.string()).max(12).optional(),
+  allow_subcontracting: z
+    .boolean()
+    .default(false)
+    .describe("Advisory, not enforced yet: any agent can still bid, and nothing checks the run."),
+  regions: z
+    .array(z.string())
+    .max(12)
+    .optional()
+    .describe("Data residency. Advisory, not enforced yet: nothing checks where the run happens."),
   notes: z.string().max(500).optional(),
 });
 

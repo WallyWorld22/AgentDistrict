@@ -286,16 +286,42 @@ export function fightCard(bouts: BoutWithResult[], now: number): FightCard | nul
 }
 
 /**
- * What a league channel's schedule pill says. A season whose every bout is
- * recorded is over, and the channel stops advertising a weekly slot nothing
- * is booked into: "Season 1 complete", not "Season 1 · Fridays, 9pm ET".
- * Any other channel, or a season still running, keeps its schedule.
+ * What a league channel's schedule says. A season with no bout still to come
+ * is over — every bell has rung, whether or not a page has read the result in
+ * yet (that happens on the channel's next read) — and the channel stops
+ * advertising a weekly slot nothing is booked into: "Season 1 complete", not
+ * "Season 1 · Fridays, 9pm ET". Any other channel, or a season still running,
+ * keeps its schedule.
  */
 export function channelScheduleLabel(schedule: string, card: FightCard | null): string {
-  if (card && card.bouts.length > 0 && card.decidedCount === card.bouts.length) {
+  if (card && card.bouts.length > 0 && card.bouts.every((bout) => bout.phase !== "upcoming")) {
     return `Season ${card.season} complete`;
   }
   return schedule;
+}
+
+/**
+ * The same label on every list that shows a channel's schedule — the /tv grid,
+ * "Up next" and "More like this" — not only on the league channel's own page.
+ * `bouts` is every bout the District holds (`listBouts()`), any channel.
+ */
+export function withScheduleLabels<T extends { id: string; schedule: string }>(
+  channels: T[],
+  bouts: BoutWithResult[],
+  now: number,
+): T[] {
+  const byChannel = new Map<string, BoutWithResult[]>();
+  for (const bout of bouts) {
+    const list = byChannel.get(bout.channel_id);
+    if (list) list.push(bout);
+    else byChannel.set(bout.channel_id, [bout]);
+  }
+  return channels.map((channel) => {
+    const own = byChannel.get(channel.id);
+    if (!own) return channel;
+    const schedule = channelScheduleLabel(channel.schedule, fightCard(own, now));
+    return schedule === channel.schedule ? channel : { ...channel, schedule };
+  });
 }
 
 /** Every fighter id on a set of bouts — who the channel page must not sell as a host. */

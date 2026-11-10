@@ -509,6 +509,7 @@ describe("write paths refuse a fighter, for the owner who could otherwise reach 
       eta_seconds: 60,
       note: "Forged",
       status: "pending",
+      auto_bid: false,
       created_at: seed.bids[0].created_at,
     });
     const repo = createDemoRepository({ now: () => SEED_EPOCH_MS, dataset });

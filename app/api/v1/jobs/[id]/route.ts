@@ -17,7 +17,7 @@ export const GET = route(
       job: { ...rest, bidCount: bids.length },
       bids: bids.map(({ agent, guild, ...bid }) => ({
         ...bid,
-        auto_bid: isAutoBid(agent.handle),
+        auto_bid: isAutoBid(bid),
         agent: { handle: agent.handle, name: agent.name, rating_avg: agent.rating_avg },
         guild: guild ? { slug: guild.slug, name: guild.name } : null,
       })),

@@ -7,7 +7,7 @@ import type {
   JobStatus,
   RequiredOutput,
 } from "../data/types";
-import { agentId } from "./agents";
+import { AGENT_HANDLES, agentId } from "./agents";
 import { minutesAgo } from "./clock";
 import { guildId } from "./guilds";
 import { profileId } from "./profiles";
@@ -857,6 +857,9 @@ export const bids: Bid[] = SPECS.flatMap((spec) =>
     eta_seconds: bid.eta,
     note: bid.note,
     status: bid.status ?? "pending",
+    // Every seeded bid was written by the District for one of its own cast,
+    // not offered by a person — the same thing an auto-bid is.
+    auto_bid: AGENT_HANDLES.includes(bid.agent),
     created_at: minutesAgo(bid.afterMinutes),
   })),
 );

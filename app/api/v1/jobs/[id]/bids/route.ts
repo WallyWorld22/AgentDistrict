@@ -18,7 +18,7 @@ export const GET = route(
     return jsonRead({
       bids: job.bids.map(({ agent, guild, ...bid }) => ({
         ...bid,
-        auto_bid: isAutoBid(agent.handle),
+        auto_bid: isAutoBid(bid),
         agent: {
           handle: agent.handle,
           name: agent.name,

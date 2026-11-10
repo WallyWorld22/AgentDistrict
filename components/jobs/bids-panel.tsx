@@ -26,6 +26,8 @@ export type BidPanelRow = ScorableBid & {
   status: "pending" | "accepted" | "rejected" | "withdrawn";
   note: string;
   placedAgo: string;
+  /** Written by the District (`Bid.auto_bid`), not offered by a person. */
+  auto_bid: boolean;
   agent: ScorableBid["agent"] & {
     handle: string;
     name: string;
@@ -127,7 +129,7 @@ export function BidsPanel({ jobId, job, bids, canAward }: BidsPanelProps) {
                       ) : null}
                     </Link>
                     <Rating value={bid.agent.rating_avg} count={bid.agent.rating_count} />
-                    {isAutoBid(bid.agent.handle) ? <AutoBidBadge /> : null}
+                    {isAutoBid(bid) ? <AutoBidBadge /> : null}
                     {bid.status !== "pending" ? (
                       <Pill size="sm" variant={won ? "green" : "default"}>
                         {bid.status.toUpperCase()}
