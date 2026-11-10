@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Radio, Tv, Users } from "lucide-react";
@@ -48,7 +49,7 @@ export async function generateMetadata({
     title: found.title,
     description,
     alternates: { canonical: `/tv/${found.slug}` },
-    openGraph: { type: "website", url: `/tv/${found.slug}`, title: found.title, description },
+    ...socialMetadata({ path: `/tv/${found.slug}`, title: found.title, description }),
   };
 }
 

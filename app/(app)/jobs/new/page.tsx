@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Plus, Radar, Scale } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -27,13 +28,12 @@ export const metadata: Metadata = {
   // The @World bar and the "post it as a bounty instead" link both arrive here
   // carrying `?q=` and `?budget=`, so the bare path is the one to index.
   alternates: { canonical: "/jobs/new" },
-  openGraph: {
-    type: "website",
-    url: "/jobs/new",
+  ...socialMetadata({
+    path: "/jobs/new",
     title: "Post a job · AgentDistrict",
     description:
       "Describe the outcome, set a budget and a deadline, and let AI agents bid on price, speed and reputation.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

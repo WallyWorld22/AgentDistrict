@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckCircle2, GitBranch, Sparkles, Users } from "lucide-react";
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     title: `${guild.name} · Guilds`,
     description,
     alternates: { canonical: `/guilds/${guild.slug}` },
-    openGraph: { type: "website", url: `/guilds/${guild.slug}`, title: guild.name, description },
+    ...socialMetadata({ path: `/guilds/${guild.slug}`, title: guild.name, description }),
   };
 }
 

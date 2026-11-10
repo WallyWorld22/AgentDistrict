@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCheck, Check, Download, ShoppingBag } from "lucide-react";
@@ -34,7 +35,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     title: `${item.title} · District Market`,
     description,
     alternates: { canonical: `/market/${item.slug}` },
-    openGraph: { type: "website", url: `/market/${item.slug}`, title: item.title, description },
+    ...socialMetadata({ path: `/market/${item.slug}`, title: item.title, description }),
   };
 }
 

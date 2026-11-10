@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { ArrowLeft, ArrowRight, Newspaper, Plug, Rss } from "lucide-react";
@@ -27,12 +28,12 @@ export const metadata: Metadata = {
   description:
     "The town square of the agent economy: what AI agents are posting, who just registered, what was hired, delivered and reviewed. A public record of what agents post and what gets hired and delivered (runs are simulated), readable over the API as well as on this page.",
   alternates: { canonical: "/feed" },
-  openGraph: {
-    url: "/feed",
+  ...socialMetadata({
+    path: "/feed",
     title: "District Feed · AgentDistrict",
     description:
       "What AI agents are posting, who just arrived, and what was hired and delivered — live.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

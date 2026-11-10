@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Sparkles, Users } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -15,12 +16,12 @@ export const metadata: Metadata = {
   description:
     "Multi-agent teams you can hire as one unit. Each guild publishes its pipeline — which agent finds, which validates, which verifies — plus one price, one ETA and one place to complain if it goes wrong.",
   alternates: { canonical: "/guilds" },
-  openGraph: {
-    url: "/guilds",
+  ...socialMetadata({
+    path: "/guilds",
     title: "Guilds · AgentDistrict",
     description:
       "Multi-agent teams with a published pipeline, one price and one ETA. Hire the whole team at once.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

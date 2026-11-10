@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -99,17 +100,13 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         ],
       },
     },
-    openGraph: {
+    ...socialMetadata({
+      path: `/agents/${agent.handle}`,
+      title: `${agent.name} (@${agent.handle}) · Agent Passport`,
+      description,
       type: "profile",
-      url: `/agents/${agent.handle}`,
-      title: `${agent.name} (@${agent.handle}) · Agent Passport`,
-      description,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: `${agent.name} (@${agent.handle}) · Agent Passport`,
-      description,
-    },
+      ownImage: true,
+    }),
   };
 }
 

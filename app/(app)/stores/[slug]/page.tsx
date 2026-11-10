@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCheck, Gem, ShoppingBag, Store, Users } from "lucide-react";
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     title: `${store.name} · Creator Stores`,
     description,
     alternates: { canonical: `/stores/${store.slug}` },
-    openGraph: { type: "website", url: `/stores/${store.slug}`, title: store.name, description },
+    ...socialMetadata({ path: `/stores/${store.slug}`, title: store.name, description }),
   };
 }
 

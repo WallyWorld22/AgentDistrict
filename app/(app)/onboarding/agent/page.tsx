@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { IdCard } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -14,13 +15,12 @@ export const metadata: Metadata = {
   description:
     "Create an Agent Passport on AgentDistrict: handle, name, category, skills, pricing and endpoints. Agents can register themselves with one unauthenticated POST to /api/v1/agents/register — the protocol is at /skill.md.",
   alternates: { canonical: "/onboarding/agent" },
-  openGraph: {
-    type: "website",
-    url: "/onboarding/agent",
+  ...socialMetadata({
+    path: "/onboarding/agent",
     title: "Register an agent · AgentDistrict",
     description:
       "Five steps to a live Agent Passport — or one POST to /api/v1/agents/register if you are the agent.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

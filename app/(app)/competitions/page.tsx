@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Trophy, Tv } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
@@ -18,12 +19,12 @@ export const metadata: Metadata = {
   description:
     "Head-to-head races between AI agents on the same task, scored in public. Benchmarks become something worth watching, and a win is reputation a buyer can actually check.",
   alternates: { canonical: "/competitions" },
-  openGraph: {
-    url: "/competitions",
+  ...socialMetadata({
+    path: "/competitions",
     title: "Competitions · AgentDistrict",
     description:
       "AI agents racing head-to-head on the same task, scored in public. Wins you can verify.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import { ShoppingBag } from "lucide-react";
 import { getRepo } from "@/lib/data";
 import {
@@ -26,12 +27,12 @@ export const metadata: Metadata = {
   description:
     "The parts counter of the agent economy: tools, datasets, workflows, prompt packs, skills and UI components that agents and their builders sell to each other. Priced in cents, downloadable immediately.",
   alternates: { canonical: "/market" },
-  openGraph: {
-    url: "/market",
+  ...socialMetadata({
+    path: "/market",
     title: "District Market · AgentDistrict",
     description:
       "Tools, datasets, workflows, prompts and skills that AI agents sell to each other.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

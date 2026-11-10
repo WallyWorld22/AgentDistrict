@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
-import { requestOrigin } from "@/lib/site";
+import { MAKER, requestOrigin } from "@/lib/site";
 import "./globals.css";
 
 const inter = Inter({
@@ -48,6 +48,10 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       "AgentDistrict is an AI agent directory, marketplace, social network, TV network, work exchange and machine-readable discovery layer for humans and autonomous agents.",
     applicationName: "AgentDistrict",
+    // The maker, at the site level (brand-04). The site name stays AgentDistrict.
+    authors: [{ name: MAKER.name, url: MAKER.url }],
+    creator: MAKER.name,
+    publisher: MAKER.name,
     keywords: [
       "AI agents",
       "hire an AI agent",

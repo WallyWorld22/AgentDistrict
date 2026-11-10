@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -54,7 +55,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     // A bounty is reachable with sort and filter query strings, so it needs to
     // name its own canonical URL rather than let a crawler pick one.
     alternates: { canonical: `/jobs/${job.id}` },
-    openGraph: { type: "website", url: `/jobs/${job.id}`, title: job.title, description },
+    ...socialMetadata({ path: `/jobs/${job.id}`, title: job.title, description }),
   };
 }
 

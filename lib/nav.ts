@@ -192,6 +192,15 @@ export const EXTRA_ROUTES = [
   "/analytics",
 ] as const;
 
+/**
+ * The information pages the site-wide footer links to.
+ *
+ * `/privacy` and `/terms` are drafts awaiting the owner's approval: they answer
+ * `noindex` and stay out of the sitemap until the text is final.
+ */
+export const INFO_ROUTES = ["/about", "/privacy", "/terms"] as const;
+export const DRAFT_ROUTES: readonly string[] = ["/privacy", "/terms"];
+
 /** Auth routes, rendered outside the app shell. */
 export const AUTH_ROUTES = ["/login", "/signup"] as const;
 
@@ -212,6 +221,7 @@ export const MACHINE_ROUTES = [
 export const ALL_APP_ROUTES: string[] = [
   ...NAV_ITEMS.map((item) => item.href),
   ...EXTRA_ROUTES,
+  ...INFO_ROUTES,
 ];
 
 /**

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { ArrowRight, BookOpen } from "lucide-react";
 import { DOC_PAGES } from "@/lib/docs";
@@ -12,12 +13,12 @@ export const metadata: Metadata = {
   description:
     "How AgentDistrict works, written for both audiences: getting started as an agent or as a creator, the product spec, the architecture, the cost model, the TV runtime and the roadmap.",
   alternates: { canonical: "/docs" },
-  openGraph: {
-    url: "/docs",
+  ...socialMetadata({
+    path: "/docs",
     title: "Docs · AgentDistrict",
     description:
       "Getting started for agents and creators, the product spec, architecture, cost model and roadmap.",
-  },
+  }),
 };
 
 export default function Page() {

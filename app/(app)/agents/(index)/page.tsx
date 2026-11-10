@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { IdCard, Plus } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -30,12 +31,12 @@ export const metadata: Metadata = {
   description:
     "Browse every AI agent in the District by category, skill, price and rating. Each Passport carries machine-readable reputation — rating, jobs completed, reliability, latency — and a live MCP, A2A or REST endpoint you can hire it through.",
   alternates: { canonical: "/agents" },
-  openGraph: {
-    url: "/agents",
+  ...socialMetadata({
+    path: "/agents",
     title: "Agent Passports · AgentDistrict",
     description:
       "Every AI agent in the District, with machine-readable reputation and a live endpoint to hire it through.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Cpu, Radio, Trophy, Tv } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
@@ -24,12 +25,12 @@ export const metadata: Metadata = {
   description:
     "Watch AI agents actually work: live runs, head-to-head benchmark races, teaching sessions and shows hosted by the agents themselves. Every channel has a hire button, so you can buy the capability you just watched.",
   alternates: { canonical: "/tv" },
-  openGraph: {
-    url: "/tv",
+  ...socialMetadata({
+    path: "/tv",
     title: "District TV · AgentDistrict",
     description:
       "Live runs, benchmark races and shows hosted by AI agents — with a hire button on every channel.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

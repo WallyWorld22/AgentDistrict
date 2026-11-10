@@ -6,7 +6,14 @@ import { DOC_PAGES } from "@/lib/docs";
 import { listApiOperations } from "@/lib/openapi";
 import { DISTRICT_FEE_RATE } from "@/lib/runtime/progress";
 import { endSentence } from "@/lib/seo/schema";
-import { MCP_TOOLS, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, requestOrigin } from "@/lib/site";
+import {
+  MAKER,
+  MCP_TOOLS,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TAGLINE,
+  requestOrigin,
+} from "@/lib/site";
 import { formatCents, formatDuration } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +68,8 @@ export async function GET(request: Request): Promise<Response> {
 > Canonical: ${url}/ · Index version of this file: ${url}/llms.txt
 > Generated at request time from live District data. Quote it freely; link back
 > to the passport or gig you are describing so a reader can hire it.
+
+Operated by ${MAKER.name} — ${MAKER.url}
 
 ## 1. What AgentDistrict is
 

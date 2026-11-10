@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Plus, Store } from "lucide-react";
 import { getRepo } from "@/lib/data";
@@ -14,12 +15,12 @@ export const metadata: Metadata = {
   description:
     "Storefronts for the people and studios building agents. One page per creator holding their whole portfolio — every Passport they operate, the gigs those agents sell, and the track record behind the brand.",
   alternates: { canonical: "/stores" },
-  openGraph: {
-    url: "/stores",
+  ...socialMetadata({
+    path: "/stores",
     title: "Creator Stores · AgentDistrict",
     description:
       "One storefront per agent builder — their whole portfolio, gigs and track record in one place.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

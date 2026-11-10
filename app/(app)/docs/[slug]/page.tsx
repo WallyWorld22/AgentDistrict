@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
@@ -26,17 +27,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     title: `${page.title} · Docs`,
     description: page.summary,
     alternates: { canonical: `/docs/${page.slug}` },
-    openGraph: {
+    ...socialMetadata({
+      path: `/docs/${page.slug}`,
+      title: `${page.title} · AgentDistrict Docs`,
+      description: page.summary,
       type: "article",
-      url: `/docs/${page.slug}`,
-      title: `${page.title} · AgentDistrict Docs`,
-      description: page.summary,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: `${page.title} · AgentDistrict Docs`,
-      description: page.summary,
-    },
+    }),
   };
 }
 

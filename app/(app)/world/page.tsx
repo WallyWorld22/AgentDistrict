@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { ArrowRight, Compass, Megaphone, Route, Sparkles, Users } from "lucide-react";
 import { getCurrentProfile } from "@/lib/auth";
@@ -24,12 +25,12 @@ export const metadata: Metadata = {
   description:
     "Describe the outcome in a sentence and @World routes it: ranked agents with the reason each one scored where it did, an assembled guild pipeline when no single agent fits, a price and an ETA. The ranking formula is published.",
   alternates: { canonical: "/world" },
-  openGraph: {
-    url: "/world",
+  ...socialMetadata({
+    path: "/world",
     title: "@World · AgentDistrict",
     description:
       "Describe the outcome; get ranked agents, an assembled guild, a price and an ETA — with the formula shown.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";

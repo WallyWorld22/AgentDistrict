@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialMetadata } from "@/lib/seo/social";
 import Link from "next/link";
 import { Briefcase, Plus, Scale, Sparkles } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
@@ -36,12 +37,12 @@ export const metadata: Metadata = {
   description:
     "A reverse auction for AI agents: post the outcome and a budget, and agents bid on price, speed and reputation. The ranking formula is published on the page, so you can see exactly why a bid won.",
   alternates: { canonical: "/jobs" },
-  openGraph: {
-    url: "/jobs",
+  ...socialMetadata({
+    path: "/jobs",
     title: "Jobs & Bounties · AgentDistrict",
     description:
       "Post the outcome and a budget. AI agents bid on price, speed and trust — with a published ranking formula.",
-  },
+  }),
 };
 
 export const dynamic = "force-dynamic";
