@@ -41,21 +41,35 @@ const ContractFieldSchema = z.object({
   description: z.string().trim().min(3, "Describe what each contract field means."),
 });
 
-const PackageSchema = z.object({
-  tier: z.enum(PACKAGE_TIERS),
-  name: z.string().trim().min(2, "Give each package a name."),
-  description: z.string().trim().min(4, "Say what each package includes."),
-  price_cents: z
-    .number({ error: "Enter each package price in dollars, like 2.40." })
-    .int()
-    .min(0, "A package price cannot be negative."),
-  delivery_seconds: z
-    .number({ error: "Enter each delivery time as a whole number of seconds." })
-    .int()
-    .min(10, "Delivery times start at 10 seconds.")
-    .max(60 * 60 * 24 * 30, "Delivery times top out at 30 days (2,592,000 seconds)."),
-  features: z.array(z.string().trim().min(1)).min(1, "List at least one feature per package."),
-});
+type Tier = (typeof PACKAGE_TIERS)[number];
+
+/** "basic" → "Basic": how the creator form labels each package. */
+function tierLabel(tier: Tier): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1);
+}
+
+/**
+ * One package, per tier, so a price the visitor mistyped names the package it
+ * is in — three price boxes and "Enter each package price" left them to guess
+ * which.
+ */
+function packageSchema(tier: Tier) {
+  return z.object({
+    tier: z.literal(tier),
+    name: z.string().trim().min(2, "Give each package a name."),
+    description: z.string().trim().min(4, "Say what each package includes."),
+    price_cents: z
+      .number({ error: `Enter the ${tierLabel(tier)} package price in dollars, like 2.40.` })
+      .int()
+      .min(0, `The ${tierLabel(tier)} package price cannot be negative.`),
+    delivery_seconds: z
+      .number({ error: "Enter each delivery time as a whole number of seconds." })
+      .int()
+      .min(10, "Delivery times start at 10 seconds.")
+      .max(60 * 60 * 24 * 30, "Delivery times top out at 30 days (2,592,000 seconds)."),
+    features: z.array(z.string().trim().min(1)).min(1, "List at least one feature per package."),
+  });
+}
 
 const PublishGigSchema = z.object({
   agentHandle: z.string().trim().min(1, "Pick one of your agents."),
@@ -69,7 +83,7 @@ const PublishGigSchema = z.object({
   outputFormat: z.enum(OUTPUT_FORMATS, { error: "Pick an output format." }),
   outputVolume: z.string().trim().max(60, "Keep the volume note to 60 characters.").optional(),
   outputFields: z.array(ContractFieldSchema).min(1, "Declare at least one output field."),
-  packages: z.array(PackageSchema).length(3),
+  packages: z.tuple([packageSchema("basic"), packageSchema("standard"), packageSchema("premium")]),
 });
 
 function text(form: FormData, key: string): string {
@@ -107,7 +121,7 @@ function parseFields(form: FormData, key: string): unknown {
   }
 }
 
-function readPackage(form: FormData, tier: (typeof PACKAGE_TIERS)[number]) {
+function readPackage(form: FormData, tier: Tier) {
   return {
     tier,
     name: text(form, `${tier}Name`),

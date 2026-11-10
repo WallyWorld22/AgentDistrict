@@ -15,7 +15,8 @@ import { placeBidAction, postJobAction } from "@/app/(app)/jobs/actions";
 import { registerAgentAction } from "@/app/(app)/onboarding/actions";
 import { updateSpendPolicyAction } from "@/app/(app)/wallet/actions";
 import { topUpAction } from "@/app/actions";
-import { resetRepoForTests } from "@/lib/data";
+import { getRepo, resetRepoForTests } from "@/lib/data";
+import { ConflictError, INTERNAL_ERROR_MESSAGE, UpstreamError } from "@/lib/data/errors";
 import {
   MAX_STARTING_PRICE_CENTS,
   emptyDraft,
@@ -189,9 +190,18 @@ describe("publishing a gig (gigs-orders-09)", () => {
     ...overrides,
   });
 
-  it("a non-numeric package price names the price", async () => {
+  it("a non-numeric package price names the price and its package", async () => {
     const result = await publishGigAction(null, form(gig({ standardPrice: "abc" })));
-    expect(message(result)).toBe("Enter each package price in dollars, like 2.40.");
+    expect(message(result)).toBe("Enter the Standard package price in dollars, like 2.40.");
+    const basic = await publishGigAction(null, form(gig({ basicPrice: "" })));
+    expect(message(basic)).toBe("Enter the Basic package price in dollars, like 2.40.");
+    const premium = await publishGigAction(null, form(gig({ premiumPrice: "6.001" })));
+    expect(message(premium)).toBe("Enter the Premium package price in dollars, like 2.40.");
+  });
+
+  it("a negative package price names its package", async () => {
+    const result = await publishGigAction(null, form(gig({ premiumPrice: "-3" })));
+    expect(message(result)).toBe("The Premium package price cannot be negative.");
   });
 
   it("an over-long delivery time says the ceiling in words", async () => {
@@ -202,5 +212,45 @@ describe("publishing a gig (gigs-orders-09)", () => {
   it("a non-numeric delivery time names the field", async () => {
     const result = await publishGigAction(null, form(gig({ basicDelivery: "soon" })));
     expect(message(result)).toBe("Enter each delivery time as a whole number of seconds.");
+  });
+});
+
+describe("a failure nobody worded for the visitor", () => {
+  const DB_TEXT = 'duplicate key value violates unique constraint "wallets_pkey" (SQLSTATE 23505)';
+
+  it("answers the fixed public sentence, never the database text, and logs the original", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.spyOn(getRepo(), "topUp").mockRejectedValueOnce(new UpstreamError(DB_TEXT));
+      const result = await topUpAction(null, form({ amount: "10" }));
+      expect(result).toEqual({ ok: false, message: INTERNAL_ERROR_MESSAGE });
+      expect(JSON.stringify(result)).not.toContain("wallets_pkey");
+      expect(log).toHaveBeenCalledWith("[action] internal error", expect.any(UpstreamError));
+
+      // Anything thrown that is not a DistrictError is treated the same way.
+      vi.spyOn(getRepo(), "topUp").mockRejectedValueOnce(new TypeError(DB_TEXT));
+      expect(await topUpAction(null, form({ amount: "10" }))).toEqual({
+        ok: false,
+        message: INTERNAL_ERROR_MESSAGE,
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("keeps the wording of a failure raised on purpose", async () => {
+    expect(await topUpAction(null, form({ amount: "-5" }))).toEqual({
+      ok: false,
+      message: "Enter an amount in dollars, like 10.00.",
+    });
+    vi.spyOn(getRepo(), "topUp").mockRejectedValueOnce(new ConflictError("That wallet is frozen."));
+    try {
+      expect(await topUpAction(null, form({ amount: "10" }))).toEqual({
+        ok: false,
+        message: "That wallet is frozen.",
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

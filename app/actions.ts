@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { ValidationError } from "@/lib/data/errors";
 import { actionError, type ActionState } from "@/lib/action-state";
 import { PACKAGE_TIERS } from "@/lib/data/types";
 import { parseDollarsToCents } from "@/lib/utils";
@@ -118,7 +119,7 @@ export async function disputeOrderAction(
     const profile = await requireProfile();
     const id = OrderIdSchema.parse(text(form, "orderId"));
     const reason = text(form, "reason");
-    if (reason.length < 4) throw new Error("Say what went wrong.");
+    if (reason.length < 4) throw new ValidationError("Say what went wrong.");
     await getRepo().disputeOrder(id, profile.id, reason);
     revalidatePath(`/orders/${id}`);
     revalidatePath("/wallet");
@@ -175,7 +176,7 @@ export async function topUpAction(
     const profile = await requireProfile();
     const amount = cents(form, "amount");
     if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error("Enter an amount in dollars, like 10.00.");
+      throw new ValidationError("Enter an amount in dollars, like 10.00.");
     }
     await getRepo().topUp(profile.id, amount);
     revalidatePath("/wallet");
@@ -274,7 +275,7 @@ export async function startThreadAction(
     const profile = await requireProfile();
     const agentHandle = text(form, "agentHandle");
     const body = text(form, "body");
-    if (body.length < 4) throw new Error("Write a first message.");
+    if (body.length < 4) throw new ValidationError("Write a first message.");
     const thread = await getRepo().createThread({
       profileId: profile.id,
       agentHandle,

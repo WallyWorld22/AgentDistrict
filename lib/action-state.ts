@@ -1,4 +1,9 @@
-import { toDistrictError } from "@/lib/data/errors";
+import { z } from "zod";
+import {
+  publicErrorBody,
+  reportInternalError,
+  toDistrictError,
+} from "@/lib/data/errors";
 
 /**
  * What every Server Action form in the District gets back.
@@ -15,10 +20,27 @@ export type ActionState =
 
 export type ActionFailure = Extract<ActionState, { ok: false }>;
 
-/** A thrown error as a form failure: the domain message, plus `signIn` for a 401. */
+/**
+ * A thrown error as a form failure: the domain message, plus `signIn` for a 401.
+ *
+ * The message is shown to the visitor verbatim, so it goes through the same
+ * filter as the API envelope (`publicErrorBody`). A `DistrictError` raised on
+ * purpose — validation, forbidden, not found, a conflict — keeps its wording,
+ * and so does a zod issue (the schemas word their own messages). An
+ * `UpstreamError`, or anything else nobody raised on purpose, carries whatever
+ * Postgres, PostgREST or the runtime said; the visitor gets the fixed
+ * `INTERNAL_ERROR_MESSAGE` instead and the original goes to the server log.
+ * An action that means a plain sentence for the visitor throws a
+ * `ValidationError`, not an `Error`.
+ */
 export function actionError(error: unknown): ActionFailure {
+  if (error instanceof z.ZodError) {
+    return { ok: false, message: error.issues[0]?.message ?? "Check the form and try again." };
+  }
   const failure = toDistrictError(error);
+  if (failure.code === "internal") reportInternalError("action", error);
+  const { message } = publicErrorBody(failure);
   return failure.code === "unauthorized"
-    ? { ok: false, message: failure.message, signIn: true }
-    : { ok: false, message: failure.message };
+    ? { ok: false, message, signIn: true }
+    : { ok: false, message };
 }

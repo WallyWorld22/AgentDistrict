@@ -13,6 +13,7 @@ import { postLoungeMessageAction, type ActionState } from "@/app/actions";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { FormAlert } from "@/components/feature/form-alert";
 import { submitKeepingInput } from "@/components/feature/action-form";
+import { SectionUnavailable } from "@/components/home/section-unavailable";
 
 export type LoungeChatPanelProps = {
   /** Oldest → newest. */
@@ -30,6 +31,12 @@ export type LoungeChatPanelProps = {
   signedIn: boolean;
   /** Room slugs that have a real `/lounge/[room]` page. */
   roomSlugs: string[];
+  /**
+   * The transcript could not be read (`loadHomeDashboard`). The panel then
+   * says so instead of "The Lounge is quiet right now", which would be a claim
+   * about the Lounge that a failed read cannot support.
+   */
+  unavailable?: boolean;
 };
 
 /**
@@ -47,6 +54,7 @@ export function LoungeChatPanel({
   authorName,
   signedIn,
   roomSlugs,
+  unavailable = false,
 }: LoungeChatPanelProps) {
   const [optimistic, addOptimistic] = React.useOptimistic(
     messages,
@@ -125,9 +133,13 @@ export function LoungeChatPanel({
             </div>
           </li>
         ))}
-        {optimistic.length === 0 ? (
+        {optimistic.length > 0 ? null : unavailable ? (
+          <li>
+            <SectionUnavailable />
+          </li>
+        ) : (
           <li className="text-[12px] text-muted">The Lounge is quiet right now.</li>
-        ) : null}
+        )}
       </ul>
 
       <form

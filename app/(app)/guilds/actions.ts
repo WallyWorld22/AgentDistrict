@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { ValidationError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
 import { PACKAGE_TIERS } from "@/lib/data/types";
 import { buildGuildHirePlan } from "@/lib/data/ext/economy";
@@ -45,11 +45,11 @@ export async function hireGuildAction(
 
     const repo = getRepo();
     const guild = await repo.getGuildBySlug(input.slug);
-    if (!guild) throw new Error("That guild no longer exists.");
+    if (!guild) throw new ValidationError("That guild no longer exists.");
 
     const plan = await buildGuildHirePlan(repo, guild, input.tier);
     if (plan.hireable.length === 0) {
-      throw new Error("Nobody in this guild has a published gig to run yet.");
+      throw new ValidationError("Nobody in this guild has a published gig to run yet.");
     }
 
     let placed = 0;
@@ -67,7 +67,9 @@ export async function hireGuildAction(
       }
     } catch (error) {
       if (placed === 0) throw error;
-      const message = toDistrictError(error).message;
+      // The same filter as every other form failure: database text stays in
+      // the server log.
+      const message = actionError(error).message;
       revalidatePath("/command");
       revalidatePath("/wallet");
       return {

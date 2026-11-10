@@ -154,6 +154,13 @@ test.describe("bad addresses end in a 404 or a redirect, never a crash", () => {
       ["/tv%5C", "/tv"],
       ["/gigs%5C?sort=new", "/gigs?sort=new"],
       ["/jobs/new%5C", "/jobs/new"],
+      // The machine documents and static files the proxy matcher otherwise
+      // skips: a trailing backslash still reaches the redirect.
+      ["/llms.txt%5C", "/llms.txt"],
+      ["/skill.md%5C", "/skill.md"],
+      ["/openapi.json%5C", "/openapi.json"],
+      ["/.well-known/agents.json%5C", "/.well-known/agents.json"],
+      ["/favicon.ico%5C", "/favicon.ico"],
     ]) {
       const response = await page.request.get(path, { maxRedirects: 0 });
       expect(response.status(), path).toBe(308);

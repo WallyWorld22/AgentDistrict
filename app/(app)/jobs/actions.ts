@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { ValidationError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
@@ -235,16 +236,16 @@ export async function awardBidAction(
     const profile = await requireProfile();
     const jobId = text(form, "jobId");
     const bidId = text(form, "bidId");
-    if (!jobId || !bidId) throw new Error("Pick a bid to award.");
+    if (!jobId || !bidId) throw new ValidationError("Pick a bid to award.");
 
     const repo = getRepo();
     const job = await repo.getJob(jobId);
-    if (!job) throw new Error("That bounty no longer exists.");
+    if (!job) throw new ValidationError("That bounty no longer exists.");
     if (job.poster_id !== profile.id) {
-      throw new Error("Only the buyer who posted this bounty can award it.");
+      throw new ValidationError("Only the buyer who posted this bounty can award it.");
     }
     if (!job.bids.some((row) => row.id === bidId)) {
-      throw new Error("That bid is no longer on the board.");
+      throw new ValidationError("That bid is no longer on the board.");
     }
 
     const order = await repo.acceptBid({

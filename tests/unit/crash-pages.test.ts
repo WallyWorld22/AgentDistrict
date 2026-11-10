@@ -16,7 +16,12 @@ import {
 import { loadHomeDashboard } from "@/lib/data/ext/home-dashboard";
 import { isUuid } from "@/lib/data/ids";
 import type { Repository } from "@/lib/data/repository";
-import { proxy, withoutBackslashes } from "@/proxy";
+import { config as proxyConfig, proxy, withoutBackslashes } from "@/proxy";
+// What `next build` compiles `config.matcher` with; not a public export.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { getMiddlewareMatchers } = require("next/dist/build/analysis/get-page-static-info") as {
+  getMiddlewareMatchers: (matcher: unknown, nextConfig: unknown) => unknown[];
+};
 
 /**
  * Batch 1 of the site audit: the addresses and reads that used to end on a
@@ -167,6 +172,54 @@ describe("backslash addresses", () => {
     const response = await proxy(new NextRequest(`${ORIGIN}/gigs?sort=new`));
     expect(response.headers.get("location")).toBeNull();
     expect(response.status).toBe(200);
+  });
+
+  /**
+   * The redirect only runs where `config.matcher` sends a request, so the
+   * matcher is compiled exactly as `next build` compiles it and asked.
+   */
+  describe("the proxy matcher", () => {
+    const [compiled] = getMiddlewareMatchers(proxyConfig.matcher, {} as never) as {
+      regexp: string;
+    }[];
+    const runs = (path: string) => new RegExp(compiled.regexp).test(path);
+
+    it.each([
+      "/llms.txt%5C",
+      "/skill.md%5C",
+      "/openapi.json%5c",
+      "/.well-known/agents.json%5C",
+      "/.well-known/agent-card.json\\",
+      "/favicon.ico%5C",
+      "/icon.svg%5C",
+      "/manifest.webmanifest%5C",
+      "/brand/logo.png%5C",
+      "/.well-known%5Cagents.json",
+      "/llms.txt%5Cx",
+      "/tv%5C",
+      "/%5C",
+    ])("sends %s through the proxy", (path) => {
+      expect(runs(path)).toBe(true);
+    });
+
+    it.each([
+      "/llms.txt",
+      "/skill.md",
+      "/openapi.json",
+      "/.well-known/agents.json",
+      "/favicon.ico",
+      "/brand/logo.png",
+      "/_next/static/chunks/app.js",
+    ])("still skips %s", (path) => {
+      expect(runs(path)).toBe(false);
+    });
+
+    it.each(["/", "/tv", "/gigs/some-gig", "/api/v1/stats", "/llms-full.txt"])(
+      "still runs on %s",
+      (path) => {
+        expect(runs(path)).toBe(true);
+      },
+    );
   });
 });
 

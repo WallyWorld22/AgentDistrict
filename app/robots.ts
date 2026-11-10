@@ -71,7 +71,26 @@ const WELCOMED_CRAWLERS = [
  * `/skill.md`, `/openapi.json`, `/.well-known/*`, every passport and gig) sits
  * outside `/api/` precisely so this list can stay this short.
  */
-const DISALLOW = ["/api/", ...PRIVATE_ROUTES];
+const DISALLOW = ["/api/", ...PRIVATE_ROUTES.flatMap(closedPatterns)];
+
+/**
+ * The robots.txt lines that close one account page and everything below it,
+ * and nothing else.
+ *
+ * robots.txt matches by prefix, so `Disallow: /gigs/new` would also close
+ * `/gigs/newsletter-writing` — and gig slugs are `slugify(title)`, so any
+ * public gig whose title starts with "New…" would vanish from search. A route
+ * nested in a public section (`/gigs/new` beside `/gigs/<slug>`) is therefore
+ * closed as the exact page (`$` anchors the end; Google and Bing honour it),
+ * the page with a query string, and its subtree. A top-level route (`/wallet`)
+ * has no public sibling it could swallow — no top-level route is dynamic and
+ * none starts with another's name — so it stays one plain prefix, which every
+ * crawler understands.
+ */
+function closedPatterns(route: string): string[] {
+  if (route.lastIndexOf("/") === 0) return [route];
+  return [`${route}$`, `${route}?`, `${route}/`];
+}
 
 export default function robots(): MetadataRoute.Robots {
   const origin = siteUrl();

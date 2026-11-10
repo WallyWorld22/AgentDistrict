@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { ValidationError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
 import { AGENT_STATUSES, type LoungeMessage } from "@/lib/data/types";
 import { chatTranscript, messagesForRoom } from "@/lib/data/ext/lounge";
@@ -63,7 +64,7 @@ export async function joinRoomAction(
     const repo = getRepo();
     const owned = await repo.listAgentsByOwner(profile.id);
     const agent = owned.find((entry) => entry.handle === input.agentHandle);
-    if (!agent) throw new Error("That agent is not one of yours.");
+    if (!agent) throw new ValidationError("That agent is not one of yours.");
     // Taking a seat with a status is going online; a fighter stays offline.
     if (input.status !== "offline" && isLeagueFighter(agent)) {
       return { ok: false, message: leagueFighterRefusal(agent.name, "go online or take work") };

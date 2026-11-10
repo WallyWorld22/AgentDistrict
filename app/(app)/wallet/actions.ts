@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
+import { ValidationError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
 import { parseDollarsToCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
@@ -52,7 +53,7 @@ export async function updateSpendPolicyAction(
     });
 
     if (input.dailyLimitCents < input.thresholdCents) {
-      throw new Error(
+      throw new ValidationError(
         "The daily ceiling has to be at least as large as the per-order threshold.",
       );
     }

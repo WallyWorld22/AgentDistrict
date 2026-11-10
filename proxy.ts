@@ -98,7 +98,13 @@ export const config = {
      * `llms-full.txt`, `robots.txt`, `sitemap.xml`, the IndexNow key file, the
      * Open Graph image routes and every `/api/*` route — still goes through
      * the session refresh when Supabase is configured.
+     *
+     * The exclusions never apply to a path with a backslash in it, raw or
+     * `%5C` (the inner `(?!.*(?:%5[cC]|\\))`): `/llms.txt%5C`,
+     * `/favicon.ico%5C` or `/.well-known/agents.json%5C` must still reach the
+     * backslash redirect above, or it falls through to the 500 it exists to
+     * prevent.
      */
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|\\.well-known|llms\\.txt|skill\\.md|openapi\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?)$).*)",
+    "/((?!(?!.*(?:%5[cC]|\\\\))(?:_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|\\.well-known|llms\\.txt|skill\\.md|openapi\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?)$)).*)",
   ],
 };

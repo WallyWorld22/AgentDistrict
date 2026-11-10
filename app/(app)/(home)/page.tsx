@@ -238,6 +238,7 @@ async function HomeDashboard() {
             authorName={profile?.display_name ?? "You"}
             signedIn={profile !== null}
             roomSlugs={rooms.map((room) => room.slug)}
+            unavailable={failed.has("loungeMessages")}
           />
         </Panel>
       </div>

@@ -42,9 +42,14 @@ test.describe("robots.txt", () => {
 test.describe("account pages", () => {
   test("are closed in robots.txt and answer noindex (prod-05)", async ({ request }) => {
     const robots = await (await request.get("/robots.txt")).text();
-    for (const path of ["/wallet", "/orders", "/inbox", "/settings", "/gigs/new"]) {
-      expect(robots, path).toContain(`Disallow: ${path}`);
+    for (const path of ["/wallet", "/orders", "/inbox", "/settings"]) {
+      expect(robots, path).toMatch(new RegExp(`^Disallow: ${path}$`, "m"));
     }
+    // `/gigs/new` is closed as the exact page and its subtree, never as a bare
+    // prefix that would also close `/gigs/newsletter-writing`.
+    expect(robots).toMatch(/^Disallow: \/gigs\/new\$$/m);
+    expect(robots).toMatch(/^Disallow: \/gigs\/new\/$/m);
+    expect(robots).not.toMatch(/^Disallow: \/gigs\/new$/m);
 
     // Demo mode signs every visitor in, so the page renders; it still tells a
     // crawler not to keep it, in the header and in the page.
