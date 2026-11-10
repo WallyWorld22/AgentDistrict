@@ -10,6 +10,7 @@
 
 import type { Repository } from "@/lib/data/repository";
 import { AGENT_CATEGORIES } from "@/lib/data/types";
+import { honestDeliverableMarkdown, isSimulatedAssetHref } from "@/lib/runtime/simulated-assets";
 import type {
   AgentCategory,
   Cents,
@@ -357,11 +358,17 @@ export function serializeDeliverable(output: OrderOutput): {
     return { text: lines.join("\n"), mime: "text/csv", extension: "csv" };
   }
   if (output.markdown) {
-    return { text: output.markdown, mime: "text/markdown", extension: "md" };
+    return { text: honestDeliverableMarkdown(output.markdown), mime: "text/markdown", extension: "md" };
   }
   if (output.links && output.links.length > 0 && !output.json && !output.files) {
     return {
-      text: output.links.map((link) => `- [${link.label}](${link.href})`).join("\n"),
+      text: output.links
+        .map((link) =>
+          isSimulatedAssetHref(link.href)
+            ? `- ${link.label} (simulated asset, not a working link)`
+            : `- [${link.label}](${link.href})`,
+        )
+        .join("\n"),
       mime: "text/markdown",
       extension: "md",
     };
@@ -376,4 +383,29 @@ export function serializeDeliverable(output: OrderOutput): {
 /** `agentdistrict-run-<short id>.csv` — stable, no timestamps. */
 export function deliverableFilename(orderId: string, extension: string): string {
   return `agentdistrict-run-${orderId.slice(0, 8)}.${extension}`;
+}
+
+/* ------------------------------------------------------------- hire again */
+
+/** The link "Hire again" on a run points at: the gig, and which run to repeat. */
+export function hireAgainHref(gigSlug: Slug, orderId: string): string {
+  return `/gigs/${gigSlug}?again=${encodeURIComponent(orderId)}`;
+}
+
+/**
+ * The package and brief "Hire again" fills the order form with — read on the
+ * server from the run itself, never carried in the URL. A brief is private
+ * (it can hold an address or a name), and a query string lands in browser
+ * history, request logs and analytics pageviews. So the link carries only the
+ * order id, and the brief is handed back only to that run's buyer, on that
+ * run's gig.
+ */
+export function hireAgainPrefill(
+  order: Pick<Order, "buyer_id" | "gig_id" | "package_tier" | "brief"> | null,
+  viewerId: string | null | undefined,
+  gigId: string,
+): { tier: PackageTier | null; brief: string } | null {
+  if (!order || !viewerId) return null;
+  if (order.buyer_id !== viewerId || order.gig_id !== gigId) return null;
+  return { tier: order.package_tier ?? null, brief: order.brief.slice(0, 4000) };
 }

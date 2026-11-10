@@ -14,6 +14,7 @@ import {
   hashInRange,
   hashPick,
   hashString,
+  isOnline,
   loungeTotals,
   mergeMessages,
   messagesForRoom,
@@ -216,6 +217,20 @@ describe("the Lounge hall", () => {
     expect(openSlots(presence("a", "available", "r", 17, 1))).toBe(16);
   });
 
+  it("counts only agents seen in the last half hour as online", () => {
+    const now = Date.parse("2026-09-05T18:00:00.000Z");
+    const rows = [
+      presence("a", "collaborating", "a"),
+      { ...presence("b", "available", "a"), updated_at: "2026-08-18T09:00:00.000Z" },
+    ];
+    expect(loungeTotals([], rows, now).online).toBe(1);
+    expect(isOnline(rows[0], now)).toBe(true);
+    expect(isOnline(rows[1], now)).toBe(false);
+    // Half an hour after its last sighting, the fresh one drops off too.
+    expect(isOnline(rows[0], Date.parse("2026-09-05T18:29:00.000Z"))).toBe(true);
+    expect(isOnline(rows[0], Date.parse("2026-09-05T18:31:00.000Z"))).toBe(false);
+  });
+
   it("totals the hall from live rows only", () => {
     const totals = loungeTotals(
       [room("a", { openSlots: 5 }), room("b", { openSlots: 7 })],
@@ -225,6 +240,7 @@ describe("the Lounge hall", () => {
         presence("c", "working", "b"),
         presence("d", "live", "b"),
       ],
+      Date.parse("2026-09-05T18:00:00.000Z"),
     );
     expect(totals).toEqual({
       online: 3,
@@ -440,6 +456,30 @@ describe("showrooms", () => {
       expect(result!.confidence).toBeLessThanOrEqual(1);
       expect(result!.durationSeconds).toBeGreaterThan(0);
       expect(result!.summary.length).toBeGreaterThan(10);
+    }
+  });
+
+  it("times each agent's demo on its own, not off the input alone", () => {
+    // One address used to give RoofIntel, Scout, WebBuilder and CopyCat the
+    // identical "34 sec at 90%" (social-media-11).
+    const input = "123 Main St, Orlando FL";
+    const runs = SHOWROOMS.map((spec) => runShowroom(spec.agentHandle, input)!);
+    const timings = new Set(runs.map((run) => `${run.durationSeconds}:${run.confidence}`));
+    expect(timings.size).toBeGreaterThan(1);
+  });
+
+  it("writes grammatical copy and lists as many sections as it counts", () => {
+    // social-media-12: "a urgent voice"; "6 — hero, proof, offer, FAQ, CTA".
+    for (let index = 0; index < 60; index += 1) {
+      const input = `Pool cleaning ${index}`;
+      const copy = runShowroom("copycat", input)!;
+      expect(copy.summary).not.toMatch(/\ba [aeiou]/i);
+      const subhead = copy.fields.find((field) => field.label === "Subhead")!.value;
+      expect(subhead).not.toContain("One address in");
+      const site = runShowroom("webbuilder", input)!;
+      const sections = site.fields.find((field) => field.label === "Sections")!.value;
+      const [count, list] = sections.split(" — ");
+      expect(list.split(", ")).toHaveLength(Number(count));
     }
   });
 

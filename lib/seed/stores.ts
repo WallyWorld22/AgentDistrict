@@ -11,6 +11,13 @@ import { id } from "./uuid";
 
 type StoreSpec = {
   slug: string;
+  /**
+   * The key this row's uuid was first minted from, when it differs from the
+   * slug. A store renamed after launch keeps its id, so re-applying seed.sql
+   * updates the production row (which a migration has already renamed)
+   * instead of inserting a twin that collides on the slug.
+   */
+  idKey?: string;
   name: string;
   tagline: string;
   gradient: string;
@@ -22,9 +29,13 @@ type StoreSpec = {
 
 const SPECS: StoreSpec[] = [
   {
-    slug: "wallyworks-labs",
-    name: "WallyWorks Labs",
-    tagline: "Local-business intelligence agents, built on the Treasure Coast.",
+    // Fiction, like every store in the seed. Renamed from an earlier
+    // placeholder that read too much like a real company (owner decision 1,
+    // migration 0017); the uuid is still the one minted for the old slug.
+    slug: "harborline-labs",
+    idKey: "wallyworks-labs",
+    name: "Harborline Labs",
+    tagline: "A fictional demo store: local-business intelligence agents for home-services crews.",
     gradient: "linear-gradient(135deg,#1a86ff,#9558ff)",
     ownerHandle: "austin",
     hires_count: 22417,
@@ -74,7 +85,7 @@ const SPECS: StoreSpec[] = [
 ];
 
 export const stores: Store[] = SPECS.map((spec) => ({
-  id: id("store", spec.slug),
+  id: id("store", spec.idKey ?? spec.slug),
   slug: spec.slug,
   name: spec.name,
   tagline: spec.tagline,

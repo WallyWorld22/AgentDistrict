@@ -177,6 +177,9 @@ test.describe("a bounty", () => {
     await expect(page.getByText("roof_age_est", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Data policy" })).toBeVisible();
     await expect(page.getByText(/PII: redacted/)).toBeVisible();
+    // Residency and subcontracting travel with the job but nothing enforces
+    // them, and the panel says so.
+    await expect(page.getByTestId("policy-advisory")).toContainText("advisory, not enforced");
 
     // The machine surface for the same bid.
     await expect(page.getByRole("heading", { name: "Bid on this from code" })).toBeVisible();
@@ -192,6 +195,15 @@ test.describe("a bounty", () => {
       (await page.getByTestId("bid-amount").allInnerTexts()).map((value) =>
         Number(value.replace(/[^\d.]/g, "")),
       );
+
+    // Bids the District placed for its founding cast say so, one badge per
+    // such bid; none is shown as an offer a person made.
+    const rows = page.getByTestId("bid-row");
+    expect(await rows.filter({ has: page.getByTestId("auto-bid-badge") }).count()).toBeGreaterThan(0);
+    await expect(page.getByTestId("auto-bid-badge").first()).toHaveAttribute(
+      "title",
+      /Not an offer a person made/,
+    );
 
     await page.getByRole("tab", { name: "Lowest" }).click();
     const cheapestFirst = await prices();
@@ -244,14 +256,20 @@ test.describe("a bounty", () => {
 });
 
 test.describe("posting a bounty", () => {
-  test("prefills from @World and previews who gets notified", async ({ page }) => {
+  test("prefills from @World and previews an example match set", async ({ page }) => {
     await page.goto(`/jobs/new?q=${encodeURIComponent(ROOFING_OUTCOME)}&budget=1000`);
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Post a job");
     await expect(page.locator("#job-title")).toHaveValue(ROOFING_OUTCOME);
     await expect(page.locator("#job-budget")).toHaveValue("10.00");
-    await expect(page.getByRole("heading", { name: "Who gets notified" })).toBeVisible();
+    // The panel is computed once, from the outcome in the URL, so it says it
+    // is an example; and matching notifies nobody.
+    await expect(
+      page.getByRole("heading", { name: "Who might match — an example" }),
+    ).toBeVisible();
+    await expect(page.getByText(/does not follow your edits/)).toBeVisible();
     await expect(page.getByText(/compatible agents online/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Who gets notified" })).toHaveCount(0);
 
     // The required-output fields are chips, and they can be edited.
     await hydrated(page, "#job-field-input");
@@ -261,6 +279,11 @@ test.describe("posting a bounty", () => {
     await expect(page.getByRole("button", { name: "Remove roof_age" })).toBeVisible();
     await page.getByRole("button", { name: "Remove roof_age" }).click();
     await expect(page.getByRole("button", { name: "Remove roof_age" })).toBeHidden();
+
+    // Residency and subcontracting are advisory, and the form says so.
+    await expect(page.getByTestId("advisory-pill")).toHaveCount(2);
+    await expect(page.getByText(/Advisory, not enforced yet/)).toHaveCount(2);
+    await expect(page.getByText(/enforced on every run/)).toHaveCount(0);
 
     // Data-policy toggles are real switches.
     const subcontract = page.getByRole("switch", { name: "Allow subcontracting" });
@@ -284,8 +307,16 @@ test.describe("@World", () => {
     const ranked = page.locator('a[href^="/agents/"]');
     await expect(ranked.first()).toBeVisible();
     expect(await ranked.count()).toBeGreaterThanOrEqual(3);
-    const shortlist = page.locator('a[href="/agents/scout"], a[href="/agents/roofintel"]');
+    const shortlist = page.locator(
+      'a[href="/agents/researchotter"], a[href="/agents/parcelpro"]',
+    );
     expect(await shortlist.count()).toBeGreaterThan(0);
+    // The demo human's own agents (Scout, RoofIntel) are routed around: nobody
+    // may hire their own agent, so @World never proposes one (gigs-orders-03).
+    const proposals = page.getByRole("main");
+    await expect(
+      proposals.locator('a[href="/agents/scout"], a[href="/agents/roofintel"]'),
+    ).toHaveCount(0);
 
     // Scores are shown, and the formula behind them is one click away.
     await expect(page.getByText(/\d+ score/).first()).toBeVisible();
@@ -365,7 +396,9 @@ test.describe("the Command Center", () => {
     const refused = await page.request.post("/api/v1/orders", {
       headers: { authorization: `Bearer ${writeKey()}` },
       data: {
-        gig_slug: "pdf-summary-with-page-refs",
+        // Not one of the demo human's own gigs: those are refused before the
+        // pause is even consulted.
+        gig_slug: "normalize-and-dedupe-csv",
         tier: "basic",
         brief: "E2E: a machine caller while spending is paused.",
       },
@@ -373,11 +406,22 @@ test.describe("the Command Center", () => {
     expect(refused.status()).toBe(409);
     expect((await refused.json()).error.message).toMatch(/paused/i);
 
+    // The pages that show the spend policy say it is paused, rather than
+    // wearing a green "Enforced" over limits nothing can spend against.
+    for (const path of ["/workplace", "/wallet"]) {
+      await page.goto(path);
+      await expect(page.getByTestId("spend-paused").first()).toHaveText("Paused");
+      await expect(page.getByText(/All unattended spend is paused/).first()).toBeVisible();
+    }
+
     // And it lifts again.
     await page.goto("/command");
     await hydrated(page, '[role="switch"]');
     await page.getByRole("switch", { name: /Pause all external agent spending/ }).click();
     await expect(page.getByTestId("spend-paused-banner")).toBeHidden({ timeout: 20_000 });
+    await page.goto("/workplace");
+    await expect(page.getByTestId("spend-paused")).toHaveCount(0);
+    await page.goto("/command");
 
     // The ceiling was never clamped, so resuming cannot strand it at a cent.
     await expect(page.getByText("$20.00").first()).toBeVisible();

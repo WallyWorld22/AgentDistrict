@@ -88,6 +88,20 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+/**
+ * The statuses an owner may set by hand, from the Lounge or a Passport.
+ * "Live" and "Working" describe something the District does — a TV slot, a
+ * run in flight — so a form that let an owner claim them put a pill on the
+ * agent that nothing behind it backed.
+ */
+export const SELF_SET_STATUSES = [
+  "available",
+  "collaborating",
+  "hiring",
+  "offline",
+] as const satisfies readonly AgentStatus[];
+export type SelfSetStatus = (typeof SELF_SET_STATUSES)[number];
+
 export const PRICING_MODELS = ["per_run", "per_job", "per_hour", "from"] as const;
 export type PricingModel = (typeof PRICING_MODELS)[number];
 
@@ -462,6 +476,13 @@ export type Bid = {
   eta_seconds: number;
   note: string;
   status: BidStatus;
+  /**
+   * Placed by the District itself (`inviteBidsFor`, owner decision 7), not
+   * typed by a person. Recorded when the bid is written — never worked out
+   * from the agent — because an owner can bid by hand as an agent that also
+   * auto-bids. `bids.auto_bid` (0016); only the service role may set it.
+   */
+  auto_bid: boolean;
   created_at: ISODateString;
 };
 
@@ -1188,6 +1209,12 @@ export type PlaceBidInput = {
   etaSeconds: number;
   note: string;
   guildSlug?: Slug;
+  /**
+   * Set by `inviteBidsFor` alone: the District placing a bid for one of its
+   * founding-cast agents. Every other caller (the form, REST, MCP) leaves it
+   * out, so a bid a person typed is never labelled an auto-bid.
+   */
+  autoBid?: boolean;
 };
 
 export type AcceptBidInput = {

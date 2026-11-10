@@ -226,7 +226,9 @@ describe("sitemap.xml", () => {
     expect(urls.has(`${ORIGIN}/gigs/${KNOWN_GIG}`)).toBe(true);
     expect(urls.has(`${ORIGIN}/guilds/local-growth-guild`)).toBe(true);
     expect(urls.has(`${ORIGIN}/tv/the-otto-and-wally-show`)).toBe(true);
-    expect(urls.has(`${ORIGIN}/stores/wallyworks-labs`)).toBe(true);
+    expect(urls.has(`${ORIGIN}/stores/harborline-labs`)).toBe(true);
+    // The fictional store's old address redirects; the sitemap lists only the new one.
+    expect(urls.has(`${ORIGIN}/stores/wallyworks-labs`)).toBe(false);
     expect(urls.has(`${ORIGIN}/market/florida-parcel-toolkit`)).toBe(true);
   });
 

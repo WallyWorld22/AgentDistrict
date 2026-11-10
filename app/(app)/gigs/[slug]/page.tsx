@@ -14,7 +14,8 @@ import {
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
-import { moreFromAgent } from "@/lib/data/ext/gigs";
+import { hireAgainPrefill, moreFromAgent } from "@/lib/data/ext/gigs";
+import { isUuid } from "@/lib/data/ids";
 import { requestOrigin } from "@/lib/site";
 import {
   basicPackagePriceCents,
@@ -101,6 +102,10 @@ export default async function Page({
 
   const query = await searchParams;
   const showAllReviews = readQuery(query, "reviews") === "all";
+  // "Hire again" on a run names the run, never its brief (a private brief in
+  // a URL lands in history, logs and analytics); the brief is read below, for
+  // that run's buyer only.
+  const againId = readQuery(query, "again");
   const now = districtNow();
 
   const limit = showAllReviews ? REVIEW_ALL : REVIEW_PREVIEW;
@@ -127,7 +132,14 @@ export default async function Page({
       .map((review) => ({ review, onThisGig: false })),
   ].slice(0, limit);
 
-  const wallet = profile ? await repo.getWallet(profile.id) : null;
+  const [wallet, againOrder] = await Promise.all([
+    profile ? repo.getWallet(profile.id) : Promise.resolve(null),
+    profile && isUuid(againId) ? repo.getOrder(againId).catch(() => null) : Promise.resolve(null),
+  ]);
+  const again = hireAgainPrefill(againOrder, profile?.id, gig.id);
+  // The repository refuses an owner's order of their own gig (gigs-orders-03),
+  // so the page says so instead of offering the form.
+  const isOwner = profile !== null && profile.id === gig.agent.owner_id;
   const available = wallet ? wallet.balance_cents - wallet.held_cents : undefined;
 
   const firstField = gig.input_contract.fields[0];
@@ -329,18 +341,35 @@ export default async function Page({
         <div className="order-2 min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="flex flex-col gap-4 lg:sticky lg:top-[76px]">
             <Panel
-              title={gig.status === "paused" ? "Not taking orders" : "Choose a package"}
+              title={
+                isOwner
+                  ? "This is your gig"
+                  : gig.status === "paused"
+                    ? "Not taking orders"
+                    : "Choose a package"
+              }
               bodyClassName="grid gap-3"
             >
               {/* A paused gig is read-only: the repository refuses the order,
                   so the page must not offer it. The packages still show — this
                   is a listing, not a 404. */}
-              {gig.status === "paused" ? (
+              {isOwner || gig.status === "paused" ? (
                 <>
                   <p className="m-0 text-[12.5px] leading-relaxed text-ink">
-                    {gig.agent.name} has paused this gig, so it is not taking new
-                    orders right now. The packages below are what it sells when it
-                    reopens.
+                    {isOwner ? (
+                      <>
+                        You own {gig.agent.name}, so you cannot order this gig yourself —
+                        an order would pay you from your own wallet and count as a hire
+                        that never happened. Share the page with a buyer instead; these
+                        are the packages they see.
+                      </>
+                    ) : (
+                      <>
+                        {gig.agent.name} has paused this gig, so it is not taking new
+                        orders right now. The packages below are what it sells when it
+                        reopens.
+                      </>
+                    )}
                   </p>
                   <ul className="m-0 grid list-none gap-2 p-0">
                     {gig.packages.map((pkg) => (
@@ -368,6 +397,8 @@ export default async function Page({
                   inputSummary={gig.input_contract.summary}
                   briefPlaceholder={briefPlaceholder}
                   availableCents={available}
+                  defaultTier={again?.tier ?? null}
+                  defaultBrief={again?.brief ?? null}
                 />
               )}
             </Panel>

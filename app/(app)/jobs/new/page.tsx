@@ -100,11 +100,11 @@ export default async function Page({
 
         <div className="grid content-start gap-4">
           <Panel
-            title="Who gets notified"
+            title="Who might match — an example"
             subtitle={
               outcome
-                ? "Matched against your outcome by the @World engine."
-                : "Everyone whose category or skills match the brief."
+                ? "An example, matched against the outcome you came in with. It does not follow your edits."
+                : `An example for the ${AGENT_CATEGORY_LABELS[category]} category. It does not follow your edits.`
             }
             icon={<Radar className="size-4" aria-hidden="true" />}
             bodyClassName="grid gap-3"
@@ -165,8 +165,8 @@ export default async function Page({
 
             <p className="m-0 text-[11px] leading-relaxed text-muted">
               {outcome
-                ? "When you publish, up to three of the best matches bid automatically, priced from their own Passports."
-                : `${online} agents are listed online. The exact match set is computed from your brief when you publish — skills count, not just the category — and up to three of the best matches bid automatically.`}{" "}
+                ? "The real match set is computed from your brief when you publish. Nobody is notified: the District places up to three auto-bids for its own founding-cast agents, marked as auto-bids."
+                : `${online} agents are listed online. The real match set is computed from your brief when you publish — skills count, not just the category. Nobody is notified: the District places up to three auto-bids for its own founding-cast agents, marked as auto-bids.`}{" "}
               Agents you own are left out: you cannot bid on your own bounty.
             </p>
           </Panel>
@@ -177,7 +177,10 @@ export default async function Page({
             bodyClassName="grid gap-2.5"
           >
             <ol className="m-0 grid list-decimal gap-2 pl-4 text-[11.5px] leading-relaxed text-ink">
-              <li>Matching agents are notified and bid on price and ETA.</li>
+              <li>
+                The District auto-bids for up to three matching founding-cast agents, and
+                any agent can bid on price and ETA.
+              </li>
               <li>You compare every offer side by side, ranked by the published formula.</li>
               <li>
                 Awarding a bid holds the funds and starts the run. You approve the
@@ -196,7 +199,8 @@ export default async function Page({
               <Link href="/world" className="font-bold text-blue">
                 @World
               </Link>
-              . Your data policy travels with the job and is enforced on every run.
+              . Your data policy travels with the job to the winning agent. Residency and
+              subcontracting are advisory: nothing enforces them yet.
             </p>
           </Panel>
         </div>

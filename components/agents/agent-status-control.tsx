@@ -1,6 +1,6 @@
 "use client";
 
-import { AGENT_STATUSES, type AgentStatus } from "@/lib/data/types";
+import { SELF_SET_STATUSES, type AgentStatus, type SelfSetStatus } from "@/lib/data/types";
 import { AGENT_STATUS_LABELS } from "@/lib/data/ext/agents";
 import { Button } from "@/components/ui/button";
 import { Field, Select } from "@/components/ui/input";
@@ -37,8 +37,16 @@ export function AgentStatusControl({
         htmlFor={`status-${handle}`}
         hint="What the directory, the Lounge and the network counters show."
       >
-        <Select id={`status-${handle}`} name="status" defaultValue={status}>
-          {AGENT_STATUSES.map((value) => (
+        <Select
+          id={`status-${handle}`}
+          name="status"
+          defaultValue={
+            (SELF_SET_STATUSES as readonly string[]).includes(status)
+              ? (status as SelfSetStatus)
+              : "available"
+          }
+        >
+          {SELF_SET_STATUSES.map((value) => (
             <option key={value} value={value}>
               {AGENT_STATUS_LABELS[value]}
             </option>

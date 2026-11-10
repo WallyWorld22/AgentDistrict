@@ -107,8 +107,18 @@ test.describe("agent passport", () => {
     // Identity + reputation.
     await expect(page.getByRole("heading", { level: 1, name: /Scout/ })).toBeVisible();
     await expect(page.getByText("4.96", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("1,842 reviews")).toBeVisible();
+    await expect(page.getByText("1,842 ratings", { exact: true })).toBeVisible();
     await expect(page.getByText("Reliability", { exact: true })).toBeVisible();
+    // The header counts written reviews apart from ratings: 1,842 people did
+    // not each write one (agents-identity-10).
+    await expect(
+      page.getByRole("heading", { name: /^Reviews \(\d+ written · 1,842 ratings\)$/ }),
+    ).toBeVisible();
+    // Nothing verifies a declared skill, so the panel does not say "Verified".
+    await expect(page.getByRole("heading", { name: "Skills", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Verified skills" })).toHaveCount(0);
+    // Per-agent MCP tools are not callable, so there are no chips for them.
+    await expect(page.getByText("MCP tools", { exact: true })).toHaveCount(0);
     await expect(page.getByText("FL", { exact: true }).first()).toBeVisible();
 
     // Scout ships with the District, so the Passport says where that 1,842 came
@@ -192,6 +202,24 @@ test.describe("agent passport", () => {
 
     await expect(page).toHaveURL(/\/inbox\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     await expect(page.getByText(body)).toBeVisible();
+    // Nothing promises a reply: agents cannot answer a thread yet.
+    await expect(page.getByTestId("no-reply-note")).toHaveText("Agents can't reply here yet");
+    await expect(page.getByText(/Typically replies/)).toHaveCount(0);
+    const thread = page.url();
+
+    // Messaging the same agent again continues that thread (owner decision
+    // 14) instead of opening a duplicate.
+    const again = "E2E: and the same for Palm Beach, please.";
+    await page.goto("/agents/mapfox");
+    await hydrated(page, "#thread-body");
+    await page.locator("#thread-subject").fill("E2E territory question, part two");
+    await page.locator("#thread-body").fill(again);
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(page.getByRole("paragraph").filter({ hasText: again })).toBeVisible({
+      timeout: 30_000,
+    });
+    expect(page.url()).toBe(thread);
+    await expect(page.getByRole("paragraph").filter({ hasText: body })).toBeVisible();
   });
 });
 
@@ -305,7 +333,15 @@ test("onboarding: the wizard validates each step, creates a Passport and lands o
   await expect(
     page.getByText("End-to-end coverage for the Passport wizard").first(),
   ).toBeVisible();
-  await expect(page.getByText("run_probe", { exact: true })).toBeVisible();
+  // The wizard took an MCP tool name, but the Passport lists no tool chips:
+  // the District's MCP server does not serve an agent's own tools, so a chip
+  // would promise a call that answers "Tool not found" (owner decision 10).
+  await expect(page.getByText("run_probe", { exact: true })).toHaveCount(0);
+  // No runs, no track record: rating, reliability and latency read "New",
+  // not a default like 95% / 2 min (agents-identity-04).
+  await expect(page.getByText("New", { exact: true })).toHaveCount(3);
+  await expect(page.getByText("No runs yet", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("No ratings yet", { exact: true })).toHaveCount(1);
 
   // The new Passport carries a full agent card of its own.
   //
@@ -382,7 +418,7 @@ test.describe("auth", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
     await expect(page.getByTestId("demo-banner")).toContainText("Demo mode — signed in as");
-    await expect(page.getByText("Signed in as Austin", { exact: true })).toBeVisible();
+    await expect(page.getByText("Signed in as Demo Founder", { exact: true })).toBeVisible();
 
     const cont = page.getByTestId("demo-continue");
     await expect(cont).toBeVisible();
@@ -392,8 +428,15 @@ test.describe("auth", () => {
     // Nothing on the page is a dead, disabled control.
     await expect(page.locator("button[disabled], a[aria-disabled='true']")).toHaveCount(0);
 
+    // Visitor copy only: no server variables, no "zero environment variables".
+    await expect(page.getByText(/NEXT_PUBLIC_SUPABASE|zero environment variables/)).toHaveCount(0);
+
     await cont.click();
     await expect(page).toHaveURL(/\/$/);
+
+    // Where you were going is where Continue goes.
+    await page.goto("/login?next=/profile");
+    await expect(page.getByTestId("demo-continue")).toHaveAttribute("href", "/profile");
   });
 
   test("/signup offers the same demo path and links back to sign in", async ({ page }) => {
@@ -403,6 +446,8 @@ test.describe("auth", () => {
       page.getByRole("heading", { level: 1, name: "Create an account" }),
     ).toBeVisible();
     await expect(page.getByTestId("demo-continue")).toBeVisible();
+    // The same member on both pages: no second persona on /signup.
+    await expect(page.getByText(/@austin · Builder Mode/)).toBeVisible();
     await expect(page.getByRole("link", { name: "← Back to the District" })).toBeVisible();
   });
 

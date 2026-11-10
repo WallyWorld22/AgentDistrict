@@ -5,11 +5,18 @@ import { Radio, Tv, Users } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import type { Agent, BoutWithResult, LeagueStanding } from "@/lib/data/types";
-import { currentSeason, fightCard, fighterIds, type FightCard } from "@/lib/data/ext/fight-night";
+import {
+  channelScheduleLabel,
+  currentSeason,
+  fightCard,
+  fighterIds,
+  withScheduleLabels,
+  type FightCard,
+} from "@/lib/data/ext/fight-night";
 import { chatTranscript, raceSecondsRemaining, relatedChannels } from "@/lib/data/ext/lounge";
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
 import { endSentence } from "@/lib/seo/schema";
 import { buttonClasses } from "@/components/ui/button";
-import { LiveDot } from "@/components/ui/live-dot";
 import { Pill } from "@/components/ui/pill";
 import { SectionHead } from "@/components/ui/section-head";
 import { DataRow, Panel } from "@/components/feature/panel";
@@ -17,6 +24,7 @@ import { ChannelChat } from "@/components/tv/channel-chat";
 import { ChannelTile } from "@/components/tv/channel-tile";
 import { CompetitionPanel } from "@/components/tv/competition-panel";
 import { FightNight } from "@/components/tv/fight-night";
+import { ScriptedBadge } from "@/components/tv/fiction-badge";
 import { FollowButton } from "@/components/tv/follow-button";
 import { HostsRow, type HostEntry } from "@/components/tv/hosts-row";
 import { ShareButton } from "@/components/tv/share-button";
@@ -50,11 +58,12 @@ export default async function Page({ params }: { params: Params }) {
   const channel = await repo.getChannelBySlug(slug);
   if (!channel) notFound();
 
-  const [profile, competitions, everyChannel, league] = await Promise.all([
+  const [profile, competitions, listed, league, everyBout] = await Promise.all([
     getCurrentProfile(),
     channel.competition ? repo.listCompetitions() : Promise.resolve([]),
     repo.listChannels({ limit: 40 }),
     readLeague(channel.id),
+    readEveryBout(),
   ]);
 
   // A Fight League fighter is a character, not a service: it sits on the stage
@@ -70,6 +79,10 @@ export default async function Page({ params }: { params: Params }) {
   const now = districtNow();
   const nowIso = districtNowIso();
   const card: FightCard | null = league ? fightCard(league.bouts, now) : null;
+  const schedule = channelScheduleLabel(channel.schedule, card);
+  // "Up next" and "More like this" print other channels' schedules: a league
+  // whose season is over says so there too, not only on its own page.
+  const everyChannel = withScheduleLabels(listed, everyBout, now);
   const race = competitions.find((entry) => entry.id === channel.competition?.id) ?? null;
   const related = relatedChannels(channel, everyChannel);
   const transcript = chatTranscript(channel.chat, 40);
@@ -88,13 +101,13 @@ export default async function Page({ params }: { params: Params }) {
         action={
           <div className="flex flex-wrap items-center gap-2">
             {channel.is_live ? (
-              <Pill variant="live">
-                <LiveDot color="bg-red" size="sm" />
-                LIVE
+              <Pill variant="live" title={SCRIPTED_NOTE}>
+                {SCRIPTED_CHIP}
               </Pill>
             ) : (
-              <Pill variant="purple">{channel.schedule}</Pill>
+              <Pill variant="purple">{schedule}</Pill>
             )}
+            <ScriptedBadge />
             <FollowButton
               slug={channel.slug}
               title={channel.title}
@@ -112,7 +125,7 @@ export default async function Page({ params }: { params: Params }) {
             title={channel.title}
             hosts={channel.hosts}
             isLive={channel.is_live}
-            schedule={channel.schedule}
+            schedule={schedule}
             gradient={channel.thumbnail_gradient}
           />
 
@@ -179,7 +192,7 @@ export default async function Page({ params }: { params: Params }) {
               ))}
               {upNext.length === 0 ? (
                 <li className="text-[12px] text-muted">
-                  Every channel is live right now.
+                  Every channel is on rotation right now.
                 </li>
               ) : null}
             </ul>
@@ -189,7 +202,7 @@ export default async function Page({ params }: { params: Params }) {
         <div className="grid content-start gap-4">
           <div id="chat" className="scroll-mt-24">
             <Panel
-              title="Live chat"
+              title="Chat"
               subtitle={
                 channel.is_live
                   ? "Viewers and agents, same room."
@@ -213,7 +226,7 @@ export default async function Page({ params }: { params: Params }) {
           <Panel title="Channel">
             <dl className="m-0 grid gap-0">
               <DataRow label="Kind" value={channel.kind} />
-              <DataRow label="Schedule" value={channel.schedule} />
+              <DataRow label="Schedule" value={schedule} />
               <DataRow
                 label="Followers"
                 value={channel.followers.toLocaleString("en-US")}
@@ -230,7 +243,7 @@ export default async function Page({ params }: { params: Params }) {
 
       <Panel
         title="More like this"
-        subtitle="Same kind, same network."
+        subtitle="Same kind first, then the rest of the network."
         href="/tv"
         actionLabel="All channels"
         bodyClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
@@ -265,6 +278,16 @@ type LeagueRead = {
  * still read and a due bout shows as pending; if reading fails (a database
  * without 0012, say), the page renders without the section.
  */
+/** Every bout, for the schedule labels on the channel lists. A failed read labels nothing. */
+async function readEveryBout(): Promise<BoutWithResult[]> {
+  try {
+    return await getRepo().listBouts();
+  } catch (error) {
+    console.error("[tv] reading the bouts for the schedule labels failed", error);
+    return [];
+  }
+}
+
 async function readLeague(channelId: string): Promise<LeagueRead | null> {
   const repo = getRepo();
   try {

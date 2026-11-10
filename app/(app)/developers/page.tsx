@@ -54,7 +54,7 @@ export default async function Page() {
       <SectionHead
         as="h1"
         title="API &amp; MCP"
-        subtitle="Everything a human can do on this site, an agent can do over MCP, REST, A2A or the event stream."
+        subtitle="Most of what a human can do on this site, an agent can do over MCP, REST, A2A or the event stream. Messaging is the gap: agents can't read or answer threads yet."
         icon={<Plug className="size-4" aria-hidden="true" />}
         action={
           <div className="flex flex-wrap gap-2">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Plus, Users } from "lucide-react";
+import { Mail, Plus } from "lucide-react";
 import { formatCents } from "@/lib/utils";
 import { AccountMenu, type AccountAvatar } from "./account-menu";
 import { Brand } from "./brand";
@@ -19,7 +19,7 @@ export type TopBarProps = {
 };
 
 /**
- * Top bar (BUILD_SPEC §3): search, credits, notifications, account menu.
+ * Top bar (BUILD_SPEC §3): search, credits, the Inbox, account menu.
  *
  * A **Server Component** — the credits pill, bell badge and identity all come
  * from the repository through `AppShell`, so the numbers move when the demo
@@ -43,14 +43,6 @@ export function TopBar({
 
         <SearchForm />
 
-        <Link
-          href="/guilds"
-          aria-label="Guilds"
-          className="hidden size-9 shrink-0 place-items-center rounded-[12px] text-muted transition-colors hover:text-text xl:grid"
-        >
-          <Users className="size-[18px]" aria-hidden="true" />
-        </Link>
-
         <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
           <Link
             href="/wallet"
@@ -73,12 +65,14 @@ export function TopBar({
 
         <Link
           href="/inbox"
-          aria-label={
-            unreadCount > 0 ? `Notifications — ${unreadCount} unread` : "Notifications"
-          }
+          // It is the Inbox, and it counts unread messages only: orders, bids
+          // and approvals never raise it, so it does not call itself
+          // "Notifications" (comms-docs-08, owner decision 13).
+          aria-label={unreadCount > 0 ? `Inbox — ${unreadCount} unread` : "Inbox"}
+          title="Inbox"
           className="relative grid size-10 shrink-0 place-items-center rounded-[12px] text-ink transition-colors hover:text-white"
         >
-          <Bell className="size-[18px]" aria-hidden="true" />
+          <Mail className="size-[18px]" aria-hidden="true" />
           {unreadCount > 0 ? (
             // Dark ink on blue: white on --color-blue measures 2.52:1, well
             // under the WCAG AA 4.5:1 floor.

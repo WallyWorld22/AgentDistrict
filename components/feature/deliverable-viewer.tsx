@@ -2,6 +2,11 @@ import type { OrderOutput } from "@/lib/data/types";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Pill } from "@/components/ui/pill";
 import { Inset } from "./panel";
+import {
+  SIMULATED_FILES_NOTE,
+  honestDeliverableMarkdown,
+  isSimulatedAssetHref,
+} from "@/lib/runtime/simulated-assets";
 
 /**
  * Renders a run's structured deliverable (BUILD_SPEC §6) in the shape its
@@ -59,39 +64,53 @@ export function DeliverableViewer({ output }: { output: OrderOutput }) {
 
       {output.markdown ? (
         <Inset className="text-[12.5px] leading-relaxed whitespace-pre-wrap text-ink">
-          {output.markdown}
+          {honestDeliverableMarkdown(output.markdown)}
         </Inset>
       ) : null}
 
       {output.files && output.files.length > 0 ? (
-        <ul className="m-0 grid list-none gap-1.5 p-0">
-          {output.files.map((file) => (
-            <li
-              key={file.path}
-              className="bg-inset-surface flex items-center justify-between gap-3 rounded-[13px] border border-[#1c2638] px-3 py-2"
-            >
-              <code className="truncate font-mono text-[11.5px] text-cyan">
-                {file.path}
-              </code>
-              <small className="shrink-0 text-[10.5px] text-muted tabular-nums">
-                {file.bytes.toLocaleString("en-US")} B
-              </small>
-            </li>
-          ))}
-        </ul>
+        <div className="grid gap-1.5">
+          {/* Names only: a simulated run has no file contents, so no sizes
+              and nothing that reads as an attachment (gigs-orders-06). */}
+          <p data-testid="files-not-attached" className="m-0 text-[11px] text-muted">
+            {SIMULATED_FILES_NOTE}
+          </p>
+          <ul className="m-0 grid list-none gap-1.5 p-0">
+            {output.files.map((file) => (
+              <li
+                key={file.path}
+                className="bg-inset-surface flex items-center justify-between gap-3 rounded-[13px] border border-[#1c2638] px-3 py-2"
+              >
+                <code className="truncate font-mono text-[11.5px] text-cyan">{file.path}</code>
+                <small className="shrink-0 text-[10.5px] text-muted">{file.language}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {output.links && output.links.length > 0 ? (
         <ul className="m-0 grid list-none gap-1.5 p-0">
           {output.links.map((link) => (
             <li key={link.href}>
-              <a
-                href={link.href}
-                rel="noreferrer noopener"
-                className="text-[12px] font-bold text-blue underline-offset-2 hover:underline"
-              >
-                {link.label}
-              </a>
+              {isSimulatedAssetHref(link.href) ? (
+                // A simulated run's links point at the reserved `.example`
+                // domain, which never loads: plain text, tagged, not a link.
+                <span className="inline-flex items-center gap-2 text-[12px] font-bold text-ink">
+                  {link.label}
+                  <Pill size="sm" data-testid="simulated-asset">
+                    simulated asset
+                  </Pill>
+                </span>
+              ) : (
+                <a
+                  href={link.href}
+                  rel="noreferrer noopener"
+                  className="text-[12px] font-bold text-blue underline-offset-2 hover:underline"
+                >
+                  {link.label}
+                </a>
+              )}
             </li>
           ))}
         </ul>

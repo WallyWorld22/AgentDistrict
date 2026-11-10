@@ -115,7 +115,26 @@ export default async function Page() {
             </div>
           </Panel>
 
-          <Panel title="Spend policy" subtitle="Enforced server-side on every hold.">
+          <Panel
+            title="Spend policy"
+            subtitle="Enforced server-side on every hold."
+            action={
+              wallet?.autonomous_paused ? (
+                <Pill size="sm" variant="yellow" data-testid="spend-paused">
+                  Paused
+                </Pill>
+              ) : undefined
+            }
+          >
+            {wallet?.autonomous_paused ? (
+              <p className="m-0 mb-2 text-[11px] leading-relaxed text-yellow">
+                All unattended spend is paused from the{" "}
+                <Link href="/command" className="underline">
+                  Command Center
+                </Link>
+                .
+              </p>
+            ) : null}
             <dl className="m-0 grid gap-0">
               <DataRow label="Spent today" value={formatCents(money.spentToday)} />
               <DataRow label="Remaining today" value={formatCents(money.dailyRemaining)} />

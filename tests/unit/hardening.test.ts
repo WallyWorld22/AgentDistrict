@@ -9,7 +9,7 @@ import { WebhookAdapter } from "@/lib/runtime/webhook";
 import { extractCategories, extractIntent } from "@/lib/world/intent";
 import { routeOutcome } from "@/lib/world";
 import { apiKeyMatches, timingSafeEqualHex } from "@/lib/data/hash";
-import { DEMO_API_KEY, DEMO_PROFILE_ID, DEMO_WRITE_API_KEY, SEED_EPOCH_MS, seed } from "@/lib/seed";
+import { DEMO_API_KEY, DEMO_PROFILE_ID, DEMO_WRITE_API_KEY, SEED_EPOCH_MS, profileId, seed } from "@/lib/seed";
 import type { Agent, Order } from "@/lib/data/types";
 import { remainingRunSeconds, runTimeLabel } from "@/lib/data/ext/economy";
 import { ALL_KEY_SCOPES } from "@/lib/data/ext/agents";
@@ -21,7 +21,8 @@ import { rngFor } from "@/lib/seed/rng";
  * wrong before, so a future change that reintroduces it fails here.
  */
 
-const CHEAP_GIG = "find-100-qualified-local-businesses";
+// Not one of the demo human's own gigs: those cannot be ordered by their owner.
+const CHEAP_GIG = "double-sourced-contact-verification";
 
 let now = SEED_EPOCH_MS;
 let repo: DemoRepository;
@@ -125,26 +126,50 @@ describe("reputation cannot be bought", () => {
   it("refuses a review on your own agent", async () => {
     // The demo human owns Scout; a creator reviewing their own Passport would
     // buy the 35% quality term of the published ranking formula outright.
+    // Since gigs-orders-03 the run a self-review needs cannot even be ordered;
+    // `createReview` keeps its own guard for any such run that predates that.
     const mine = (await repo.listAgentsByOwner(DEMO_PROFILE_ID))[0];
     expect(mine).toBeDefined();
     const gigs = await repo.listGigs({ agentHandle: mine.handle, limit: 5 });
     expect(gigs.length).toBeGreaterThan(0);
 
+    await expect(
+      repo.orderGig({
+        gigSlug: gigs[0].slug,
+        tier: "basic",
+        brief: "Self-review probe.",
+        buyerId: DEMO_PROFILE_ID,
+        approved: true,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // A run of the same agent bought by someone else, then reviewed by the
+    // owner, is refused too: the review belongs to the buyer alone.
     const order = await repo.orderGig({
       gigSlug: gigs[0].slug,
       tier: "basic",
-      brief: "Self-review probe.",
-      buyerId: DEMO_PROFILE_ID,
+      brief: "Bought by a stranger.",
+      buyerId: profileId("devdan"),
       approved: true,
     });
     now += order.eta_seconds * 1000 + 1000;
     await repo.refreshOrder(order.id);
-    await repo.approveOrder(order.id, DEMO_PROFILE_ID);
-
+    await repo.approveOrder(order.id, profileId("devdan"));
     await expect(
       repo.createReview({ orderId: order.id, rating: 5, body: "Five stars for me." },
         DEMO_PROFILE_ID),
     ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // The owner-cannot-review guard itself, on a self-run that predates
+    // gigs-orders-03: the seed keeps one (the demo human's approved Scout run).
+    const selfRun = (
+      await repo.listOrders({ buyerId: DEMO_PROFILE_ID, status: "approved", limit: 200 })
+    ).find((row) => row.agent.owner_id === DEMO_PROFILE_ID);
+    expect(selfRun).toBeDefined();
+    await expect(
+      repo.createReview({ orderId: selfRun!.id, rating: 5, body: "Five stars for me." },
+        DEMO_PROFILE_ID),
+    ).rejects.toThrow("You cannot review your own agent");
   });
 
   it("refuses a review before the run is approved", async () => {

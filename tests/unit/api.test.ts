@@ -23,6 +23,8 @@ import { GET as openapi } from "@/app/openapi.json/route";
 import { GET as skill } from "@/app/skill.md/route";
 import { hireAgentMcpSnippet, orderGigCurl } from "@/lib/data/ext/gigs";
 import { CreateOrderSchema } from "@/lib/openapi";
+import { isFoundingCast } from "@/lib/data/ext/cast";
+import { AUTO_BID_FLOOR_SHARE } from "@/lib/data/ext/jobs";
 import { MCP_TOOLS } from "@/lib/site";
 import { DEMO_API_KEY, DEMO_WRITE_API_KEY, FEATURED_GIG_SLUGS } from "@/lib/seed";
 
@@ -221,7 +223,10 @@ describe("jobs", () => {
     // Posting over REST wakes the matching agents, exactly as posting through
     // the site does — otherwise the reverse auction `/llms.txt` documents
     // ("POST /jobs, then GET /jobs/{id}/bids") dead-ends on an empty board.
-    expect(body.agents_notified).toBeGreaterThan(0);
+    // `agents_matched` is the honest name — matching notifies nobody — and
+    // `agents_notified` stays as a deprecated alias with the same number.
+    expect(body.agents_matched).toBeGreaterThan(0);
+    expect(body.agents_notified).toBe(body.agents_matched);
 
     const list = await listJobs(get("/api/v1/jobs?status=open&limit=50"));
     const jobs = (await json(list)).jobs as Array<{ id: string }>;
@@ -229,14 +234,29 @@ describe("jobs", () => {
 
     const one = await getJob(get(`/api/v1/jobs/${created.id}`), params({ id: created.id }));
     expect(one.status).toBe(200);
-    const bids = (await json(one)).bids as Array<{ agent_handle?: string; amount_cents: number }>;
+    const read = await json(one);
+    const budget = (read.job as { budget_cents: number }).budget_cents;
+    const bids = read.bids as Array<{
+      auto_bid: boolean;
+      agent: { handle: string };
+      amount_cents: number;
+    }>;
     expect(bids.length).toBeGreaterThan(0);
+    // Every one of them is the District's auto-bid for a founding-cast agent,
+    // flagged as such, and none undercuts the floor.
+    for (const bid of bids) {
+      expect(bid.auto_bid).toBe(true);
+      expect(isFoundingCast(bid.agent.handle)).toBe(true);
+      expect(bid.amount_cents).toBeGreaterThanOrEqual(Math.round(budget * AUTO_BID_FLOOR_SHARE));
+    }
   });
 });
 
 describe("orders", () => {
   it("hires a gig, then reads the run back privately", async () => {
-    const slug = FEATURED_GIG_SLUGS[0];
+    // Not a featured gig: the demo human owns Scout, whose gig leads that
+    // list, and nobody may order their own gig (see the next test).
+    const slug = "double-sourced-contact-verification";
     const response = await createOrder(
       post("/api/v1/orders", {
         gig_slug: slug,
@@ -256,6 +276,21 @@ describe("orders", () => {
     expect(read.status).toBe(200);
     expect(read.headers.get("cache-control")).toBe("no-store");
     expect(((await json(read)).order as { id: string }).id).toBe(order.id);
+  });
+
+  it("refuses an order of the caller's own gig (gigs-orders-03)", async () => {
+    const response = await createOrder(
+      post("/api/v1/orders", {
+        gig_slug: FEATURED_GIG_SLUGS[0],
+        tier: "basic",
+        brief: "Ordering my own gig to pad its run count.",
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect((await json(response)).error).toMatchObject({
+      code: "forbidden",
+      message: expect.stringMatching(/This is your gig/),
+    });
   });
 
   it("rejects a body that is neither a gig purchase nor a bid acceptance", async () => {

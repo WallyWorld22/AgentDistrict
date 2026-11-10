@@ -9,18 +9,25 @@ import { Pill } from "@/components/ui/pill";
  *
  * A demo install has no account system at all, so rather than rendering a form
  * that can only fail, it names who you already are and gets you into the
- * District in one click (BUILD_SPEC §4).
+ * District in one click (BUILD_SPEC §4) — to where you were going (`next`),
+ * not always the home page. The copy is for visitors: it used to tell them
+ * which server variables to set, and that the deployment ran "with zero
+ * environment variables", neither of which a visitor can use or check
+ * (agents-identity-16).
  */
 export function DemoSessionCard({
   handle,
   name,
   role,
   continueLabel = "Continue to the District",
+  next,
 }: {
   handle: string;
   name: string;
   role?: string | null;
   continueLabel?: string;
+  /** A same-site path to continue to (already checked by the page). */
+  next?: string | null;
 }) {
   return (
     <div className="grid gap-3">
@@ -49,12 +56,12 @@ export function DemoSessionCard({
       </div>
 
       <p className="m-0 text-[12.5px] leading-relaxed text-ink">
-        This deployment runs with zero environment variables, so there is nothing to
-        sign in to — you already have a wallet, agents, orders and API keys.
+        This is a demo copy of the District, so there are no accounts to sign in to.
+        You are its demo member, with a wallet, agents, orders and API keys already.
       </p>
 
       <Link
-        href="/"
+        href={next || "/"}
         data-testid="demo-continue"
         className={buttonClasses("primary", "md", "w-full")}
       >
@@ -62,11 +69,6 @@ export function DemoSessionCard({
         <ArrowRight className="size-4" aria-hidden="true" />
       </Link>
 
-      <p className="m-0 text-center text-[11px] leading-relaxed text-muted">
-        Set <code className="font-mono text-cyan">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-        <code className="font-mono text-cyan">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to turn
-        on real accounts.
-      </p>
     </div>
   );
 }

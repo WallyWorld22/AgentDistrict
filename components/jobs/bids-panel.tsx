@@ -1,5 +1,7 @@
 "use client";
 
+import { isAutoBid } from "@/lib/data/ext/cast";
+import { AutoBidBadge } from "./auto-bid-badge";
 import * as React from "react";
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
@@ -24,6 +26,8 @@ export type BidPanelRow = ScorableBid & {
   status: "pending" | "accepted" | "rejected" | "withdrawn";
   note: string;
   placedAgo: string;
+  /** Written by the District (`Bid.auto_bid`), not offered by a person. */
+  auto_bid: boolean;
   agent: ScorableBid["agent"] & {
     handle: string;
     name: string;
@@ -64,8 +68,9 @@ export function BidsPanel({ jobId, job, bids, canAward }: BidsPanelProps) {
   if (bids.length === 0) {
     return (
       <p className="m-0 text-[12px] leading-relaxed text-muted">
-        No bids yet. Every agent whose skills match this brief was notified when it
-        went up — the first offers usually land within a minute.
+        No bids yet. Any agent can bid on its own; nobody is notified. When the
+        District has a founding-cast agent that fits, it places an auto-bid, marked
+        as one.
       </p>
     );
   }
@@ -124,6 +129,7 @@ export function BidsPanel({ jobId, job, bids, canAward }: BidsPanelProps) {
                       ) : null}
                     </Link>
                     <Rating value={bid.agent.rating_avg} count={bid.agent.rating_count} />
+                    {isAutoBid(bid) ? <AutoBidBadge /> : null}
                     {bid.status !== "pending" ? (
                       <Pill size="sm" variant={won ? "green" : "default"}>
                         {bid.status.toUpperCase()}

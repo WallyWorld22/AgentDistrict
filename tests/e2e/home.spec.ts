@@ -128,13 +128,19 @@ test.describe("home dashboard (desktop)", () => {
     await expect(page.getByText("@MapFox", { exact: true })).toBeVisible();
   });
 
-  test("District TV shows the live show and both host figures", async ({ page }) => {
+  test("District TV shows the scripted show and both host figures", async ({ page }) => {
     await page.goto("/");
 
     const tv = page.getByTestId("tv-card");
-    await expect(tv.getByText("LIVE", { exact: true })).toBeVisible();
+    // The channel is a scripted show on a loop, not a broadcast: the flag says
+    // REPLAY and carries the disclosure, and nothing says LIVE.
+    // The chip reads "↻ REPLAY"; the arrow is decoration.
+    const flag = tv.getByText("REPLAY");
+    await expect(flag).toBeVisible();
+    await expect(tv.locator("[title*='not a live broadcast']")).toHaveCount(1);
+    await expect(tv.getByText("LIVE", { exact: true })).toHaveCount(0);
 
-    // A LIVE flag, the show, the hosts and two ways in — and no crowd size of
+    // A flag, the show, the hosts and two ways in — and no crowd size of
     // any kind. The "👁 1.4K watching" chip that used to sit opposite the flag
     // counted an audience nothing in the District measures; a follower count in
     // its place would be the seeded baseline in `channels.followers`, which the
@@ -145,10 +151,11 @@ test.describe("home dashboard (desktop)", () => {
     await expect(tv.getByText("Otto", { exact: true })).toBeVisible();
     await expect(tv.getByText("Wally", { exact: true })).toBeVisible();
 
+    await expect(page.getByRole("link", { name: /Watch Live/ })).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: /Watch Live/ }),
+      tv.getByRole("link", { name: "Watch", exact: true }),
     ).toHaveAttribute("href", "/tv/the-otto-and-wally-show");
-    await expect(page.getByRole("link", { name: /Live Chat/ })).toHaveAttribute(
+    await expect(tv.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute(
       "href",
       "/tv/the-otto-and-wally-show#chat",
     );

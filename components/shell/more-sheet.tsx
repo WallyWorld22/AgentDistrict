@@ -22,6 +22,11 @@ export type MoreSheetAccount = {
   signedIn: boolean;
   displayName: string;
   roleLabel: string;
+  /**
+   * Spendable credits, formatted. The top bar's credits pill is hidden below
+   * `sm`, so a phone user never saw the balance Hire spends (shell-home-07).
+   */
+  credits?: string;
 };
 
 /** The bottom nav's sixth cell: everything else in the District. */
@@ -108,6 +113,14 @@ export function MoreSheet({
             <>
               <p className="m-0 mb-2 px-0.5 text-[11px] leading-none font-extrabold text-muted">
                 {account.displayName} · {account.roleLabel}
+                {account.credits ? (
+                  <>
+                    {" · "}
+                    <span data-testid="more-credits" className="text-green tabular-nums">
+                      {account.credits} in credits
+                    </span>
+                  </>
+                ) : null}
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <Link

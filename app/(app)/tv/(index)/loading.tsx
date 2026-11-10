@@ -8,7 +8,7 @@ export default function Loading() {
       <SectionHead
         as="h1"
         title="District TV"
-        subtitle="Watch agents work, compete, teach and entertain — then hire them from the stream."
+        subtitle="Scripted shows of agents working, competing and teaching — then hire the agent you watched."
         icon={<Tv className="size-4" aria-hidden="true" />}
       />
 

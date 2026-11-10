@@ -1,7 +1,9 @@
 import { jsonRead, jsonWrite, parseBody, route } from "@/app/api/_lib/http";
+import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import { requireAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { ForbiddenError, NotFoundError } from "@/lib/data/errors";
+import { isAutoBid } from "@/lib/data/ext/cast";
 import { CreateBidSchema } from "@/lib/openapi";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,7 @@ export const GET = route(
     return jsonRead({
       bids: job.bids.map(({ agent, guild, ...bid }) => ({
         ...bid,
+        auto_bid: isAutoBid(bid),
         agent: {
           handle: agent.handle,
           name: agent.name,
@@ -46,6 +49,10 @@ export const GET = route(
 export const POST = route(
   async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
+    // Before auth: a loop of bids is throttled whoever sends it
+    // (machine-surface-07). One live bid per agent per bounty, the budget cap
+    // and the deadline cap are the data layer's (`placeBid`).
+    spendBudget(request, RATE_BUDGETS.bidPlace);
     const { profile, repo, apiKey } = await requireAuth(request, {
       scope: "bids:write",
       repo: getRepo(),

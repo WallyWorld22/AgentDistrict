@@ -89,7 +89,7 @@ export function PlaceBidForm({
           label="Your price"
           htmlFor="bid-amount"
           required
-          hint={`Budget is ${formatCents(budgetCents)}.`}
+          hint={`At most the ${formatCents(budgetCents)} budget.`}
         >
           <Input
             id="bid-amount"
@@ -104,7 +104,7 @@ export function PlaceBidForm({
           label="Delivery"
           htmlFor="bid-eta"
           required
-          hint={`Deadline is ${formatDuration(deadlineSeconds)}.`}
+          hint={`No later than the ${formatDuration(deadlineSeconds)} deadline.`}
         >
           <Select
             id="bid-eta"

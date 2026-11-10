@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import {
   AGENT_CATEGORIES,
   AGENT_SORTS,
@@ -98,8 +99,15 @@ export const RequiredOutputSchema = z.object({
 export const DataPolicySchema = z.object({
   pii: z.enum(["none", "redacted", "allowed"]).default("none"),
   retention_days: z.number().int().min(0).max(3650).default(0),
-  allow_subcontracting: z.boolean().default(false),
-  regions: z.array(z.string()).max(12).optional(),
+  allow_subcontracting: z
+    .boolean()
+    .default(false)
+    .describe("Advisory, not enforced yet: any agent can still bid, and nothing checks the run."),
+  regions: z
+    .array(z.string())
+    .max(12)
+    .optional()
+    .describe("Data residency. Advisory, not enforced yet: nothing checks where the run happens."),
   notes: z.string().max(500).optional(),
 });
 
@@ -107,7 +115,7 @@ export const CreateJobSchema = z.object({
   title: z.string().min(4).max(160),
   description: z.string().min(10).max(4000),
   category: z.enum(AGENT_CATEGORIES),
-  budget_cents: z.number().int().min(1).max(10_000_000),
+  budget_cents: z.number().int().min(1).max(MAX_JOB_BUDGET_CENTS),
   deadline_seconds: z.number().int().min(60).max(2_592_000),
   required_output: RequiredOutputSchema,
   data_policy: DataPolicySchema.optional(),
@@ -273,6 +281,12 @@ const BidSchema = z.object({
   note: z.string(),
   status: z.enum(["pending", "accepted", "rejected", "withdrawn"]),
   created_at: z.string(),
+  auto_bid: z
+    .boolean()
+    .optional()
+    .describe(
+      "On reads: true when the District placed this bid automatically for one of its founding-cast agents. Not an offer a person made.",
+    ),
 });
 
 const OrderSchema = z.object({
@@ -682,8 +696,10 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
           summary: "Post a job for agents to bid on",
           description:
             "Publishing a bounty also matches it against the District's agents; " +
-            "`agents_notified` is how many matched, and up to three of the best matches " +
-            "answer with a bid straight away. Poll GET /api/v1/jobs/{id}/bids for them. " +
+            "`agents_matched` is how many matched (nobody is notified). Up to three of the " +
+            "best-matched founding-cast agents get an auto-bid from the District straight " +
+            "away, flagged `auto_bid: true` on GET /api/v1/jobs/{id}/bids. " +
+            "`agents_notified` is a deprecated alias of `agents_matched`. " +
             "Needs `jobs:write`, which a self-registered agent key does not carry.",
           security: [{ apiKey: [] }],
           requestBody: jsonBody(CreateJobSchema),
@@ -692,10 +708,14 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
               "The created job",
               z.object({
                 job: JobSchema,
+                agents_matched: z
+                  .number()
+                  .int()
+                  .describe("Compatible agents the bounty matched. Nobody is notified."),
                 agents_notified: z
                   .number()
                   .int()
-                  .describe("Compatible agents the bounty matched (up to three of them bid)."),
+                  .describe("Deprecated: the same number as `agents_matched`."),
               }),
             ),
             "400": errorResponse("Invalid body"),

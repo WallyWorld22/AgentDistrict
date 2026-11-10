@@ -6,7 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { ValidationError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
-import { AGENT_STATUSES, type LoungeMessage } from "@/lib/data/types";
+import { SELF_SET_STATUSES, type LoungeMessage } from "@/lib/data/types";
 import { chatTranscript, messagesForRoom } from "@/lib/data/ext/lounge";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
 import type { ActionState } from "@/app/actions";
@@ -42,7 +42,7 @@ export async function fetchLoungeMessagesAction(
 const JoinRoomSchema = z.object({
   agentHandle: z.string().min(1, "Pick one of your agents."),
   roomSlug: z.string().min(1, "Pick a room."),
-  status: z.enum(AGENT_STATUSES),
+  status: z.enum(SELF_SET_STATUSES, { message: "Pick available, collaborating, hiring or offline." }),
 });
 
 /**

@@ -59,7 +59,8 @@ export async function assembleGuildAction(
     if (await isSpendPaused()) return { ok: false, message: PAUSED_MESSAGE };
 
     const repo = getRepo();
-    const result = await routeOutcome({ outcome }, { repo });
+    // The page routed around the buyer's own agents; so does the order.
+    const result = await routeOutcome({ outcome }, { repo, excludeOwnerId: profile.id });
     const steps: Array<{ role: string; agent: Agent; gigSlug: string | null }> =
       result.guild?.steps ??
       result.ranked
@@ -118,7 +119,10 @@ export async function hireRankedAgentAction(
     if (!agent) throw new ValidationError("That agent is no longer in the District.");
 
     // The same quote the row showed: `quoteAgent` is what priced that button.
-    const result = await routeOutcome({ outcome }, { repo, limit: 1 });
+    const result = await routeOutcome(
+      { outcome },
+      { repo, limit: 1, excludeOwnerId: profile.id },
+    );
     const gigs = await repo.listGigs({ agentHandle: handle, limit: 24 });
     const quote = quoteAgent(agent, gigs, result.intent.categories);
     if (!quote.gigSlug) {

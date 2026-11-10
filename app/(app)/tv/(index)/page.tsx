@@ -4,6 +4,7 @@ import { Cpu, Radio, Trophy, Tv } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { CHANNEL_KINDS, type ChannelKind } from "@/lib/data/types";
+import { withScheduleLabels } from "@/lib/data/ext/fight-night";
 import { TV_FILTERS, raceSecondsRemaining, sortCompetitions } from "@/lib/data/ext/lounge";
 import { oneOf, readQuery } from "@/lib/query";
 import { StatTile } from "@/components/cards";
@@ -47,15 +48,22 @@ export default async function Page({
   const repo = getRepo();
   const now = districtNow();
   const profile = await getCurrentProfile(repo);
-  const [all, competitions, followed] = await Promise.all([
+  const [all, competitions, followed, bouts] = await Promise.all([
     repo.listChannels({ limit: 40 }),
     repo.listCompetitions(),
     profile ? repo.listFollowedChannelSlugs(profile.id) : Promise.resolve([]),
+    // Only for the schedule labels: a failed read labels nothing.
+    repo.listBouts().catch((error: unknown) => {
+      console.error("[tv] reading the bouts for the schedule labels failed", error);
+      return [];
+    }),
   ]);
   const following = new Set(followed);
 
-  // `listChannels` brings the hosts with it — one round trip for the page.
-  const withHosts = all;
+  // `listChannels` brings the hosts with it — one round trip for the page. A
+  // league whose season is over reads "Season 1 complete" on its tile, as it
+  // does on its own page, not the weekly slot it no longer has.
+  const withHosts = withScheduleLabels(all, bouts, now);
   const featured =
     withHosts.find((channel) => channel.slug === FEATURED_SLUG) ??
     [...withHosts].sort((a, b) => b.followers - a.followers)[0] ??
@@ -89,7 +97,7 @@ export default async function Page({
       <SectionHead
         as="h1"
         title="District TV"
-        subtitle="Watch agents work, compete, teach and entertain — then hire them from the stream."
+        subtitle="Scripted shows of agents working, competing and teaching — then hire the agent you watched."
         icon={<Tv className="size-4" aria-hidden="true" />}
         action={
           <Link href="/competitions" className={buttonClasses("outline", "sm")}>
@@ -108,14 +116,15 @@ export default async function Page({
       <p className="m-0 text-[11.5px] leading-relaxed text-muted">
         District TV ships with the District&rsquo;s own channels so there is
         something on air on day one — their follower counts came with them, the
-        way the founding cast&rsquo;s track records did. What is live right now,
-        who is on the couch and every follow from here are real.
+        way the founding cast&rsquo;s track records did. The shows are scripted
+        and run on a loop: nothing here is a live broadcast. Every follow from
+        here, and every chat line you post, is real.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile value={liveChannels.length} label="Live now" tone="red" icon="●" />
+        <StatTile value={liveChannels.length} label="On now" tone="red" icon="●" />
         <StatTile value={withHosts.length} label="Channels" tone="purple" icon="📺" />
-        <StatTile value={hostsOnAir} label="Hosts on air" tone="cyan" icon="🎙" />
+        <StatTile value={hostsOnAir} label="Hosts on the couch" tone="cyan" icon="🎙" />
         <StatTile
           value={totalFollowers.toLocaleString("en-US")}
           label="Followers"
@@ -158,8 +167,8 @@ export default async function Page({
       )}
 
       <Panel
-        title="Live now"
-        subtitle="Entertainment, demos, competitions and build streams."
+        title="On now"
+        subtitle="Scripted shows on a loop: entertainment, demos, competitions and builds."
         icon={<Radio className="size-4" aria-hidden="true" />}
       >
         <LiveStrip channels={liveChannels} />

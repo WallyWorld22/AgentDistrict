@@ -838,9 +838,10 @@ suite("supabase schema against a real Postgres", () => {
 
     await client.query("begin");
     try {
-      // Registration is the one write path with **no credential at all**, so
-      // it runs as `anon` here — exactly as a curl from the open internet does.
-      await client.query("set local role anon");
+      // Registration takes no credential from the caller, but since 0014 the
+      // app makes the call server-side, as the service role, after its per-IP
+      // rate limit — so that is the role it runs as here.
+      await client.query("set local role service_role");
       const registered = await client.query<{
         id: string;
         handle: string;
@@ -898,7 +899,7 @@ suite("supabase schema against a real Postgres", () => {
       );
       expect(Number(discovered.rows[0].count)).toBe(1);
 
-      // `anon` must not be able to read the claim row it just created: the
+      // `anon` must not be able to read the claim row registration created: the
       // digest is the only thing standing between a leak and a stolen agent.
       await client.query("set local role anon");
       const leaked = await client.query<{ count: string }>(
@@ -958,7 +959,7 @@ suite("supabase schema against a real Postgres", () => {
   it("refuses a self-registered key that asks to spend money", async () => {
     await client.query("begin");
     try {
-      await client.query("set local role anon");
+      await client.query("set local role service_role");
       await expect(
         client.query(
           `select public.register_agent(
@@ -979,9 +980,9 @@ suite("supabase schema against a real Postgres", () => {
 
   /* ----------------------------------------- 0011: the hardened entrance */
 
-  /** `register_agent()` as anon with the app's 18 arguments, returning the agent. */
-  async function registerAsAnon(handle: string, keyHash: string, tokenHash: string) {
-    await client.query("set local role anon");
+  /** `register_agent()` as the app calls it (service role, 18 arguments), returning the agent. */
+  async function registerAsApp(handle: string, keyHash: string, tokenHash: string) {
+    await client.query("set local role service_role");
     const { rows } = await client.query<{ id: string; owner_id: string }>(
       `select id, owner_id from public.register_agent(
          p_handle => $1, p_name => 'Probe', p_tagline => 'Registry pinning probe.',
@@ -1002,9 +1003,10 @@ suite("supabase schema against a real Postgres", () => {
   it("pins register_agent() to the District registry, whatever the caller names", async () => {
     await client.query("begin");
     try {
-      // Straight through PostgREST with the anon key, naming a real person's
-      // profile: before 0011 this bound the agent *and its key* to `austin`.
-      await client.query("set local role anon");
+      // Naming a real person's profile: before 0011 this bound the agent *and
+      // its key* to `austin`. Even the service role — the only caller since
+      // 0014 — cannot pick the holding profile.
+      await client.query("set local role service_role");
       await client.query("savepoint hijack");
       await expect(
         client.query(
@@ -1028,7 +1030,7 @@ suite("supabase schema against a real Postgres", () => {
 
       // The app's own call shape — no `p_registry_handle` at all — still works,
       // and still lands on the registry.
-      const agent = await registerAsAnon(
+      const agent = await registerAsApp(
         "pinned-probe",
         `sha256$${"1".repeat(64)}`,
         "2".repeat(64),
@@ -1047,17 +1049,22 @@ suite("supabase schema against a real Postgres", () => {
       await client.query("rollback");
     }
 
-    // The front door is still open to the roles the app calls it as: both
-    // entrances use the anon-key client, never the service role.
+    // Since 0014 the front door is server-only: both entrances call it as the
+    // service role after their rate limit, and nothing else may.
     const signature =
       "public.register_agent(text, text, text, text, text, text, text, text[], text[], " +
       "text, text, integer, jsonb, text[], text, text, text[], text, text)";
-    const grants = await client.query<{ anon: boolean; authenticated: boolean }>(
+    const grants = await client.query<{
+      anon: boolean;
+      authenticated: boolean;
+      service_role: boolean;
+    }>(
       `select has_function_privilege('anon', $1, 'EXECUTE') as anon,
-              has_function_privilege('authenticated', $1, 'EXECUTE') as authenticated`,
+              has_function_privilege('authenticated', $1, 'EXECUTE') as authenticated,
+              has_function_privilege('service_role', $1, 'EXECUTE') as service_role`,
       [signature],
     );
-    expect(grants.rows[0]).toEqual({ anon: true, authenticated: true });
+    expect(grants.rows[0]).toEqual({ anon: false, authenticated: false, service_role: true });
   });
 
   it("refuses a signed-in user who forges an agent-bound or over-scoped key", async () => {
@@ -1079,7 +1086,7 @@ suite("supabase schema against a real Postgres", () => {
     await client.query("begin");
     try {
       // An unclaimed agent, held by the registry — the shape the forge targets.
-      const stranger = await registerAsAnon(
+      const stranger = await registerAsApp(
         "forge-target",
         `sha256$${"3".repeat(64)}`,
         "4".repeat(64),
@@ -1143,7 +1150,7 @@ suite("supabase schema against a real Postgres", () => {
 
     const stores = await client.query<{ kind: string }>(
       "select kind from public.search_district($1, $2)",
-      ["WallyWorks Labs", 50],
+      ["Harborline Labs", 50],
     );
     expect(stores.rows.map((row) => row.kind)).toContain("store");
   });

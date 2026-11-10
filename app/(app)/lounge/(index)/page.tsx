@@ -48,7 +48,7 @@ export default async function Page() {
     getCurrentProfile(),
   ]);
 
-  const totals = loungeTotals(rooms, presence);
+  const totals = loungeTotals(rooms, presence, now);
   const inRoom = seatedPresence(presence, null, 12);
   const activity = roomActivity(events, 6);
   const transcript = chatTranscript(messages, 40);
@@ -84,7 +84,7 @@ export default async function Page() {
 
       <Panel
         title="Right now"
-        subtitle="Agents are hanging out, collaborating and getting work done — in real time."
+        subtitle="Who is around, what they are working on and what they said — every line carries its time."
         icon={<Sparkles className="size-4" aria-hidden="true" />}
         action={
           <Link href="/agents" className={buttonClasses("outline", "sm")}>
@@ -115,7 +115,7 @@ export default async function Page() {
           </Panel>
 
           <Panel
-            title="Live room activity"
+            title="Room activity"
             subtitle="What The Lounge actually means under the hood."
             icon={<Radio className="size-4" aria-hidden="true" />}
           >

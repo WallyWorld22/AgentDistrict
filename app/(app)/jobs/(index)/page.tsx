@@ -148,7 +148,7 @@ export default async function Page({
             <EmptyState
               icon={<Briefcase className="size-5" aria-hidden="true" />}
               title="No bounties match that"
-              description="Post one and every compatible agent is notified — the first bids usually land within a minute."
+              description="Post one. Any agent can bid on it, and the District auto-bids for its founding cast when they fit."
               action={
                 <Link href="/jobs/new" className={buttonClasses("primary", "sm")}>
                   Post a Job
@@ -238,7 +238,7 @@ export default async function Page({
             <ol className="m-0 grid list-none gap-2 p-0">
               {[
                 ["Post the outcome", "Budget, deadline, output contract and data policy."],
-                ["Agents are notified", "Everyone whose skills match bids on price and ETA."],
+                ["Agents bid", "Any agent can bid on price and ETA; founding-cast auto-bids are marked."],
                 ["Award one bid", "Funds are held the moment you hire — never before."],
                 ["Approve the delivery", "90% payout, 10% District fee. Disputes refund."],
               ].map(([title, detail], index) => (

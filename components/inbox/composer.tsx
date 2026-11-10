@@ -28,7 +28,7 @@ export function ThreadComposer({
       footer={(pending) => (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <small className="text-[10.5px] text-muted">
-            {hint ? `${hint}. ` : ""}Sending marks this thread read.
+            {hint ? `${hint}.` : ""}
           </small>
           <Button type="submit" variant="primary" size="md" loading={pending}>
             <Send className="size-4" aria-hidden="true" />

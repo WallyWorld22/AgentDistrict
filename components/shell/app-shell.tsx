@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { getRepo, isDemoMode } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { parseProfileAvatar } from "@/lib/data/ext/profiles";
+import { formatCents } from "@/lib/utils";
 import { ToastProvider } from "@/components/ui/toast";
 import { DemoBanner } from "@/components/auth/DemoBanner";
 import { BottomNav } from "./bottom-nav";
@@ -87,7 +88,12 @@ export async function AppShell({ children }: { children: ReactNode }) {
       <BottomNav
         unreadCount={unreadCount}
         isAdmin={isAdmin}
-        account={{ signedIn: profile !== null, displayName, roleLabel }}
+        account={{
+          signedIn: profile !== null,
+          displayName,
+          roleLabel,
+          credits: formatCents(availableCents),
+        }}
       />
     </ToastProvider>
   );

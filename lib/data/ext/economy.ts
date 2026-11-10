@@ -64,7 +64,14 @@ export const GUILD_FORMATION_STEPS: ReadonlyArray<{
 export type GuildHireStep = {
   agent: Agent;
   role: string;
+  /** Null when the member has nothing published, or is the buyer's own agent. */
   gig: GigWithAgent | null;
+  /**
+   * The buyer owns this member. Nobody may order their own gig
+   * (gigs-orders-03), so the step is skipped — priced out of the total and
+   * never ordered — rather than failing the hire part-way.
+   */
+  ownedByBuyer: boolean;
   tier: PackageTier;
   priceCents: Cents;
   etaSeconds: number;
@@ -79,6 +86,8 @@ export type GuildHirePlan = {
   etaSeconds: number;
   /** Members with nothing published, so the UI can say so honestly. */
   missing: Agent[];
+  /** Members the buyer owns, skipped for the same reason. */
+  owned: Agent[];
 };
 
 /** The package a hire uses for one member of a guild. */
@@ -128,15 +137,18 @@ export async function buildGuildHirePlan(
   repo: Repository,
   guild: GuildWithMembers,
   tier: PackageTier = "basic",
+  options: { buyerId?: string | null } = {},
 ): Promise<GuildHirePlan> {
   const steps = await Promise.all(
     guild.members.map(async (agent, index): Promise<GuildHireStep> => {
-      const gig = await bestGigForAgent(repo, agent.handle);
+      const ownedByBuyer = Boolean(options.buyerId) && agent.owner_id === options.buyerId;
+      const gig = ownedByBuyer ? null : await bestGigForAgent(repo, agent.handle);
       const pkg = gig ? packageFor(gig, tier) : null;
       return {
         agent,
         role: guild.roles[index] ?? agent.category,
         gig,
+        ownedByBuyer,
         tier,
         priceCents: pkg?.price_cents ?? agent.starting_price_cents,
         etaSeconds: pkg?.delivery_seconds ?? agent.avg_latency_sec,
@@ -150,7 +162,10 @@ export async function buildGuildHirePlan(
     hireable,
     totalCents: hireable.reduce((sum, step) => sum + step.priceCents, 0),
     etaSeconds: hireable.reduce((slowest, step) => Math.max(slowest, step.etaSeconds), 0),
-    missing: steps.filter((step) => step.gig === null).map((step) => step.agent),
+    missing: steps
+      .filter((step) => step.gig === null && !step.ownedByBuyer)
+      .map((step) => step.agent),
+    owned: steps.filter((step) => step.ownedByBuyer).map((step) => step.agent),
   };
 }
 
@@ -350,13 +365,13 @@ export function sortMarketItems<T extends MarketItem>(items: T[], sort: MarketSo
 /* Inbox                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** "Typically replies in 12 sec" — straight from the Passport's `avg_latency_sec`. */
-export function replyLatencyLabel(seconds: number | null | undefined): string | null {
-  if (!seconds || seconds <= 0) return null;
-  if (seconds < 90) return `Typically replies in ${Math.round(seconds)} sec`;
-  if (seconds < 5400) return `Typically replies in ${Math.round(seconds / 60)} min`;
-  return `Typically replies in ${Math.round(seconds / 3600)} h`;
-}
+/**
+ * Agents cannot answer a thread: there is no API route and no MCP tool for an
+ * agent to read or reply to messages yet (owner decision 8). The inbox used to
+ * print "Typically replies in 42 sec" from the Passport's latency, a reply
+ * that never came. Every place that would promise a reply says this instead.
+ */
+export const AGENT_REPLY_NOTE = "Agents can't reply here yet";
 
 /**
  * One-line preview of a message for the conversation rail.
@@ -499,7 +514,7 @@ export const GATEWAY_LANES: readonly GatewayLane[] = [
   {
     id: "gateway",
     title: "Workplace Gateway",
-    items: ["Policy", "Spend limits", "Redaction", "Audit log"],
+    items: ["Policy", "Spend limits", "Approvals", "Audit log"],
     tone: "blue",
   },
   {

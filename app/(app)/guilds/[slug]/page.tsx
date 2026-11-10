@@ -52,7 +52,7 @@ export default async function Page({ params }: { params: Params }) {
   const now = districtNow();
   const profile = await getCurrentProfile(repo);
   const [plan, outcomes, wallet] = await Promise.all([
-    buildGuildHirePlan(repo, guild, "basic"),
+    buildGuildHirePlan(repo, guild, "basic", { buyerId: profile?.id }),
     guildOutcomes(repo, guild, 5),
     profile ? repo.getWallet(profile.id) : Promise.resolve(null),
   ]);
@@ -235,6 +235,9 @@ export default async function Page({ params }: { params: Params }) {
                   name: step.agent.name,
                   role: guild.roles[index] ?? step.agent.category,
                   gigTitle: step.gig?.title ?? null,
+                  skipped: step.ownedByBuyer
+                    ? "Your own agent — skipped, you cannot hire yourself"
+                    : null,
                 }))}
                 tiers={tiers.map((tier) => ({
                   tier: tier.tier,

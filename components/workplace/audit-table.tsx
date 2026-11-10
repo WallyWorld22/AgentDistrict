@@ -66,7 +66,7 @@ export function AuditTable({ rows, now }: { rows: AuditRow[]; now: number }) {
                     href={row.href}
                     className="ml-2 inline-block text-[10.5px] font-extrabold text-blue hover:text-cyan"
                   >
-                    View run →
+                    {auditLinkLabel(row.href)}
                   </Link>
                 ) : null}
               </td>
@@ -76,4 +76,19 @@ export function AuditTable({ rows, now }: { rows: AuditRow[]; now: number }) {
       </table>
     </div>
   );
+}
+
+/**
+ * Say where the link goes. Order rows open a run; District events link to a
+ * Passport, a channel, a job or a page, and "View run" on those promised a run
+ * that was not there.
+ */
+export function auditLinkLabel(href: string): string {
+  if (href.startsWith("/orders/")) return "View run →";
+  if (href.startsWith("/agents/")) return "View Passport →";
+  if (href.startsWith("/tv/")) return "Open channel →";
+  if (href.startsWith("/jobs/")) return "View bounty →";
+  if (href.startsWith("/gigs/")) return "View gig →";
+  if (href.startsWith("/guilds/")) return "View guild →";
+  return "Open →";
 }

@@ -85,6 +85,13 @@ type TableSpec = {
    * trigger, so re-applying the seed must leave those rows exactly as they are.
    */
   insertOnly?: boolean;
+  /**
+   * Columns left out of the INSERT, because the seed must also load on a
+   * database that predates them (the integration suites seed 0001–00NN before
+   * applying the migration under test). Each one is written afterwards by a
+   * guarded UPDATE instead — see `renderAutoBids`.
+   */
+  omit?: string[];
 };
 
 /**
@@ -129,7 +136,7 @@ const TABLES: TableSpec[] = [
     pk: ["id"],
     json: ["required_output", "data_policy"],
   },
-  { table: "bids", key: "bids", pk: ["id"] },
+  { table: "bids", key: "bids", pk: ["id"], omit: ["auto_bid"] },
   { table: "market_items", key: "marketItems", pk: ["id"], textArray: ["tags"] },
   { table: "channels", key: "channels", pk: ["id"] },
   { table: "channel_hosts", key: "channelHosts", pk: ["channel_id", "agent_id"] },
@@ -194,9 +201,9 @@ function renderTable(spec: TableSpec, rowsOverride?: Record<string, unknown>[]):
   const rows = (rowsOverride ?? seed[spec.key]) as unknown as Record<string, unknown>[];
   if (rows.length === 0) return `-- ${spec.table}: no rows\n`;
 
-  const columns = Object.keys(rows[0]);
+  const columns = Object.keys(rows[0]).filter((column) => !spec.omit?.includes(column));
   for (const row of rows) {
-    const keys = Object.keys(row);
+    const keys = Object.keys(row).filter((column) => !spec.omit?.includes(column));
     if (keys.length !== columns.length || keys.some((k, i) => k !== columns[i])) {
       throw new Error(
         `seed:sql — ${spec.table} rows have inconsistent shapes; every row must ` +
@@ -244,6 +251,38 @@ function renderAwardedBidUpdates(): string {
   return [
     "-- jobs.awarded_bid_id (deferred: bids reference jobs, jobs reference bids)",
     ...lines,
+    "",
+  ].join("\n");
+}
+
+/**
+ * `bids.auto_bid` (0016). Left out of the bids INSERT so the seed still loads
+ * on a database without the column, and set here — only where the column
+ * exists. 0016 sets the same rows on a database seeded before it.
+ */
+function renderAutoBids(): string {
+  const ids = seed.bids.filter((bid) => bid.auto_bid).map((bid) => quote(bid.id));
+  if (ids.length === 0) return "";
+  const list: string[] = [];
+  for (let offset = 0; offset < ids.length; offset += 4) {
+    list.push(`      ${ids.slice(offset, offset + 4).join(", ")}`);
+  }
+  return [
+    "-- bids.auto_bid (0016): written by the District, not offered by a person",
+    "do $$",
+    "begin",
+    "  if exists (",
+    "    select 1 from information_schema.columns",
+    "     where table_schema = 'public' and table_name = 'bids' and column_name = 'auto_bid'",
+    "  ) then",
+    "    update public.bids set auto_bid = true",
+    "     where not auto_bid",
+    "       and id in (",
+    list.join(",\n"),
+    "       );",
+    "  end if;",
+    "end",
+    "$$;",
     "",
   ].join("\n");
 }
@@ -380,6 +419,7 @@ begin;
     if (spec.table === "bids") {
       body.push(renderTable(spec));
       body.push(renderAwardedBidUpdates());
+      body.push(renderAutoBids());
       continue;
     }
     body.push(renderTable(spec));

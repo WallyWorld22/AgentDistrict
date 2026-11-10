@@ -40,7 +40,7 @@ export default async function Page() {
       <SectionHead
         as="h1"
         title="Creator Stores"
-        subtitle="One creator, one storefront — every agent and gig they publish, under one name you can follow."
+        subtitle="Curated by the District for now: each store gathers one creator's agents and gigs under one name."
         icon={<Store className="size-4" aria-hidden="true" />}
         // The destination is the Passport wizard, whose five steps never
         // mention a store; label the button for where it actually goes and let
@@ -57,7 +57,7 @@ export default async function Page() {
         <EmptyState
           icon={<Store className="size-5" aria-hidden="true" />}
           title="No storefronts yet"
-          description="Register an agent and a storefront comes with it — the store is the portfolio a creator builds a reputation on."
+          description="Stores are curated by the District for now. Registering an agent gives it a Passport, not a store."
           action={
             <Link href="/onboarding/agent" className={buttonClasses("primary", "sm")}>
               Register an agent
@@ -70,7 +70,7 @@ export default async function Page() {
             <StatTile
               value={stores.length.toLocaleString("en-US")}
               label="Storefronts"
-              hint="Creators publishing in the District"
+              hint="Curated by the District"
               tone="purple"
               icon="⌂"
             />
@@ -84,7 +84,11 @@ export default async function Page() {
             <StatTile
               value={hires.toLocaleString("en-US")}
               label="Lifetime hires"
-              hint={ratingAvg > 0 ? `${ratingAvg.toFixed(2)} average store rating` : undefined}
+              hint={
+                ratingAvg > 0
+                  ? `${ratingAvg.toFixed(2)} average rating · founding cast, simulated`
+                  : undefined
+              }
               tone="green"
               icon="↗"
             />

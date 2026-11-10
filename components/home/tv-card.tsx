@@ -1,10 +1,10 @@
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
 import * as React from "react";
 import Link from "next/link";
 import { MessageSquare, Play } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
-import { LiveDot } from "@/components/ui/live-dot";
 
 export type TvCardProps = {
   channel: Channel;
@@ -44,9 +44,9 @@ export function TvCard({ channel, hosts, className }: TvCardProps) {
         <span className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#0a0713]/85 to-transparent" />
 
         {channel.is_live ? (
-          <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-[7px] bg-[#e8283f] px-2 py-1 text-[9.5px] font-black tracking-[0.06em] text-white">
-            <LiveDot color="bg-white" size="sm" />
-            LIVE
+          <span title={SCRIPTED_NOTE} className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-[7px] bg-[#e8283f] px-2 py-1 text-[9.5px] font-black tracking-[0.06em] text-white">
+            <span aria-hidden="true">↻</span>
+            {SCRIPTED_CHIP}
           </span>
         ) : null}
       </Link>
@@ -69,14 +69,14 @@ export function TvCard({ channel, hosts, className }: TvCardProps) {
           className={buttonClasses("primary", "sm", "flex-1")}
         >
           <Play className="size-3.5 fill-current" aria-hidden="true" />
-          {channel.is_live ? "Watch Live" : "Watch"}
+          Watch
         </Link>
         <Link
           href={`/tv/${channel.slug}#chat`}
           className={buttonClasses("outline", "sm", "flex-1")}
         >
           <MessageSquare className="size-3.5" aria-hidden="true" />
-          Live Chat
+          Chat
         </Link>
       </div>
     </div>

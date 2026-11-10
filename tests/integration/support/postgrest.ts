@@ -30,6 +30,13 @@ export type PostgrestRole = "anon" | "service_role";
  * shape for them: a set-returning function gives an array of row objects, any
  * other the one row object (or `null`).
  *
+ * And it serves the two plain writes the adapter makes through the table
+ * endpoints: `POST /rest/v1/<table>` (`.insert(row)`, one object or an array)
+ * and `PATCH /rest/v1/<table>?<eq filters>` (`.update(patch).eq(…)`), as that
+ * role and **committed**. Only the columns the body names are written, so
+ * every other column keeps its default exactly as PostgREST leaves it. With
+ * `select=*` the written rows come back (`.select("*")`), otherwise nothing.
+ *
  * `role` is the database role every request runs as: `anon` (the default) is
  * the anon-key client, `service_role` the service-role client an API-key or MCP
  * caller reaches Postgres through (`getRepoActingAs()` in `lib/data`).
@@ -144,10 +151,77 @@ function translate(url: URL): { sql: string; params: unknown[] } {
   return { sql, params };
 }
 
+/**
+ * `POST /rest/v1/<table>` or `PATCH /rest/v1/<table>?col=eq.v` → one
+ * INSERT … RETURNING / UPDATE … RETURNING. The body is decoded with
+ * `json_populate_record(set)` against the table's own row type, so every value
+ * is cast exactly as Postgres would cast it.
+ */
+function translateWrite(
+  url: URL,
+  method: "POST" | "PATCH",
+  body: unknown,
+): { sql: string; params: unknown[]; returning: boolean } {
+  const path = /^\/rest\/v1\/([^/]+)$/.exec(url.pathname);
+  if (!path) throw new Unsupported(`path ${url.pathname}`);
+  const table = identifier(path[1]);
+  const rows: unknown[] = Array.isArray(body) ? body : [body];
+  if (
+    rows.length === 0 ||
+    rows.some((row) => row === null || typeof row !== "object" || Array.isArray(row))
+  ) {
+    throw new Unsupported("write body that is not an object or an array of objects");
+  }
+  const columns = [...new Set(rows.flatMap((row) => Object.keys(row as object)))].map(identifier);
+  if (columns.length === 0) throw new Unsupported("write with no columns");
+
+  let returning = false;
+  const params: unknown[] = [JSON.stringify(method === "POST" ? rows : rows[0])];
+  const where: string[] = [];
+  for (const [key, value] of url.searchParams) {
+    if (key === "select") {
+      if (value !== "*") throw new Unsupported(`write select ${JSON.stringify(value)}`);
+      returning = true;
+    } else if (key === "columns") {
+      // postgrest-js names the inserted columns; the body already does.
+    } else if (method === "PATCH" && value.startsWith("eq.")) {
+      params.push(value.slice(3));
+      where.push(`t.${identifier(key)}::text = $${params.length}`);
+    } else {
+      throw new Unsupported(`write parameter ${key}=${value}`);
+    }
+  }
+
+  if (method === "POST") {
+    const list = columns.join(", ");
+    return {
+      sql:
+        `insert into public.${table} as t (${list}) ` +
+        `select ${list} from json_populate_recordset(null::public.${table}, $1::json) ` +
+        "returning row_to_json(t) as row",
+      params,
+      returning,
+    };
+  }
+  // An unfiltered PATCH would rewrite the whole table; the adapter never
+  // sends one.
+  if (where.length === 0) throw new Unsupported("PATCH with no filter");
+  return {
+    sql:
+      `update public.${table} t set ${columns.map((column) => `${column} = r.${column}`).join(", ")} ` +
+      `from json_populate_record(null::public.${table}, $1::json) r ` +
+      `where ${where.join(" and ")} returning row_to_json(t) as row`,
+    params,
+    returning,
+  };
+}
+
 type Scalar = string | number | boolean | null;
+/** An RPC argument as `pg` sends it: a scalar, an array (a Postgres array) or JSON text. */
+type RpcParam = Scalar | Scalar[];
 
 /** `POST /rest/v1/rpc/<fn>` with a JSON object body → one named-argument call. */
-function translateRpc(url: URL, body: unknown): { name: string; sql: string; params: Scalar[] } {
+function translateRpc(url: URL, body: unknown): { name: string; sql: string; params: RpcParam[] } {
   const path = /^\/rest\/v1\/rpc\/([^/]+)$/.exec(url.pathname);
   if (!path) throw new Unsupported(`path ${url.pathname}`);
   const name = path[1];
@@ -155,12 +229,18 @@ function translateRpc(url: URL, body: unknown): { name: string; sql: string; par
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
     throw new Unsupported("rpc body that is not a JSON object");
   }
-  const params: Scalar[] = [];
+  const params: RpcParam[] = [];
+  const isScalar = (value: unknown): value is Scalar =>
+    value === null || ["string", "number", "boolean"].includes(typeof value);
   const args = Object.entries(body as Record<string, unknown>).map(([key, value]) => {
-    if (value !== null && !["string", "number", "boolean"].includes(typeof value)) {
-      throw new Unsupported(`rpc argument ${key} that is not a scalar`);
-    }
-    params.push(value as Scalar);
+    // PostgREST hands a JSON array to a Postgres array parameter and a JSON
+    // object to a json/jsonb one. `pg` sends a JS array as an array literal
+    // and the object goes as its JSON text; both resolve against the
+    // function's declared parameter types.
+    if (Array.isArray(value) && value.every(isScalar)) params.push(value);
+    else if (isScalar(value)) params.push(value);
+    else if (typeof value === "object" && !Array.isArray(value)) params.push(JSON.stringify(value));
+    else throw new Unsupported(`rpc argument ${key} of this shape`);
     return `${identifier(key)} => $${params.length}`;
   });
   return {
@@ -186,6 +266,10 @@ function postgrestFetch(pool: Pool, role: PostgrestRole): typeof fetch {
 
     if (method === "POST" && url.pathname.startsWith("/rest/v1/rpc/")) {
       return callRpc(pool, role, url, typeof init?.body === "string" ? init.body : "");
+    }
+    if (method === "POST" || method === "PATCH") {
+      const body = typeof init?.body === "string" ? init.body : "";
+      return callWrite(pool, role, url, method, body, accept);
     }
 
     let statement: { sql: string; params: unknown[] };
@@ -239,7 +323,7 @@ async function callRpc(
   url: URL,
   rawBody: string,
 ): Promise<Response> {
-  let statement: { name: string; sql: string; params: Scalar[] };
+  let statement: { name: string; sql: string; params: RpcParam[] };
   try {
     statement = translateRpc(url, rawBody === "" ? {} : JSON.parse(rawBody));
   } catch (error) {
@@ -268,6 +352,58 @@ async function callRpc(
     await connection.query("commit");
     const data = rows.map((row) => row.row);
     return respond(200, shape[0]?.set ? data : (data[0] ?? null));
+  } catch (error) {
+    await connection.query("rollback").catch(() => undefined);
+    const { code, message } = error as { code?: string; message?: string };
+    return respond(400, { code: code ?? "", message: message ?? String(error), details: null, hint: null });
+  } finally {
+    connection.release();
+  }
+}
+
+async function callWrite(
+  pool: Pool,
+  role: PostgrestRole,
+  url: URL,
+  method: "POST" | "PATCH",
+  rawBody: string,
+  accept: string,
+): Promise<Response> {
+  let statement: { sql: string; params: unknown[]; returning: boolean };
+  try {
+    statement = translateWrite(url, method, rawBody === "" ? null : JSON.parse(rawBody));
+  } catch (error) {
+    if (!(error instanceof Unsupported) && !(error instanceof SyntaxError)) throw error;
+    return respond(400, {
+      code: "SHIM",
+      message: `postgrest test shim cannot serve ${method} ${url.pathname}${url.search}: unsupported ${error.message}`,
+      details: null,
+      hint: null,
+    });
+  }
+
+  const connection = await pool.connect();
+  try {
+    await connection.query("begin");
+    await connection.query(`set local role ${role}`);
+    await connection.query("set local timezone to 'UTC'");
+    const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
+    await connection.query("commit");
+    const data = rows.map((row) => row.row);
+    if (!statement.returning) return new Response(null, { status: 204 });
+    const status = method === "POST" ? 201 : 200;
+    if (accept.includes("application/vnd.pgrst.object+json")) {
+      if (data.length !== 1) {
+        return respond(406, {
+          code: "PGRST116",
+          message: "JSON object requested, multiple (or no) rows returned",
+          details: `The result contains ${data.length} rows`,
+          hint: null,
+        });
+      }
+      return respond(status, data[0]);
+    }
+    return respond(status, data);
   } catch (error) {
     await connection.query("rollback").catch(() => undefined);
     const { code, message } = error as { code?: string; message?: string };

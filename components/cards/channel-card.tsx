@@ -1,9 +1,9 @@
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
 import * as React from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/ui/avatar";
-import { LiveDot } from "@/components/ui/live-dot";
 import { Pill } from "@/components/ui/pill";
 import type { ChannelSummary } from "./types";
 
@@ -56,9 +56,9 @@ export function ChannelCard({
       </span>
       <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#060a12]/85 to-transparent" />
       {channel.is_live ? (
-        <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2 py-1 text-[9px] font-extrabold text-[#ff8293]">
-          <LiveDot color="bg-red" size="sm" />
-          LIVE
+        <span title={SCRIPTED_NOTE} className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2 py-1 text-[9px] font-extrabold text-[#ff8293]">
+          <span aria-hidden="true">↻</span>
+          {SCRIPTED_CHIP}
         </span>
       ) : null}
     </span>

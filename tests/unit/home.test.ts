@@ -128,7 +128,17 @@ describe("pickSceneCast", () => {
   });
 
   it("countOnline ignores offline rows", () => {
-    expect(countOnline(rows)).toBe(4);
+    const now = Date.parse("2026-01-01T00:10:00.000Z");
+    expect(countOnline(rows, now)).toBe(4);
+  });
+
+  it("countOnline ignores rows nobody has seen for over half an hour", () => {
+    // The production hall read "28 online" over rooms where every presence
+    // was last seen 18 days earlier.
+    const later = Date.parse("2026-01-01T00:31:00.000Z");
+    expect(countOnline(rows, later)).toBe(0);
+    const stale = { ...rows[0], updated_at: "2025-12-14T00:00:00.000Z" };
+    expect(countOnline([stale, ...rows.slice(1)], Date.parse("2026-01-01T00:10:00.000Z"))).toBe(3);
   });
 
   it("the reference order only names real handles", async () => {

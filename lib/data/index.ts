@@ -38,10 +38,13 @@ const repoGlobal = globalThis as unknown as RepoGlobal;
 
 export function getRepo(): Repository {
   if (isSupabaseDataMode()) {
-    return (repoGlobal[SUPABASE_SLOT] ??= new SupabaseRepository(async () => {
-      const { createClient } = await import("@/lib/supabase/server");
-      return createClient();
-    }));
+    return (repoGlobal[SUPABASE_SLOT] ??= new SupabaseRepository(
+      async () => {
+        const { createClient } = await import("@/lib/supabase/server");
+        return createClient();
+      },
+      { serviceClient: serviceClientFactory },
+    ));
   }
   return (repoGlobal[DEMO_SLOT] ??= createDemoRepository());
 }
@@ -63,13 +66,20 @@ export function getRepo(): Repository {
 export function getRepoActingAs(profileId: string): Repository | null {
   if (!isSupabaseDataMode()) return null;
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  return new SupabaseRepository(
-    async () => {
-      const { createServiceClient } = await import("@/lib/supabase/service");
-      return createServiceClient();
-    },
-    { actAs: profileId },
-  );
+  return new SupabaseRepository(serviceClientFactory, {
+    actAs: profileId,
+    serviceClient: serviceClientFactory,
+  });
+}
+
+/**
+ * The service-role client, loaded lazily. Handed to every Supabase repository
+ * for `registerAgent()` alone, which 0014 made server-only; the repository
+ * never uses it for anything else unless it was built to act as one profile.
+ */
+async function serviceClientFactory() {
+  const { createServiceClient } = await import("@/lib/supabase/service");
+  return createServiceClient();
 }
 
 /** Which adapter `getRepo()` will hand back, without constructing it. */

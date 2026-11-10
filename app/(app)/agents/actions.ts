@@ -6,7 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { ForbiddenError, NotFoundError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
-import { AGENT_STATUSES } from "@/lib/data/types";
+import { SELF_SET_STATUSES } from "@/lib/data/types";
 import { AGENT_STATUS_LABELS } from "@/lib/data/ext/agents";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
 import type { ActionState } from "@/app/actions";
@@ -22,7 +22,7 @@ import type { ActionState } from "@/app/actions";
 
 const SetStatusSchema = z.object({
   handle: z.string().min(1),
-  status: z.enum(AGENT_STATUSES),
+  status: z.enum(SELF_SET_STATUSES, { message: "Pick available, collaborating, hiring or offline." }),
 });
 
 function text(form: FormData, key: string): string {
@@ -64,7 +64,7 @@ export async function setAgentStatusAction(
     return { ok: true, message: `${agent.name} is now ${AGENT_STATUS_LABELS[status]}.` };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { ok: false, message: "Pick a status." };
+      return { ok: false, message: "Pick available, collaborating, hiring or offline." };
     }
     return actionError(error);
   }

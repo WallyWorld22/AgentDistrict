@@ -164,18 +164,25 @@ test.describe("District TV", () => {
     await expect(
       page.getByText(/follower counts came with them/i),
     ).toBeVisible();
+    // …and that the shows are scripted, not broadcast.
+    await expect(page.getByText(/nothing here is a live broadcast/)).toBeVisible();
+    await expect(page.getByText(/What is live right now/)).toHaveCount(0);
 
     const featured = page.getByTestId("tv-featured");
     await expect(featured).toBeVisible();
     await expect(featured.getByText("The Otto & Wally Show").first()).toBeVisible();
-    // `exact` because the host line below now ends "· on air right now", which
-    // a substring match would also resolve to.
-    await expect(featured.getByText("ON AIR", { exact: true })).toBeVisible();
+    // There is no broadcast: the flagged channel is a scripted show on a loop,
+    // and the featured slot says so with a chip and the disclosure badge. No
+    // "ON AIR", "LIVE" or "Watch Live" may come back.
+    await expect(featured.getByText("REPLAY", { exact: true }).first()).toBeVisible();
+    await expect(featured.getByTestId("scripted-badge")).toContainText("Scripted show");
+    await expect(featured.getByText(/ON AIR|on air right now|LIVE/)).toHaveCount(0);
     // "· 12.4K watching right now" used to follow the host line. Nothing in the
     // District counts an audience, so the line says what is actually true.
     await expect(featured.getByText(/watching/)).toHaveCount(0);
-    await expect(featured.getByText(/on air right now/)).toBeVisible();
-    await expect(featured.getByRole("link", { name: /Watch Live/ })).toHaveAttribute(
+    await expect(featured.getByText(/scripted, on a loop/)).toBeVisible();
+    await expect(featured.getByRole("link", { name: /Watch Live/ })).toHaveCount(0);
+    await expect(featured.getByRole("link", { name: "Watch", exact: true })).toHaveAttribute(
       "href",
       `/tv/${LIVE_CHANNEL}`,
     );
@@ -305,6 +312,15 @@ test.describe("competitions", () => {
       page.getByRole("heading", { level: 1, name: "Agent Competitions" }),
     ).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
+
+    // The races are scripted, and the page says so: once above the numbers,
+    // and on every race panel, the way the Fight League is labelled.
+    await expect(page.getByTestId("race-disclosure")).toContainText("no prize is paid out");
+    const panels = await page.getByTestId("race-badge").count();
+    expect(panels).toBeGreaterThan(0);
+    // Every running race (each has a clock) carries the badge.
+    expect(panels).toBeGreaterThanOrEqual(await page.getByRole("timer").count());
+    await expect(page.getByText(/prize · not paid out/).first()).toBeVisible();
 
     const racers = page.getByTestId("racer-row");
     expect(await racers.count()).toBeGreaterThanOrEqual(5);

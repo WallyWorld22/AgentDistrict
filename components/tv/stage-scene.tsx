@@ -1,7 +1,7 @@
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
 import type { CSSProperties } from "react";
 import type { Agent } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
-import { LiveDot } from "@/components/ui/live-dot";
 import { LoungeStyles } from "@/components/lounge/lounge-styles";
 
 export type StageSceneProps = {
@@ -80,9 +80,9 @@ export function StageScene({
       {/* Live bar */}
       <div className="absolute top-3 left-3 flex items-center gap-2">
         {isLive ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2.5 py-1 text-[10px] font-extrabold text-[#ff8293]">
-            <LiveDot color="bg-red" size="sm" />
-            LIVE
+          <span title={SCRIPTED_NOTE} className="inline-flex items-center gap-1.5 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-2.5 py-1 text-[10px] font-extrabold text-[#ff8293]">
+            <span aria-hidden="true">↻</span>
+            {SCRIPTED_CHIP}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#26324b] bg-[#080d17]/85 px-2.5 py-1 text-[10px] font-extrabold text-[#bdc6da]">

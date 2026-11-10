@@ -26,6 +26,17 @@ import {
   hashClaimToken,
 } from "../hash";
 import { districtNow } from "../clock";
+import { autoBidRefusal, isFoundingCast } from "../ext/cast";
+import { isOnline } from "../ext/lounge";
+import {
+  SELF_ORDER_REFUSAL,
+  TOPUP_MEMO,
+  assertBidFitsJob,
+  assertFreeOrderAllowance,
+  assertJobBudget,
+  assertTopUp,
+  liveBidRefusal,
+} from "../limits";
 import { countInto, emptySeries } from "../analytics";
 import {
   boutLoserId,
@@ -435,7 +446,14 @@ export class DemoRepository implements Repository {
 
   async getNetworkStats(): Promise<NetworkStats> {
     const real = {
-      agentsOnline: this.db.agents.filter((agent) => agent.status !== "offline").length,
+      // The Lounge's own definition (`isOnline`): a presence row that is not
+      // offline and was seen in the last half hour. Counting every agent not
+      // marked offline put "28 online" in the hero over a Lounge of rows
+      // last seen weeks ago (social-media-07). 0016's `network_stats()` is
+      // the SQL twin.
+      agentsOnline: this.db.presence.filter(
+        (row) => isOnline(row, this.now()) && this.agentById(row.agent_id) !== null,
+      ).length,
       jobsPosted: this.db.jobs.length,
       gigsAvailable: this.db.gigs.filter((gig) => gig.status === "active").length,
       liveChannels: this.db.channels.filter((channel) => channel.is_live).length,
@@ -773,9 +791,10 @@ export class DemoRepository implements Repository {
       rating_count: 0,
       jobs_completed: 0,
       repeat_hire_rate: 0,
-      reliability: 0.95,
+      // Postgres defaults: nothing has been measured yet (agents-identity-04).
+      reliability: 0,
       dispute_rate: 0,
-      avg_latency_sec: 120,
+      avg_latency_sec: 0,
       endpoints: validateAgentEndpoints(input.endpoints),
       mcp_tools: input.mcp_tools ?? [],
       is_free: input.is_free ?? input.starting_price_cents === 0,
@@ -1248,8 +1267,18 @@ export class DemoRepository implements Repository {
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "be hired"));
     }
+    // Ordering your own gig pays yourself, burns the fee and fakes a hire.
+    if (agent.owner_id === input.buyerId) throw new ForbiddenError(SELF_ORDER_REFUSAL);
     const brief = input.brief.trim();
     if (!brief) throw new ValidationError("A brief is required");
+    if (pkg.price_cents === 0) {
+      assertFreeOrderAllowance(
+        this.db.orders
+          .filter((row) => row.buyer_id === input.buyerId && row.amount_cents === 0)
+          .map((row) => Date.parse(row.created_at)),
+        this.now(),
+      );
+    }
 
     const timestamp = this.nowIso();
     const order: Order = {
@@ -1296,7 +1325,8 @@ export class DemoRepository implements Repository {
       { approved: input.approved },
     );
     this.db.orders.unshift(order);
-    gig.runs_count += 1;
+    // `runs_count` is public ("Runs", the Trending sort), so it moves when the
+    // buyer approves the delivery — see `approveOrder` — not on the order.
 
     await this.publishEvent({
       kind: "hired",
@@ -1367,7 +1397,7 @@ export class DemoRepository implements Repository {
   }
 
   async createJob(input: CreateJobInput, posterId: UUID): Promise<Job> {
-    if (input.budget_cents <= 0) throw new ValidationError("Budget must be greater than zero");
+    assertJobBudget(input.budget_cents);
     const timestamp = this.nowIso();
     const job: Job = {
       id: this.id(),
@@ -1411,13 +1441,31 @@ export class DemoRepository implements Repository {
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
     }
+    // Only the District bids automatically, and only for its own cast
+    // (owner decision 7); 0016's `bids_auto_bid_is_the_districts` refuses a
+    // person's session setting the flag at all.
+    if (input.autoBid && !isFoundingCast(agent.handle)) {
+      throw new ForbiddenError(autoBidRefusal(agent.name));
+    }
     if (input.amountCents <= 0) throw new ValidationError("Bid amount must be greater than zero");
+    // A bid answers the bounty as posted: no more than its budget, no slower
+    // than its deadline (jobs-03). Every bid path lands here.
+    assertBidFitsJob(job, input.amountCents, input.etaSeconds);
     // The reverse auction only means anything if the poster is not also the
     // seller: post → bid → award → approve would otherwise mint a completed job
     // for the price of one cent. The friendlier wording lives in the form
     // action; this is the trust boundary, so every caller hits it.
     if (job.poster_id === agent.owner_id) {
       throw new ForbiddenError("You cannot bid on your own bounty");
+    }
+    // One live bid per agent per bounty: a second one is noise on the board,
+    // and a loop of them buried every other bidder (machine-surface-07).
+    if (
+      this.db.bids.some(
+        (row) => row.job_id === job.id && row.agent_id === agent.id && row.status === "pending",
+      )
+    ) {
+      throw new ConflictError(liveBidRefusal(agent.name));
     }
 
     const guild = input.guildSlug
@@ -1433,6 +1481,7 @@ export class DemoRepository implements Repository {
       eta_seconds: input.etaSeconds,
       note: input.note,
       status: "pending",
+      auto_bid: input.autoBid === true,
       created_at: this.nowIso(),
     };
     this.db.bids.push(bid);
@@ -1662,6 +1711,11 @@ export class DemoRepository implements Repository {
     // Reputation.
     agent.jobs_completed += 1;
     agent.updated_at = timestamp;
+    const gig = order.gig_id ? this.db.gigs.find((row) => row.id === order.gig_id) : undefined;
+    if (gig) {
+      gig.runs_count += 1;
+      gig.updated_at = timestamp;
+    }
     if (agent.store_id) {
       const store = this.db.stores.find((row) => row.id === agent.store_id);
       if (store) {
@@ -2161,6 +2215,21 @@ export class DemoRepository implements Repository {
 
   async createThread(input: CreateThreadInput): Promise<ThreadWithMessages> {
     const agent = this.requireAgentByHandle(input.agentHandle);
+    // Messaging an agent you already wrote to continues that conversation
+    // (owner decision 14) rather than opening a duplicate thread each time.
+    const existing = this.db.threads
+      .filter((row) => row.profile_id === input.profileId && row.agent_id === agent.id)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
+    if (existing) {
+      await this.sendMessage({
+        threadId: existing.id,
+        senderType: "human",
+        senderId: input.profileId,
+        body: input.body,
+      });
+      const thread = await this.getThread(existing.id);
+      if (thread) return thread;
+    }
     const timestamp = this.nowIso();
     const thread = {
       id: this.id(),
@@ -2200,8 +2269,17 @@ export class DemoRepository implements Repository {
   }
 
   async topUp(profileId: UUID, amountCents: number): Promise<Wallet> {
-    if (amountCents <= 0) throw new ValidationError("Top-up must be greater than zero");
     const wallet = this.requireWallet(profileId);
+    // The 0014 caps, as `top_up_wallet()` enforces them: per top-up and per
+    // UTC day.
+    const today = this.today();
+    const toppedUpToday = this.db.walletTransactions
+      .filter(
+        (tx) =>
+          tx.profile_id === profileId && tx.kind === "topup" && tx.created_at.slice(0, 10) === today,
+      )
+      .reduce((sum, tx) => sum + tx.amount_cents, 0);
+    assertTopUp(amountCents, toppedUpToday);
     wallet.balance_cents += amountCents;
     wallet.updated_at = this.nowIso();
     this.db.walletTransactions.unshift({
@@ -2210,7 +2288,7 @@ export class DemoRepository implements Repository {
       kind: "topup",
       amount_cents: amountCents,
       order_id: null,
-      memo: "Added credits — demo top-up",
+      memo: TOPUP_MEMO,
       created_at: this.nowIso(),
     });
     return wallet;

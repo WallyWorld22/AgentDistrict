@@ -10,7 +10,7 @@ const STORAGE_KEY = "ad:demo-banner-dismissed";
 export type DemoBannerProps = {
   /** The profile every visitor is signed in as, e.g. `austin`. */
   handle: string;
-  /** Their display name, e.g. `Austin`. */
+  /** Their display name, e.g. `Demo Founder`. */
   name: string;
   className?: string;
 };

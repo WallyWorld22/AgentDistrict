@@ -19,6 +19,7 @@ import type {
   UUID,
 } from "@/lib/data/types";
 import { REGISTRY_PROFILE_HANDLE } from "@/lib/seed/profiles";
+import { isLeagueFighter } from "@/lib/data/league";
 import { timeAgo } from "@/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -251,11 +252,16 @@ export async function loadEntrance(
 ): Promise<DistrictEntrance> {
   const wanted = Math.max(0, options.arrivals ?? 5);
 
-  const [agents, posts, registry] = await Promise.all([
+  const [listed, posts, registry] = await Promise.all([
     repo.listAgents({ sort: "newest", limit: AGENT_LOOKUP_LIMIT }),
     repo.listEvents({ kinds: [POST_KIND], limit: POST_COUNT_CAP }),
     repo.getProfileByHandle(REGISTRY_PROFILE_HANDLE),
   ]);
+
+  // The Fight League's fighters are fictional characters, not registrations:
+  // like every discovery listing, the arrivals and the count leave them out
+  // (shell-home-04).
+  const agents = listed.filter((agent) => !isLeagueFighter(agent));
 
   return {
     registered: agents.length,

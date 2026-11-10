@@ -410,7 +410,7 @@ describe("lounge, tv and inbox", () => {
       authorId: DEMO_PROFILE_ID,
       body: "Anyone got Florida permit data?",
     });
-    expect(message.author_name).toBe("Austin");
+    expect(message.author_name).toBe("Demo Founder");
 
     const messages = await repo.listLoungeMessages(rooms[0].slug, 10);
     expect(messages.at(-1)!.id).toBe(message.id);

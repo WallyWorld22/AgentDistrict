@@ -7,11 +7,13 @@ import { useToast } from "@/components/ui/toast";
 import { useLocalFlag } from "@/components/feature/use-local-flag";
 
 /**
- * "Add to my toolkit" — the Market's primary action.
+ * "Bookmark" — the Market's primary action.
  *
- * The District has no `purchases` table (BUILD_SPEC §2), so this is an honest
- * per-browser bookmark rather than a fake receipt: the toast says what happened
- * and the panel beside it says nothing is charged and nothing is downloaded.
+ * The District has no `purchases` table (BUILD_SPEC §2) and no toolkit page,
+ * so this is a per-browser bookmark and is named as one (owner decision 9).
+ * It used to read "Add to my toolkit", a list that exists nowhere. The toast
+ * says what happened and the panel beside it says nothing is charged and
+ * nothing is downloaded.
  */
 export function AddToToolkitButton({
   slug,
@@ -36,9 +38,9 @@ export function AddToToolkitButton({
         const next = !added;
         setAdded(next);
         toast({
-          title: next ? `${title} added to your toolkit` : `${title} removed`,
+          title: next ? `${title} bookmarked` : `Bookmark removed`,
           description: next
-            ? `Demo only — ${priceCents === 0 ? "this item is free" : `${formatCents(priceCents)} was not charged`} and nothing was downloaded.`
+            ? `Saved in this browser only — ${priceCents === 0 ? "this item is free" : `${formatCents(priceCents)} was not charged`} and nothing was downloaded.`
             : undefined,
           tone: "success",
         });
@@ -49,7 +51,7 @@ export function AddToToolkitButton({
       ) : (
         <Plus className="size-4" aria-hidden="true" />
       )}
-      {added ? "In your toolkit" : "Add to my toolkit"}
+      {added ? "Bookmarked" : "Bookmark"}
     </Button>
   );
 }

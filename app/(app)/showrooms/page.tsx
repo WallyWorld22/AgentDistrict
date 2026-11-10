@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MonitorPlay, ShieldCheck } from "lucide-react";
 import { getRepo } from "@/lib/data";
-import { SHOWROOMS } from "@/lib/data/ext/lounge";
+import { SHOWROOMS, runShowroom } from "@/lib/data/ext/lounge";
 import { StatTile } from "@/components/cards";
 import { buttonClasses } from "@/components/ui/button";
 import { SectionHead } from "@/components/ui/section-head";
@@ -43,6 +43,12 @@ export default async function Page() {
   );
 
   const live = demos.filter((demo) => demo.exists);
+  const fieldsPerReadout = Math.max(
+    0,
+    ...live.map(
+      (demo) => runShowroom(demo.spec.agentHandle, demo.spec.inputExample)?.fields.length ?? 0,
+    ),
+  );
 
   return (
     <div className="grid gap-4">
@@ -61,8 +67,17 @@ export default async function Page() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile value={live.length} label="Demos on the floor" tone="purple" icon="🧪" />
         <StatTile value="0" label="External calls made" tone="green" icon="🔒" />
-        <StatTile value="30s" label="Fastest demo" tone="cyan" icon="⚡" />
-        <StatTile value="4" label="Fields per readout" tone="blue" icon="📋" />
+        {/* Counted from the demos themselves, not typed in: the tiles used
+            to read "30s fastest" and "4 fields" while every readout had six
+            (social-media-11). Every number a demo prints is simulated. */}
+        <StatTile
+          value={fieldsPerReadout}
+          label="Fields per readout"
+          hint="Simulated values"
+          tone="blue"
+          icon="📋"
+        />
+        <StatTile value="Simulated" label="Every readout" hint="No real lookup runs" tone="cyan" icon="⚡" />
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-2">

@@ -19,6 +19,8 @@ import {
   REGISTERED_AGENT_SCOPES,
 } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
+import { isAutoBid } from "@/lib/data/ext/cast";
+import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import { headers } from "next/headers";
 import { pingIndexNow } from "@/lib/seo/indexnow";
 import { SITE_DESCRIPTION, requestOrigin } from "@/lib/site";
@@ -420,12 +422,12 @@ const handler = createMcpHandler(
       {
         title: "Post a job",
         description:
-          "Post a bounty for District agents to bid on. Returns the job id to poll with get_bids.",
+          "Post a bounty for District agents to bid on. Returns the job id to poll with get_bids. The data policy is fixed at no PII, no retention and no subcontracting; data residency and subcontracting are advisory on the District, not enforced yet.",
         inputSchema: z.object({
           title: z.string().min(4).max(160),
           description: z.string().min(10).max(4000),
           category: z.enum(AGENT_CATEGORIES),
-          budget_cents: z.number().int().min(1),
+          budget_cents: z.number().int().min(1).max(MAX_JOB_BUDGET_CENTS),
           deadline_seconds: z.number().int().min(60),
           output_format: z.enum(OUTPUT_FORMATS).optional(),
           columns: z.array(z.string()).max(40).optional(),
@@ -449,14 +451,16 @@ const handler = createMcpHandler(
             },
             profile.id,
           );
-          // Wake the matching agents, exactly as posting through the site does,
-          // so `get_bids` has something to return.
-          const agentsNotified = await inviteBidsFor(repo, job.id, profile.id);
+          // Match the bounty and place the District's auto-bids, exactly as
+          // posting through the site does, so `get_bids` has something to return.
+          const agentsMatched = await inviteBidsFor(repo, job.id, profile.id);
           return {
             job_id: job.id,
             url: `${await origin()}/jobs/${job.id}`,
             status: job.status,
-            agents_notified: agentsNotified,
+            agents_matched: agentsMatched,
+            // Deprecated alias of `agents_matched`: nobody is notified.
+            agents_notified: agentsMatched,
           };
         }),
     );
@@ -486,6 +490,7 @@ const handler = createMcpHandler(
               note: bid.note,
               rating_avg: bid.agent.rating_avg,
               status: bid.status,
+              auto_bid: isAutoBid(bid),
             })),
           };
         }),

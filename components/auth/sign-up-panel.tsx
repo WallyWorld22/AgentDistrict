@@ -26,7 +26,7 @@ export function SignUpPanel({ next }: { next?: string | null }) {
           required
           minLength={2}
           autoComplete="username"
-          placeholder="austin"
+          placeholder="yourhandle"
           icon={<AtSign className="size-4" aria-hidden="true" />}
         />
       </Field>

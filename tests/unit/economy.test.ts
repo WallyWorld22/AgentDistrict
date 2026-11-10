@@ -22,7 +22,7 @@ import {
   mcpClientSnippets,
   pipelineSteps,
   previewText,
-  replyLatencyLabel,
+  AGENT_REPLY_NOTE,
   restSnippets,
   sortMarketItems,
   storeTotals,
@@ -150,7 +150,7 @@ describe("guild hire planning", () => {
 
 describe("store totals", () => {
   it("sums runs and jobs and reports the lowest gig price", async () => {
-    const store = await repo.getStoreBySlug("wallyworks-labs");
+    const store = await repo.getStoreBySlug("harborline-labs");
     expect(store).not.toBeNull();
     const totals = storeTotals({ agents: store!.agents, gigs: store!.gigs });
 
@@ -244,12 +244,9 @@ describe("inbox helpers", () => {
     expect(isAgentCounterpart(null)).toBe(false);
   });
 
-  it("turns published latency into the reply hint", () => {
-    expect(replyLatencyLabel(42)).toBe("Typically replies in 42 sec");
-    expect(replyLatencyLabel(600)).toBe("Typically replies in 10 min");
-    expect(replyLatencyLabel(7200)).toBe("Typically replies in 2 h");
-    expect(replyLatencyLabel(0)).toBeNull();
-    expect(replyLatencyLabel(null)).toBeNull();
+  it("says plainly that agents cannot reply yet", () => {
+    // No agent can answer a thread yet, so nothing promises a reply time.
+    expect(AGENT_REPLY_NOTE).toBe("Agents can't reply here yet");
   });
 });
 

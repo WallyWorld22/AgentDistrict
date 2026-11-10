@@ -7,7 +7,7 @@ import type {
   JobStatus,
   RequiredOutput,
 } from "../data/types";
-import { agentId } from "./agents";
+import { AGENT_HANDLES, agentId } from "./agents";
 import { minutesAgo } from "./clock";
 import { guildId } from "./guilds";
 import { profileId } from "./profiles";
@@ -37,6 +37,8 @@ type BidSpec = {
 
 type JobSpec = {
   slug: string;
+  /** The key the job's and its bids' uuids were minted from, if not the slug. */
+  idKey?: string;
   title: string;
   description: string;
   category: AgentCategory;
@@ -656,8 +658,11 @@ const SPECS: JobSpec[] = [
     ],
   },
   {
-    slug: "refresh-wallyworks-location-pages",
-    title: "Refresh 6 WallyWorks location pages",
+    slug: "refresh-harborline-location-pages",
+    // Renamed with its fictional store (migration 0017); the job and bid
+    // uuids are still the ones minted for the old slug.
+    idKey: "refresh-wallyworks-location-pages",
+    title: "Refresh 6 Harborline location pages",
     description:
       "Six existing location pages need new copy, updated schema and a mobile pass. Same URLs, no redirects, do not touch the nav.",
     category: "development",
@@ -827,10 +832,15 @@ const SPECS: JobSpec[] = [
   },
 ];
 
+/** The key a job's (and its bids') uuids hang off — stable across renames. */
+function keyOf(spec: JobSpec): string {
+  return spec.idKey ?? spec.slug;
+}
+
 export const jobs: Job[] = SPECS.map((spec) => {
   const accepted = spec.bids.findIndex((bid) => bid.status === "accepted");
   return {
-    id: id("job", spec.slug),
+    id: id("job", keyOf(spec)),
     title: spec.title,
     description: spec.description,
     category: spec.category,
@@ -841,7 +851,7 @@ export const jobs: Job[] = SPECS.map((spec) => {
     poster_id: profileId(spec.poster),
     status: spec.status,
     awarded_bid_id:
-      accepted >= 0 ? id("bid", `${spec.slug}:${accepted}`) : null,
+      accepted >= 0 ? id("bid", `${keyOf(spec)}:${accepted}`) : null,
     created_at: minutesAgo(spec.ago),
     updated_at: minutesAgo(spec.status === "open" ? spec.ago : Math.floor(spec.ago / 2)),
   };
@@ -849,14 +859,17 @@ export const jobs: Job[] = SPECS.map((spec) => {
 
 export const bids: Bid[] = SPECS.flatMap((spec) =>
   spec.bids.map((bid, index) => ({
-    id: id("bid", `${spec.slug}:${index}`),
-    job_id: id("job", spec.slug),
+    id: id("bid", `${keyOf(spec)}:${index}`),
+    job_id: id("job", keyOf(spec)),
     agent_id: agentId(bid.agent),
     guild_id: bid.guild ? guildId(bid.guild) : null,
     amount_cents: bid.amount,
     eta_seconds: bid.eta,
     note: bid.note,
     status: bid.status ?? "pending",
+    // Every seeded bid was written by the District for one of its own cast,
+    // not offered by a person — the same thing an auto-bid is.
+    auto_bid: AGENT_HANDLES.includes(bid.agent),
     created_at: minutesAgo(bid.afterMinutes),
   })),
 );
@@ -864,8 +877,9 @@ export const bids: Bid[] = SPECS.flatMap((spec) =>
 const bySlug = new Map(SPECS.map((spec) => [spec.slug, spec]));
 
 export function jobId(slug: string): string {
-  if (!bySlug.has(slug)) throw new Error(`seed: unknown job ${slug}`);
-  return id("job", slug);
+  const spec = bySlug.get(slug);
+  if (!spec) throw new Error(`seed: unknown job ${slug}`);
+  return id("job", keyOf(spec));
 }
 
 /** The accepted bid on an awarded job — used to wire up the seeded orders. */
@@ -874,7 +888,7 @@ export function acceptedBidId(slug: string): string {
   if (!spec) throw new Error(`seed: unknown job ${slug}`);
   const index = spec.bids.findIndex((bid) => bid.status === "accepted");
   if (index < 0) throw new Error(`seed: job ${slug} has no accepted bid`);
-  return id("bid", `${slug}:${index}`);
+  return id("bid", `${keyOf(spec)}:${index}`);
 }
 
 /** The four jobs the home page's Open Jobs card shows, in reference order. */

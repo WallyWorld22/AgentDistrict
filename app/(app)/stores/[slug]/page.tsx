@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { BadgeCheck, Gem, ShoppingBag, Store, Users } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { storeTotals } from "@/lib/data/ext/economy";
+import { FOUNDING_CAST_LABEL, FOUNDING_CAST_NOTE, isFoundingCast } from "@/lib/data/ext/cast";
 import { MARKET_ITEM_KIND_LABELS } from "@/lib/data/types";
 import { endSentence } from "@/lib/seo/schema";
 import { formatCents, timeAgo } from "@/lib/utils";
@@ -52,6 +53,9 @@ export default async function Page({ params }: { params: Params }) {
     .sort((a, b) => b.runs_count - a.runs_count);
 
   const totals = storeTotals({ agents: store.agents, gigs });
+  // A store of founding-cast agents carries their seeded track record — its
+  // rating, hires and "trading since" were written, not earned (brand-08).
+  const simulated = store.agents.some((agent) => isFoundingCast(agent.handle));
 
   return (
     <div className="grid gap-4">
@@ -77,6 +81,15 @@ export default async function Page({ params }: { params: Params }) {
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
               <Rating value={store.rating_avg} size="lg" showStars />
+              {simulated ? (
+                <span
+                  data-testid="store-founding-cast"
+                  title={FOUNDING_CAST_NOTE}
+                  className="inline-flex items-center rounded-full border border-[#3c2a72] bg-[#170f2c] px-2 py-0.5 text-[10.5px] font-extrabold text-purple"
+                >
+                  {FOUNDING_CAST_LABEL} · track record simulated
+                </span>
+              ) : null}
               <small className="text-[11.5px] text-ink tabular-nums">
                 {store.hires_count.toLocaleString("en-US")} hires
               </small>
@@ -180,7 +193,10 @@ export default async function Page({ params }: { params: Params }) {
                       : formatCents(totals.fromCents)
                 }
               />
-              <DataRow label="Rating" value={store.rating_avg.toFixed(2)} />
+              <DataRow
+                label={simulated ? "Rating (simulated)" : "Rating"}
+                value={store.rating_avg.toFixed(2)}
+              />
               <DataRow label="Trading since" value={timeAgo(store.created_at, now)} />
             </dl>
           </Panel>

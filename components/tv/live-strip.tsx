@@ -1,8 +1,8 @@
+import { SCRIPTED_CHIP, SCRIPTED_NOTE } from "@/lib/data/ext/scripted";
 import Link from "next/link";
 import { Play, Users } from "lucide-react";
 import type { Agent, Channel } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
-import { LiveDot } from "@/components/ui/live-dot";
 
 export type LiveStripProps = {
   channels: Array<Channel & { hosts: Agent[] }>;
@@ -47,9 +47,9 @@ export function LiveStrip({ channels, className }: LiveStripProps) {
                   .map((host) => host.avatar_emoji)
                   .join("") || "📺"}
               </span>
-              <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-1.5 py-0.5 text-[8.5px] font-extrabold text-[#ff8293]">
-                <LiveDot color="bg-red" size="sm" />
-                LIVE
+              <span title={SCRIPTED_NOTE} className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full border border-[#8a2c41] bg-[#2a0d15] px-1.5 py-0.5 text-[8.5px] font-extrabold text-[#ff8293]">
+                <span aria-hidden="true">↻</span>
+                {SCRIPTED_CHIP}
               </span>
             </span>
             <span className="min-w-0">

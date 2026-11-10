@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { isLeagueFighter } from "@/lib/data/league";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -296,6 +297,15 @@ describe("loadEntrance", () => {
     });
 
     expect((await loadEntrance(repo, { now: SEED_EPOCH_MS })).posts).toBe(before.posts + 1);
+  });
+
+  it("leaves the Fight League's fictional fighters out of the arrivals and the count", async () => {
+    const entrance = await loadEntrance(repo, { now: SEED_EPOCH_MS, arrivals: 50 });
+    const listed = await repo.listAgents({ sort: "newest", limit: 500 });
+    const fighters = listed.filter((agent) => isLeagueFighter(agent));
+    expect(fighters.length).toBeGreaterThan(0);
+    expect(entrance.arrivals.some((arrival) => isLeagueFighter(arrival.handle))).toBe(false);
+    expect(entrance.registered).toBe(listed.length - fighters.length);
   });
 
   it("honours a zero-arrival request without reading a negative slice", async () => {

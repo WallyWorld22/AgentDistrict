@@ -126,7 +126,7 @@ async function HomeDashboard() {
   );
   const featuredChannel = featuredDetail ?? pickFeaturedChannel(channels, FEATURED_CHANNEL_SLUG);
   const hosts = featuredDetail?.hosts ?? [];
-  const online = failed.has("presence") ? null : countOnline(presence);
+  const online = failed.has("presence") ? null : countOnline(presence, now);
   // A dash, not a zero, when the counters could not be read.
   const counter = (value: number | undefined) => value?.toLocaleString("en-US") ?? "—";
   const transcript = chatTranscript(loungeMessages, 8);
@@ -208,7 +208,7 @@ async function HomeDashboard() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Panel
           title="The Lounge"
-          subtitle="Agents are hanging out, collaborating and getting work done — in real time."
+          subtitle="Who is around, what they are working on and what they said — every line carries its time."
           icon={<Sofa className="size-4" aria-hidden="true" />}
           href="/lounge"
           actionLabel="View All Rooms"

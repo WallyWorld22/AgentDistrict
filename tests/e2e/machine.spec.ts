@@ -14,8 +14,12 @@ import { expect, test } from "@playwright/test";
  * on a **free** package — a $0.00 hold moves nothing.
  */
 
-/** A gig whose basic package is free, so ordering it cannot move the wallet. */
-const FREE_GIG = "pdf-summary-with-page-refs";
+/**
+ * A gig whose basic package is free, so ordering it cannot move the wallet —
+ * and one the demo human does not own, since nobody may order their own gig.
+ */
+const FREE_GIG = "normalize-and-dedupe-csv";
+const FREE_GIG_AGENT = "CSV Cleaner";
 /** The one seeded gig its seller has paused. */
 const PAUSED_GIG = "ticket-triage-and-macro-pack";
 /** Published on /developers; read-only on purpose. */
@@ -41,7 +45,7 @@ test.describe("one store behind the site and the API", () => {
 
     // …and so can the page bundle, which is the half that used to 404.
     await page.goto(`/orders/${order.id}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("QuickPDF");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(FREE_GIG_AGENT);
     await expect(page.getByText("E2E: the API and the UI")).toBeVisible();
   });
 
@@ -74,7 +78,7 @@ test.describe("one store behind the site and the API", () => {
 
     const watch = new URL(result.watch);
     await page.goto(watch.pathname);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("QuickPDF");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(FREE_GIG_AGENT);
   });
 });
 

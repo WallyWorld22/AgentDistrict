@@ -86,9 +86,13 @@ test.describe("desktop shell (1440x900)", () => {
       "$12.43",
     );
     await expect(header.getByLabel("Add credits")).toBeVisible();
-    await expect(header.getByLabel("Notifications — 3 unread")).toContainText("3");
+    // The envelope is the Inbox and says so; it counts unread messages only.
+    await expect(header.getByLabel("Inbox — 3 unread")).toContainText("3");
+    await expect(header.getByLabel(/Notifications/)).toHaveCount(0);
+    // The unlabelled people icon (a duplicate of the sidebar's Guilds row) is gone.
+    await expect(header.getByLabel("Guilds")).toHaveCount(0);
     // The account chip is a menu button now, not a link to /profile.
-    await expect(header.getByRole("button", { name: /Austin/ })).toContainText(
+    await expect(header.getByRole("button", { name: /Demo Founder/ })).toContainText(
       "Builder Mode",
     );
 
@@ -151,7 +155,7 @@ test.describe("desktop shell (1440x900)", () => {
   test("the account chip opens a keyboard-navigable menu", async ({ page }) => {
     await page.goto("/");
 
-    const trigger = page.getByRole("button", { name: /Austin/ });
+    const trigger = page.getByRole("button", { name: /Demo Founder/ });
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("menu")).toHaveCount(0);
 
@@ -183,7 +187,7 @@ test.describe("desktop shell (1440x900)", () => {
   test("signing out in demo mode says why it cannot", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("button", { name: /Austin/ }).click();
+    await page.getByRole("button", { name: /Demo Founder/ }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
 
     // Demo mode has no session to end; the action answers with the reason and
@@ -197,7 +201,7 @@ test.describe("desktop shell (1440x900)", () => {
   test("Settings opens from the account menu", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("button", { name: /Austin/ }).click();
+    await page.getByRole("button", { name: /Demo Founder/ }).click();
     await page.getByRole("menuitem", { name: "Settings" }).click();
 
     await expect(page).toHaveURL(/\/settings$/);
@@ -353,6 +357,8 @@ test.describe("mobile shell (390x844)", () => {
       "/settings",
     );
     await expect(dialog.getByRole("button", { name: "Sign out" })).toBeVisible();
+    // The top bar's credits pill is hidden on a phone; the balance is here.
+    await expect(dialog.getByTestId("more-credits")).toHaveText("$12.43 in credits");
 
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).toBeHidden();

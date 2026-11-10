@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { ValidationError } from "@/lib/data/errors";
+import { InsufficientFundsError, ValidationError } from "@/lib/data/errors";
 import { actionError } from "@/lib/action-state";
 import { PACKAGE_TIERS } from "@/lib/data/types";
-import { buildGuildHirePlan } from "@/lib/data/ext/economy";
+import { buildGuildHirePlan, walletSummary } from "@/lib/data/ext/economy";
+import { formatCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -20,9 +21,14 @@ import type { ActionState } from "@/app/actions";
  * Workplace Gateway's threshold asks for.
  *
  * The orders are placed in pipeline order so the Command Center lists them the
- * way the guild describes itself. If a later step fails (most likely
- * `InsufficientFundsError`) the earlier orders stand — they are real runs that
- * have already started — and the message says how many were placed.
+ * way the guild describes itself. Everything that would stop the hire part-way
+ * is settled **before the first order** (economy-02): the whole team's total is
+ * checked against the wallet's available credits, and a member the buyer owns
+ * is skipped (a gig cannot be ordered by its own owner) and priced out of that
+ * total, as the page shows it. Only a failure nobody could see coming
+ * — a race with another spend — can still stop it part-way; then the earlier
+ * orders stand, being real runs that have started, and the message says how
+ * many were placed.
  */
 
 const HireSchema = z.object({
@@ -47,9 +53,24 @@ export async function hireGuildAction(
     const guild = await repo.getGuildBySlug(input.slug);
     if (!guild) throw new ValidationError("That guild no longer exists.");
 
-    const plan = await buildGuildHirePlan(repo, guild, input.tier);
+    // Members the buyer owns are skipped, exactly as the page priced them.
+    const plan = await buildGuildHirePlan(repo, guild, input.tier, { buyerId: profile.id });
     if (plan.hireable.length === 0) {
-      throw new ValidationError("Nobody in this guild has a published gig to run yet.");
+      throw new ValidationError(
+        plan.owned.length > 0
+          ? "Every member of this guild with a gig to run is one of your own agents."
+          : "Nobody in this guild has a published gig to run yet.",
+      );
+    }
+
+    const wallet = await repo.getWallet(profile.id);
+    const available = wallet ? walletSummary(wallet).available : 0;
+    if (plan.totalCents > available) {
+      throw new InsufficientFundsError(
+        `Hiring ${guild.name} costs ${formatCents(plan.totalCents)}, and you have ` +
+          `${formatCents(available)} available. Add credits on the Wallet or pick a ` +
+          "smaller package — nothing was ordered.",
+      );
     }
 
     let placed = 0;

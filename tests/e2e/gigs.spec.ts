@@ -30,6 +30,11 @@ const FAST_GIG = "bulk-format-and-unit-conversion";
 const FAST_GIG_AGENT = "unitfox";
 /** Three clearly different tier prices — good for the package control. */
 const TIERED_GIG = "find-100-qualified-local-businesses";
+/**
+ * A tiered gig the demo human does NOT own, for the order form: the demo human
+ * owns Scout, so TIERED_GIG shows them "This is your gig" instead.
+ */
+const ORDERABLE_GIG = "double-sourced-contact-verification";
 
 const REVIEW_BODY =
   "E2E: clean conversion, units matched the contract, delivered inside the SLA.";
@@ -106,31 +111,43 @@ test.describe("gigs browse", () => {
 
 test.describe("gig detail", () => {
   test("the package tabs drive the Continue price", async ({ page }) => {
-    await page.goto(`/gigs/${TIERED_GIG}`);
+    await page.goto(`/gigs/${ORDERABLE_GIG}`);
     await hydrated(page, '[data-testid="gig-continue"]');
 
     const cta = page.getByTestId("gig-continue");
     const price = page.getByTestId("tier-price");
 
     // Standard is the default selection.
-    await expect(cta).toHaveText(/Continue — \$1\.89/);
-    await expect(price).toHaveText("$1.89");
+    await expect(cta).toHaveText(/Continue — \$1\.35/);
+    await expect(price).toHaveText("$1.35");
 
     await page.getByRole("tab", { name: "premium" }).click();
-    await expect(cta).toHaveText(/Continue — \$6\.40/);
+    await expect(cta).toHaveText(/Continue — \$3\.60/);
     await expect(page.getByRole("tab", { name: "premium" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
 
     await page.getByRole("tab", { name: "basic" }).click();
-    await expect(cta).toHaveText(/Continue — \$0\.79/);
+    await expect(cta).toHaveText(/Continue — \$0\.45/);
 
     // The brief is validated before the action is ever called.
     const brief = page.getByLabel("Your brief");
     await brief.fill("nope");
     await brief.blur();
     await expect(page.getByText(/at least 12 characters/)).toBeVisible();
+  });
+
+  test("the owner sees \"This is your gig\" instead of an order form", async ({ page }) => {
+    // The demo human owns Scout; the repository refuses an owner's order of
+    // their own gig, so the page does not offer one (gigs-orders-03).
+    await page.goto(`/gigs/${TIERED_GIG}`);
+    await expect(page.getByText("This is your gig")).toBeVisible();
+    await expect(page.getByText(/you cannot order this gig yourself/)).toBeVisible();
+    await expect(page.getByTestId("gig-continue")).toHaveCount(0);
+    await expect(page.getByLabel("Your brief")).toHaveCount(0);
+    // The packages still show, as a listing.
+    await expect(page.getByText("$0.79").first()).toBeVisible();
   });
 
   test("the machine block documents the REST and MCP calls", async ({ page }) => {
@@ -181,6 +198,25 @@ test.describe("orders", () => {
     await rows.first().click();
     await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}/);
     await expect(page.getByText("Simulated run", { exact: true })).toBeVisible();
+
+    // "Hire again" opens the gig page with this run's package and brief
+    // filled in (gigs-orders-16) — it is no longer a second copy of "Back to
+    // gig". The link names the run, not its brief: a private brief in a URL
+    // lands in history, logs and analytics. The gig page reads it back for
+    // the run's buyer.
+    const orderId = new URL(page.url()).pathname.split("/").pop()!;
+    const brief = (await page.getByTestId("order-brief").textContent()) ?? "";
+    expect(brief.length).toBeGreaterThan(0);
+    const again = page.getByTestId("hire-again");
+    const href = (await again.getAttribute("href")) ?? "";
+    const target = new URL(href, "http://x");
+    expect(target.pathname).toMatch(/^\/gigs\//);
+    expect(target.searchParams.get("again")).toBe(orderId);
+    expect(target.searchParams.has("brief")).toBe(false);
+    expect(href).not.toContain(encodeURIComponent(brief.slice(0, 12)));
+    await again.click();
+    await hydrated(page, "#gig-brief");
+    await expect(page.locator("#gig-brief")).toHaveValue(brief);
   });
 
   test("a delivered seeded run shows its deliverable and the approval controls", async ({

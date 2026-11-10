@@ -14,6 +14,7 @@ import {
 import { districtNow, getRepo } from "@/lib/data";
 import { getCurrentProfile } from "@/lib/auth";
 import { isLeagueFighter } from "@/lib/data/league";
+import { isAutoBid } from "@/lib/data/ext/cast";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import {
   JOB_STATUS_LABELS,
@@ -21,6 +22,7 @@ import {
   compatibleAgents,
   findOrderForJob,
   relatedJobs,
+  ADVISORY_NOTE,
 } from "@/lib/data/ext/jobs";
 import { clampWords, endSentence } from "@/lib/seo/schema";
 import { formatCents, formatDuration, timeAgo } from "@/lib/utils";
@@ -98,6 +100,7 @@ export default async function Page({
   const notified = compatibleAgents(roster, job).filter(
     (agent) => agent.owner_id !== job.poster_id,
   ).length;
+  const autoBids = job.bids.filter((bid) => isAutoBid(bid)).length;
   const winner = job.bids.find((bid) => bid.status === "accepted") ?? null;
   const pending = job.bids.filter((bid) => bid.status === "pending");
   const canAward = Boolean(isPoster) && job.status === "open";
@@ -138,10 +141,10 @@ export default async function Page({
         >
           <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
           Bounty posted — {posted || notified} compatible{" "}
-          {(posted || notified) === 1 ? "agent was" : "agents were"} notified.
-          {job.bids.length > 0
-            ? ` ${job.bids.length} of them already answered.`
-            : " Their bids will land here."}
+          {(posted || notified) === 1 ? "agent" : "agents"} matched.
+          {autoBids > 0
+            ? ` The District placed ${autoBids} auto-${autoBids === 1 ? "bid" : "bids"} for its founding cast, marked below.`
+            : " Bids from agents will land here."}
         </p>
       ) : null}
 
@@ -281,6 +284,7 @@ export default async function Page({
                 note: bid.note,
                 status: bid.status,
                 placedAgo: timeAgo(bid.created_at, now),
+                auto_bid: bid.auto_bid,
                 guild: bid.guild ? { name: bid.guild.name } : null,
                 agent: {
                   handle: bid.agent.handle,
@@ -380,18 +384,26 @@ export default async function Page({
                   ? "Delete on delivery"
                   : `Keep ${job.data_policy.retention_days} days`}
               </Pill>
-              <Pill size="sm" variant={job.data_policy.allow_subcontracting ? "blue" : "purple"}>
+              <Pill
+                size="sm"
+                variant={job.data_policy.allow_subcontracting ? "blue" : "purple"}
+                title={ADVISORY_NOTE}
+              >
                 {job.data_policy.allow_subcontracting ? "Subcontracting ok" : "No subcontracting"}
+                {" · advisory"}
               </Pill>
               {job.data_policy.regions?.map((region) => (
-                <Pill key={region} size="sm" variant="cyan">
-                  {region} only
+                <Pill key={region} size="sm" variant="cyan" title={ADVISORY_NOTE}>
+                  {region} only · advisory
                 </Pill>
               ))}
             </div>
             <p className="m-0 text-[11.5px] leading-relaxed text-ink">
               {PII_COPY[job.data_policy.pii]}.
               {job.data_policy.notes ? ` ${job.data_policy.notes}` : ""}
+            </p>
+            <p data-testid="policy-advisory" className="m-0 mt-2 text-[11px] leading-relaxed text-muted">
+              {ADVISORY_NOTE}
             </p>
             <p className="m-0 mt-2 text-[11px] leading-relaxed text-muted">
               The policy travels with the job and every run is logged to the{" "}
@@ -403,10 +415,11 @@ export default async function Page({
           </Panel>
 
           <Panel title="Reach" bodyClassName="grid gap-2">
-            <DataRow label="Agents notified" value={notified} />
+            <DataRow label="Agents matched" value={notified} />
             <DataRow label="Bids received" value={job.bids.length} />
+            <DataRow label="Auto-bids" value={autoBids} />
             <DataRow
-              label="Response rate"
+              label="Bids per match"
               value={notified > 0 ? `${Math.round((job.bids.length / notified) * 100)}%` : "—"}
             />
           </Panel>

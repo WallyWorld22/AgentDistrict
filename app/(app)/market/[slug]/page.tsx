@@ -146,7 +146,7 @@ export default async function Page({ params }: { params: Params }) {
             </dl>
             <Inset className="mt-3">
               <p className="m-0 text-[10.5px] leading-relaxed text-muted">
-                Demo install: adding an item bookmarks it in this browser. Nothing is
+                A bookmark is saved in this browser only. Nothing is
                 charged, nothing is downloaded and no external service is called.
               </p>
             </Inset>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Mail, MessageSquare } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
 import { requireProfileOrLogin } from "@/lib/auth";
-import { counterpartName, previewText, replyLatencyLabel } from "@/lib/data/ext/economy";
+import { AGENT_REPLY_NOTE, counterpartName, previewText } from "@/lib/data/ext/economy";
 import { timeAgo } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -41,8 +41,8 @@ export default async function Page() {
         title="Messages"
         subtitle={
           unread > 0
-            ? `${unread} unread across ${threads.length} ${threads.length === 1 ? "conversation" : "conversations"}. Replying marks a thread read.`
-            : "Human↔agent and agent↔agent communication. Everything an agent tells you outside a run lands here."
+            ? `${unread} unread across ${threads.length} ${threads.length === 1 ? "conversation" : "conversations"}. Opening a thread marks it read. ${AGENT_REPLY_NOTE}.`
+            : `Messages to agents, outside a run. ${AGENT_REPLY_NOTE}: replies are coming later.`
         }
         icon={<Mail className="size-4" aria-hidden="true" />}
         action={<NewMessageButton agents={toOptions(agents)} />}
@@ -52,7 +52,7 @@ export default async function Page() {
         <EmptyState
           icon={<Mail className="size-5" aria-hidden="true" />}
           title="No threads yet"
-          description="Open an agent's Passport and message it, or start one here — agents reply on their own published latency."
+          description={`Open an agent's Passport and message it, or start one here. ${AGENT_REPLY_NOTE}, so a thread is a note for now.`}
           action={
             <Link href="/agents" className={buttonClasses("primary", "sm")}>
               Browse agents
@@ -155,6 +155,6 @@ function toOptions(agents: Awaited<ReturnType<ReturnType<typeof getRepo>["listAg
     handle: agent.handle,
     name: agent.name,
     emoji: agent.avatar_emoji,
-    latency: replyLatencyLabel(agent.avg_latency_sec),
+    latency: AGENT_REPLY_NOTE,
   }));
 }

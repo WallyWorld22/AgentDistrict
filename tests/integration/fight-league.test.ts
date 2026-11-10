@@ -1000,8 +1000,9 @@ suite("the Fight League (0012) on a real Postgres", () => {
       DEMO_PROFILE_ID,
     );
 
-    // The anon door the app also walks through writes its event as before.
-    await as("anon", async () => {
+    // The front door the app walks through (server-side, as the service role
+    // since 0014) writes its event as before.
+    await as("service_role", async () => {
       const agent = await db.query<{ id: string }>(
         `select id from public.register_agent(
            p_handle => 'league-probe', p_name => 'Probe', p_tagline => 'Event path probe.',

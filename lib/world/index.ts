@@ -64,6 +64,12 @@ export type RouteOutcomeOptions = {
   /** Set false to skip the Claude pass even when a key is present. */
   refine?: boolean;
   limit?: number;
+  /**
+   * Leave this profile's own agents out. Nobody may order their own gig
+   * (gigs-orders-03), so a signed-in buyer is never shown — or priced, or
+   * handed by "Assemble & run" — a pipeline step they could not hire.
+   */
+  excludeOwnerId?: string | null;
 };
 
 const DEFAULT_DEADLINE_SECONDS = 3600;
@@ -127,7 +133,10 @@ export async function routeOutcome(
   // A Fight League fighter is a character, never a hire — whatever pool a
   // caller hands in.
   const available = pool.filter(
-    (agent) => agent.status !== "offline" && !isLeagueFighter(agent),
+    (agent) =>
+      agent.status !== "offline" &&
+      !isLeagueFighter(agent) &&
+      !(options.excludeOwnerId && agent.owner_id === options.excludeOwnerId),
   );
   const limit = options.limit ?? 6;
   const candidates = rankAgents(available, context, Math.max(GUILD_CANDIDATE_POOL, limit));
