@@ -12,6 +12,7 @@
 import { LEAGUE_FIGHTER_CARD_NOTE, isLeagueFighter } from "@/lib/data/league";
 import { formatCents, parseDollarsToCents } from "@/lib/utils";
 import type { Repository } from "@/lib/data/repository";
+import type { AgentProvenance } from "@/lib/data/ext/machine";
 import type {
   Agent,
   AgentCategory,
@@ -222,34 +223,56 @@ export function resolvedEndpoints(
  * what a machine fetches from the endpoint.
  *
  * A Fight League fighter's card describes a character, not a capability: no
- * skills, no MCP tools, no interface but its own Passport read, and a
- * `fiction` block that says so — whatever its row happens to carry.
+ * skills, no interface but its own Passport read, and a `fiction` block that
+ * says so — whatever its row happens to carry.
+ *
+ * What the card does not claim (site audit machine-surface-04 and -05):
+ *
+ * - **No A2A interface the District does not run.** A seeded Passport's `a2a`
+ *   endpoint is this card's own address; posting an A2A message to it answers
+ *   405. Only an `a2a` endpoint on the agent's *own* host is advertised.
+ * - **No streaming or push notifications.** Nothing here streams a task, and
+ *   a run webhook is the District calling the agent, not A2A push.
+ * - **No per-agent MCP tools** (owner decision 10): the District's MCP server
+ *   serves its own tools, never an agent's.
+ *
+ * `provenance` says whether the reputation in `passport` was earned or seeded
+ * (`agentProvenance` in `lib/data/ext/machine`, which is server-only — this
+ * module also reaches the onboarding wizard's browser bundle).
  */
 export function buildAgentCard(
   agent: Agent,
   gigs: GigWithAgent[],
   origin: string,
   provider: { organization: string },
+  provenance: AgentProvenance,
 ): Record<string, unknown> {
   const fighter = isLeagueFighter(agent);
   const endpoints = (
     fighter ? {} : Object.fromEntries(resolvedEndpoints(agent.endpoints, origin))
   ) as AgentEndpoints;
   const sold = fighter ? [] : gigs;
+  const passportRead = `${origin}/api/v1/agents/${agent.handle}`;
+  // An `a2a` endpoint on the District's own origin is a card, not a server.
+  const a2a =
+    endpoints.a2a && new URL(endpoints.a2a, origin).origin !== new URL(origin).origin
+      ? endpoints.a2a
+      : undefined;
 
   return {
     protocolVersion: "0.3.0",
     name: agent.name,
     districtId: `@${agent.handle}`,
     description: agent.description,
-    url: endpoints.a2a ?? `${origin}/agents/${agent.handle}`,
+    url: a2a ?? endpoints.mcp ?? passportRead,
     version: "1.0.0",
-    preferredTransport: endpoints.mcp ? "MCP" : "HTTP+JSON",
+    preferredTransport: a2a ? "JSONRPC" : endpoints.mcp ? "MCP" : "HTTP+JSON",
     provider: { organization: provider.organization, url: origin },
     documentationUrl: `${origin}/agents/${agent.handle}`,
     capabilities: {
       streaming: false,
-      pushNotifications: Boolean(agent.endpoints.webhook),
+      pushNotifications: false,
+      stateTransitionHistory: false,
     },
     defaultInputModes: ["text/plain", "application/json"],
     defaultOutputModes: ["application/json", "text/csv", "text/markdown"],
@@ -296,14 +319,15 @@ export function buildAgentCard(
       reliability: agent.reliability,
       dispute_rate: agent.dispute_rate,
       avg_latency_sec: agent.avg_latency_sec,
-      mcp_tools: fighter ? [] : agent.mcp_tools,
+      founding_cast: provenance.founding_cast,
+      track_record: provenance.track_record,
     },
     ...(fighter ? { fiction: { fictional: true, note: LEAGUE_FIGHTER_CARD_NOTE } } : {}),
     additionalInterfaces: [
-      ...(endpoints.a2a ? [{ transport: "JSONRPC", url: endpoints.a2a }] : []),
+      ...(a2a ? [{ transport: "JSONRPC", url: a2a }] : []),
       ...(endpoints.mcp ? [{ transport: "MCP", url: endpoints.mcp }] : []),
       ...(endpoints.openapi ? [{ transport: "HTTP+JSON", url: endpoints.openapi }] : []),
-      { transport: "HTTP+JSON", url: `${origin}/api/v1/agents/${agent.handle}` },
+      { transport: "HTTP+JSON", url: passportRead },
     ],
   };
 }

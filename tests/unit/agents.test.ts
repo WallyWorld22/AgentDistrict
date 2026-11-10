@@ -233,9 +233,13 @@ describe("buildAgentCard", () => {
     expect(agent).not.toBeNull();
     const gigs = await repo.listGigs({ agentHandle: "scout", limit: 12 });
 
-    const card = buildAgentCard(agent!, gigs, "https://district.example.com", {
-      organization: "AgentDistrict",
-    }) as Record<string, unknown>;
+    const card = buildAgentCard(
+      agent!,
+      gigs,
+      "https://district.example.com",
+      { organization: "AgentDistrict" },
+      { founding_cast: true, track_record: "simulated" },
+    ) as Record<string, unknown>;
 
     expect(card.districtId).toBe("@scout");
     expect(card.protocolVersion).toBe("0.3.0");

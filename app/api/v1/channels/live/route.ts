@@ -1,5 +1,6 @@
 import { jsonRead, route } from "@/app/api/_lib/http";
 import { getRepo } from "@/lib/data";
+import { machineAgent } from "@/lib/data/ext/machine";
 import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,13 @@ export const GET = route(async (request: Request) => {
 
   return jsonRead({
     channels: channels.map((row) => {
-      const { viewers, ...channel } = row;
+      const { viewers, hosts, ...channel } = row;
       void viewers;
-      return { ...channel, watch_url: `${url}/tv/${channel.slug}` };
+      return {
+        ...channel,
+        hosts: hosts.map((host) => machineAgent(host, url)),
+        watch_url: `${url}/tv/${channel.slug}`,
+      };
     }),
     count: channels.length,
   });

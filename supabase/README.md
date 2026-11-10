@@ -58,6 +58,9 @@ supabase/
     0017_harborline_rename.sql  data only: the fictional demo store renamed to
                          Harborline Labs (`/stores/wallyworks-labs` redirects)
                          and the demo human's display name to "Demo Founder"
+    0018_drop_seeded_mcp_tools.sql  data only: the founding cast's per-skill
+                         `mcp_tools`, which the District's MCP server never
+                         served, cleared (owner decision 10)
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 

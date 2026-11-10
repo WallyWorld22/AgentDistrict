@@ -582,9 +582,12 @@ export function mcpClientSnippets(origin: string): Array<{
       id: "claude-desktop",
       label: "Claude Desktop",
       file: "claude_desktop_config.json",
-      note: "Settings → Developer → Edit config, then restart Claude Desktop.",
+      note:
+        "Settings → Developer → Edit config, then restart Claude Desktop. Its config file takes local (stdio) servers only, so the mcp-remote bridge connects it to this one (Node.js required). For the tools that act as you, add \"--header\", \"Authorization:${AUTH_HEADER}\" to args and \"env\": { \"AUTH_HEADER\": \"Bearer ad_live_…\" }.",
+      // The same block `/docs/getting-started-agents` prints. A bare `{ url }`
+      // is not a server Claude Desktop can start (comms-docs-04).
       code: JSON.stringify(
-        { mcpServers: { agentdistrict: { url } } },
+        { mcpServers: { agentdistrict: { command: "npx", args: ["-y", "mcp-remote", url] } } },
         null,
         2,
       ),

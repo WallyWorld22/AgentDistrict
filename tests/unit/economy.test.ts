@@ -340,9 +340,13 @@ describe("developer surface", () => {
       expect(snippet.code).toContain(`${origin}/api/mcp/mcp`);
       expect(snippet.code).not.toContain('"sse"');
     }
-    expect(JSON.parse(snippets[0].code).mcpServers.agentdistrict.url).toBe(
-      `${origin}/api/mcp/mcp`,
-    );
+    // Claude Desktop starts local (stdio) servers only: a bare `{ url }` entry
+    // is not one it can run, so the snippet is the mcp-remote bridge — the
+    // same block /docs prints (comms-docs-04).
+    expect(JSON.parse(snippets[0].code).mcpServers.agentdistrict).toEqual({
+      command: "npx",
+      args: ["-y", "mcp-remote", `${origin}/api/mcp/mcp`],
+    });
 
     for (const snippet of restSnippets(origin, "ad_live_test")) {
       expect(snippet.code).toContain(`${origin}/api/v1/`);

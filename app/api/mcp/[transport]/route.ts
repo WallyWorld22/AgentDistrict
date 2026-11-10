@@ -5,6 +5,7 @@ import { getRepo } from "@/lib/data";
 import type { Repository } from "@/lib/data/repository";
 import type { Agent, Profile } from "@/lib/data/types";
 import {
+  NotFoundError,
   publicErrorBody,
   reportInternalError,
   toDistrictError,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { isAutoBid } from "@/lib/data/ext/cast";
+import { agentProvenance, machineAgent } from "@/lib/data/ext/machine";
 import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import { headers } from "next/headers";
 import { pingIndexNow } from "@/lib/seo/indexnow";
@@ -297,8 +299,12 @@ const handler = createMcpHandler(
       {
         title: "Search agents",
         description:
-          "Find AI agents in AgentDistrict by capability, category, price and skills. Returns Passport summaries with reputation, price and latency.",
-        inputSchema: z.object({
+          "Find AI agents in AgentDistrict by free-text capability, category, skills and maximum price. " +
+          "Returns Passport summaries with reputation, price and latency; `founding_cast: true` means the " +
+          "reputation is simulated. An argument this tool does not take is an error, not ignored.",
+        // Strict: a misspelled filter (`catgory`) must fail loudly, not come
+        // back as an unfiltered answer the caller reads as filtered.
+        inputSchema: z.strictObject({
           query: z.string().max(400).optional().describe("Natural-language capability query"),
           category: z.enum(AGENT_CATEGORIES).optional(),
           skills: z.array(z.string()).max(8).optional(),
@@ -334,6 +340,7 @@ const handler = createMcpHandler(
               rating_avg: agent.rating_avg,
               rating_count: agent.rating_count,
               avg_latency_sec: agent.avg_latency_sec,
+              ...agentProvenance(agent.handle),
               passport: `${base}/agents/${agent.handle}`,
             })),
           };
@@ -345,7 +352,8 @@ const handler = createMcpHandler(
       {
         title: "Read an Agent Passport",
         description:
-          "Full profile for one agent: reputation, verified skills, gigs, recent reviews and machine endpoints.",
+          "Full profile for one agent: reputation, skills, gigs, recent reviews and machine endpoints. " +
+          "`agent.founding_cast: true` means the reputation is simulated, not earned.",
         inputSchema: z.object({ handle: z.string().min(1).describe("Handle without the @") }),
       },
       async ({ handle }) =>
@@ -353,14 +361,16 @@ const handler = createMcpHandler(
           const repo = getRepo();
           const base = await origin();
           const agent = await repo.getAgentByHandle(handle);
-          if (!agent) return { error: `No agent @${handle}` };
+          // A miss is an error result in the shared envelope, never a
+          // successful `{ error }` the client has to sniff for.
+          if (!agent) throw new NotFoundError(`Agent @${handle}`);
           const [gigs, reviews, peers] = await Promise.all([
             repo.listGigs({ agentHandle: handle, limit: 10 }),
             repo.listReviewsForAgent(handle, 5),
             repo.listCollaborators(handle, 4),
           ]);
           return {
-            agent,
+            agent: machineAgent(agent, base),
             gigs: gigs.map((gig) => ({
               slug: gig.slug,
               title: gig.title,
@@ -383,8 +393,9 @@ const handler = createMcpHandler(
       {
         title: "List gigs",
         description:
-          "Browse packaged, machine-callable capabilities with fixed prices, delivery times and input/output contracts.",
-        inputSchema: z.object({
+          "Browse packaged, machine-callable capabilities with fixed prices, delivery times and input/output contracts. " +
+          "An argument this tool does not take is an error, not ignored.",
+        inputSchema: z.strictObject({
           query: z.string().max(400).optional(),
           category: z.enum(AGENT_CATEGORIES).optional(),
           max_price_cents: z.number().int().min(0).optional(),
@@ -409,6 +420,7 @@ const handler = createMcpHandler(
               starting_price_cents: gig.starting_price_cents,
               delivery_seconds: gig.delivery_seconds,
               rating_avg: gig.rating_avg,
+              founding_cast: agentProvenance(gig.agent.handle).founding_cast,
               input_contract: gig.input_contract,
               output_contract: gig.output_contract,
               packages: gig.packages,
@@ -478,7 +490,7 @@ const handler = createMcpHandler(
       async ({ job_id }) =>
         attempt(async () => {
           const job = await getRepo().getJob(job_id);
-          if (!job) return { error: `No job ${job_id}` };
+          if (!job) throw new NotFoundError(`Job ${job_id}`);
           return {
             job: { id: job.id, title: job.title, status: job.status, budget_cents: job.budget_cents },
             bids: job.bids.map((bid) => ({
@@ -489,6 +501,7 @@ const handler = createMcpHandler(
               eta_seconds: bid.eta_seconds,
               note: bid.note,
               rating_avg: bid.agent.rating_avg,
+              founding_cast: agentProvenance(bid.agent.handle).founding_cast,
               status: bid.status,
               auto_bid: isAutoBid(bid),
             })),
@@ -559,6 +572,7 @@ const handler = createMcpHandler(
             ranked: result.ranked.map((entry) => ({
               handle: entry.agent.handle,
               name: entry.agent.name,
+              founding_cast: agentProvenance(entry.agent.handle).founding_cast,
               score: entry.score,
               fit: entry.fit,
               reasons: entry.reasons,
@@ -593,7 +607,7 @@ const handler = createMcpHandler(
         attempt(async () => {
           const base = await origin();
           const channel = await getRepo().getChannelBySlug(channel_slug);
-          if (!channel) return { error: `No channel ${channel_slug}` };
+          if (!channel) throw new NotFoundError(`Channel ${channel_slug}`);
           return {
             channel: {
               slug: channel.slug,

@@ -88,7 +88,7 @@ export default async function Page({ params }: { params: Params }) {
                 id={anchorFor(section.heading)}
                 className="scroll-mt-24"
               >
-                <DocSectionView section={section} />
+                <DocSectionView section={section} origin={origin} />
               </div>
             ))}
           </Panel>

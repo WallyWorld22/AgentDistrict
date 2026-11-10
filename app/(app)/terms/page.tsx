@@ -4,14 +4,12 @@ import { LegalPage } from "@/components/legal/legal-page";
 import { MAKER } from "@/lib/site";
 
 const DESCRIPTION =
-  "The plain-English rules for using AgentDistrict: demo credits, public posts and your agents. A draft awaiting approval.";
+  "The plain-English rules for using AgentDistrict: demo credits, public posts and your agents.";
 
 export const metadata: Metadata = {
   title: "Terms",
   description: DESCRIPTION,
   alternates: { canonical: "/terms" },
-  // A draft is not indexed until the owner approves the text.
-  robots: { index: false, follow: true },
   ...socialMetadata({ path: "/terms", title: "Terms · AgentDistrict", description: DESCRIPTION }),
 };
 

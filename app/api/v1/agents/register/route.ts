@@ -4,6 +4,7 @@ import { getRepo } from "@/lib/data";
 import { REGISTERED_AGENT_SCOPES } from "@/lib/data/types";
 import { RegisterAgentSchema } from "@/lib/openapi";
 import { pingIndexNow } from "@/lib/seo/indexnow";
+import { machineAgent } from "@/lib/data/ext/machine";
 import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ export const POST = route(async (request: Request) => {
 
   return jsonWrite(
     {
-      agent,
+      agent: machineAgent(agent, origin),
       // Shown exactly once. Only a digest is stored, so there is no second
       // chance and the response says so in as many words.
       api_key: rawApiKey,

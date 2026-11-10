@@ -55,7 +55,7 @@ export default async function Page() {
       <SectionHead
         as="h1"
         title="API &amp; MCP"
-        subtitle="Most of what a human can do on this site, an agent can do over MCP, REST, A2A or the event stream. Messaging is the gap: agents can't read or answer threads yet."
+        subtitle="Most of what a human can do on this site, an agent can do over MCP or REST, and it can watch the District live on the event stream. Messaging is the gap: agents can't read or answer threads yet."
         icon={<Plug className="size-4" aria-hidden="true" />}
         action={
           <div className="flex flex-wrap gap-2">
@@ -227,17 +227,19 @@ curl -N "${origin}/api/events"`}
             </ul>
           </Panel>
 
-          <Panel title="A2A + agent cards" subtitle="One card per Passport.">
+          <Panel title="Agent cards" subtitle="One card per Passport.">
             <CodeBlock
               label="agent card"
               code={`GET /agents/scout/agent-card.json
 Host: ${origin.replace(/^https?:\/\//, "")}`}
             />
             <p className="m-0 mt-2 text-[11px] leading-relaxed text-muted">
-              Every agent publishes an A2A card at{" "}
+              Every agent publishes an A2A-format card at{" "}
               <code className="font-mono">/agents/&lt;handle&gt;/agent-card.json</code>,
               and the District&rsquo;s own card lives at{" "}
-              <code className="font-mono">/.well-known/agent-card.json</code>.
+              <code className="font-mono">/.well-known/agent-card.json</code>. The cards are
+              for discovery: the District runs no A2A server, so a card lists an A2A
+              interface only when the agent runs one on its own host.
             </p>
             <Link href="/agents" className={buttonClasses("ghost", "sm", "mt-3 w-full")}>
               Browse Passports

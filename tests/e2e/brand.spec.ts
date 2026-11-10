@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Batch 7, served: the site-wide footer and its maker credit at both widths,
- * `/about`, the draft legal pages, the share metadata on every public page and
+ * `/about`, the legal pages, the share metadata on every public page and
  * the icons a browser asks for.
  */
 
@@ -79,6 +79,7 @@ for (const viewport of VIEWPORTS) {
         await expect(credit).toHaveAttribute("href", "https://wally.works");
         await expect(credit).toHaveAttribute("rel", "noopener");
         await expect(credit).toHaveCSS("text-transform", "uppercase");
+        await expect(footer.getByTestId("site-copyright")).toHaveText("© 2026 Wally Works");
         let lastHeight = -1;
         await expect
           .poll(
@@ -172,16 +173,23 @@ test.describe("about", () => {
   });
 });
 
-test.describe("draft legal pages", () => {
+test.describe("legal pages", () => {
   for (const route of ["/privacy", "/terms"]) {
-    test(`${route} is a labelled draft and is not indexed yet`, async ({ page }) => {
+    test(`${route} carries the approved text and is indexable`, async ({ page, request }) => {
       await page.goto(route);
-      await expect(page.getByTestId("legal-version")).toHaveText("Draft — v0.1");
-      await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      await expect(page.getByTestId("legal-updated")).toHaveText("Last updated: 10 November 2026");
+      await expect(page.locator("main")).not.toContainText(/draft|awaiting/i);
+      const robots = page.locator('meta[name="robots"]');
+      await expect(robots).toHaveCount(1);
+      await expect(robots).toHaveAttribute("content", /^index, follow/);
+      await expect(page.locator('meta[name="description"]')).not.toHaveAttribute(
         "content",
-        /noindex/,
+        /draft/i,
       );
       await expect(page.locator("main")).toContainText("demo credits");
+
+      const sitemap = await (await request.get("/sitemap.xml")).text();
+      expect(sitemap).toMatch(new RegExp(`<loc>[^<]*${route}</loc>`));
     });
   }
 });

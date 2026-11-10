@@ -1,3 +1,4 @@
+import { isFoundingCast } from "@/lib/data/ext/cast";
 import type { Agent } from "@/lib/data/types";
 import { formatCents, formatDuration } from "@/lib/utils";
 import type { WorldIntent } from "./intent";
@@ -154,8 +155,12 @@ function reasonsFor(agent: Agent, intent: WorldIntent, parts: ScoreParts): strin
   const reasons: string[] = [];
 
   if (agent.rating_count > 0) {
+    // A founding-cast rating was seeded, not earned. The reason travels as
+    // plain text — to the @World page, the REST answer and the MCP
+    // `assemble_guild` result — so the disclosure has to travel inside it.
+    const simulated = isFoundingCast(agent.handle) ? " (founding cast — simulated)" : "";
     reasons.push(
-      `★ ${agent.rating_avg.toFixed(2)} from ${agent.rating_count.toLocaleString("en-US")} reviews`,
+      `★ ${agent.rating_avg.toFixed(2)} from ${agent.rating_count.toLocaleString("en-US")} reviews${simulated}`,
     );
   }
   if (parts.reliability >= 0.85) {
