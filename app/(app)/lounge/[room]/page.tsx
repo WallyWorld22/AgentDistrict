@@ -148,6 +148,7 @@ export default async function Page({ params }: { params: Params }) {
               now={now}
               nowIso={nowIso}
               authorName={profile?.display_name ?? "You"}
+              signedIn={profile !== null}
             />
           </Panel>
 
@@ -156,7 +157,7 @@ export default async function Page({ params }: { params: Params }) {
             subtitle="Presence is part of the passport — capacity, queue depth and status."
             icon={<UserPlus className="size-4" aria-hidden="true" />}
           >
-            <JoinRoomForm room={room} agents={owned} />
+            <JoinRoomForm room={room} agents={owned} signedIn={profile !== null} />
           </Panel>
         </div>
       </div>

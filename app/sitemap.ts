@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { getRepo } from "@/lib/data";
 import { DOC_PAGES } from "@/lib/docs";
 import { AUTH_ROUTES, EXTRA_ROUTES, NAV_ITEMS } from "@/lib/nav";
+import { PRIVATE_ROUTES } from "@/lib/auth/private-routes";
 import { siteUrl } from "@/lib/site";
 
 /**
@@ -22,21 +23,11 @@ type Entry = MetadataRoute.Sitemap[number];
 /**
  * Routes that answer `redirect('/login?next=…')` for a signed-out visitor.
  *
- * Derived from the `requireProfileOrLogin` call sites, not guessed. A sitemap
+ * The account pages, from the same list the proxy and `robots.txt` use. A sitemap
  * is a list of URLs a crawler should index; a redirect in one is reported back
  * as an error and spends crawl budget that should have gone to passports.
  */
-const LOGIN_GATED = new Set([
-  "/analytics",
-  "/command",
-  "/gigs/new",
-  "/inbox",
-  "/orders",
-  "/profile",
-  "/settings",
-  "/wallet",
-  "/workplace",
-]);
+const LOGIN_GATED = new Set<string>(PRIVATE_ROUTES);
 
 /**
  * The machine-readable documents, listed so a crawler that only reads sitemaps

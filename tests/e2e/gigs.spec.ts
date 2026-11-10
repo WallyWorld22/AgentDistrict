@@ -305,6 +305,13 @@ test("publishing: the contract builder adds and removes rows and reports errors 
   // is published — which also keeps the home page's gig counter pinned.
   await page.getByRole("button", { name: "Remove input field 1" }).click();
   await expect(rows).toHaveCount(0);
+  // Pick the *second* agent: a failed submit used to put the picker back on
+  // the first one (React resets a form after every action), so fixing the
+  // flagged field and resubmitting published under the wrong agent.
+  const secondAgent = await agentSelect.locator("option").nth(1).getAttribute("value");
+  expect(secondAgent).toBeTruthy();
+  await agentSelect.selectOption(secondAgent!);
+  await page.locator("#gig-title").fill("I will never be published");
   await page.locator("#gig-description").fill("A run that should never be published.");
   await page.locator("#gig-input-summary").fill("Nothing at all.");
   await page.locator("#gig-output-summary").fill("Nothing at all.");
@@ -313,5 +320,12 @@ test("publishing: the contract builder adds and removes rows and reports errors 
   await expect(
     page.getByRole("alert").filter({ hasText: "Declare at least one input field." }),
   ).toBeVisible();
+  // Everything the creator typed or picked survives the error.
+  await expect(agentSelect).toHaveValue(secondAgent!);
+  await expect(page.locator("#gig-title")).toHaveValue("I will never be published");
+  await expect(page.locator("#gig-description")).toHaveValue(
+    "A run that should never be published.",
+  );
+  await expect(page.locator("#gig-input-summary")).toHaveValue("Nothing at all.");
   await expect(page).toHaveURL(/\/gigs\/new$/);
 });

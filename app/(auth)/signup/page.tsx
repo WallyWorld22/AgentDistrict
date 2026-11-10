@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getRepo } from "@/lib/data";
+import { signInHref } from "@/lib/auth/return-to";
+import { safeInternalPath } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { DemoSessionCard } from "@/components/auth/demo-session-card";
 import { SignUpPanel } from "@/components/auth/sign-up-panel";
@@ -13,8 +15,16 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const configured = isSupabaseConfigured();
+  const query = await searchParams;
+  // Where to come back to once the account is confirmed (a claim link, the
+  // page a guest was on). Only a same-site path survives.
+  const next = safeInternalPath(typeof query.next === "string" ? query.next : null);
   const profile = configured ? null : await getRepo().getCurrentProfile();
 
   return (
@@ -30,11 +40,11 @@ export default async function SignupPage() {
 
       {configured ? (
         <>
-          <SignUpPanel />
+          <SignUpPanel next={next} />
           <p className="m-0 text-center text-[11px] text-muted">
             Already registered?{" "}
             <Link
-              href="/login"
+              href={signInHref(next)}
               className="inline-block py-2 font-extrabold text-blue hover:text-cyan"
             >
               Sign in

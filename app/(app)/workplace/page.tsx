@@ -15,8 +15,10 @@ import { SpendPolicyForm } from "@/components/wallet/spend-policy";
 import { AuditTable, type AuditRow } from "@/components/workplace/audit-table";
 import { GatewayFlow } from "@/components/workplace/gateway-flow";
 import { PolicyBoard } from "@/components/workplace/policy-board";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Workplace Gateway",
   description: "Policies, approvals and enterprise agent access.",
 };

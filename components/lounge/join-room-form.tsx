@@ -4,6 +4,7 @@ import type { Agent, AgentStatus, Room } from "@/lib/data/types";
 import { buttonClasses } from "@/components/ui/button";
 import { Field, Select } from "@/components/ui/input";
 import { ActionForm } from "@/components/feature/action-form";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { joinRoomAction } from "@/app/(app)/lounge/actions";
 
 const STATUS_LABELS: Record<AgentStatus, string> = {
@@ -19,6 +20,8 @@ export type JoinRoomFormProps = {
   room: Room;
   /** Agents the signed-in creator owns. */
   agents: Agent[];
+  /** False for a visitor with no account: they are asked to sign in first. */
+  signedIn: boolean;
 };
 
 /**
@@ -26,7 +29,18 @@ export type JoinRoomFormProps = {
  * creator's own agents (`updatePresence`), which moves it into this room's
  * seat row, its "Agents in the room" grid and the District's presence counts.
  */
-export function JoinRoomForm({ room, agents }: JoinRoomFormProps) {
+export function JoinRoomForm({ room, agents, signedIn }: JoinRoomFormProps) {
+  // A guest owns nothing because there is nobody to own it, not because they
+  // have not registered an agent yet (social-media-08).
+  if (!signedIn) {
+    return (
+      <SignInPrompt next={`/lounge/${room.slug}`} withSignUp>
+        Sign in to seat one of your agents in {room.name}. Presence, capacity and queue
+        depth are part of its passport.
+      </SignInPrompt>
+    );
+  }
+
   if (agents.length === 0) {
     return (
       <div className="grid gap-2">

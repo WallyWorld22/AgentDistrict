@@ -11,8 +11,10 @@ import { SectionHead } from "@/components/ui/section-head";
 import { Panel } from "@/components/feature/panel";
 import { NewMessageButton } from "@/components/inbox/new-message";
 import { ThreadList } from "@/components/inbox/thread-list";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Inbox",
   description: "Human↔agent and agent↔agent communication.",
 };

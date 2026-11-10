@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { ValidationError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
+import { parseDollarsToCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -25,10 +27,9 @@ function text(form: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Strict dollars → cents; `NaN` (which the schema words for the visitor) when it is not one. */
 function cents(form: FormData, key: string): number {
-  const raw = text(form, key).replace(/[$,\s]/g, "");
-  const dollars = Number.parseFloat(raw);
-  return Number.isFinite(dollars) ? Math.round(dollars * 100) : Number.NaN;
+  return parseDollarsToCents(text(form, key)) ?? Number.NaN;
 }
 
 function list(value: string): string[] {
@@ -46,7 +47,7 @@ function fail(error: unknown): ActionState {
   if (error instanceof z.ZodError) {
     return { ok: false, message: error.issues[0]?.message ?? "Check the form and try again." };
   }
-  return { ok: false, message: toDistrictError(error).message };
+  return actionError(error);
 }
 
 /* ------------------------------------------------------------ post a job */
@@ -54,14 +55,24 @@ function fail(error: unknown): ActionState {
 const PostJobSchema = z.object({
   title: z.string().min(6, "Give the bounty an outcome agents can bid on."),
   description: z.string().min(20, "Describe what done looks like — at least a sentence or two."),
-  category: z.enum(AGENT_CATEGORIES),
-  budgetCents: z.number().int().min(100, "Budgets start at $1.00."),
-  deadlineSeconds: z.number().int().min(60),
-  outputFormat: z.enum(OUTPUT_FORMATS),
-  columns: z.array(z.string()).max(12),
-  notes: z.string().max(280).optional(),
-  pii: z.enum(["none", "redacted", "allowed"]),
-  retentionDays: z.number().int().min(0).max(365),
+  category: z.enum(AGENT_CATEGORIES, { error: "Pick a category." }),
+  budgetCents: z
+    .number({ error: "Enter the budget in dollars, like 25.00." })
+    .int()
+    .min(100, "Budgets start at $1.00."),
+  deadlineSeconds: z
+    .number({ error: "Pick a deadline." })
+    .int()
+    .min(60, "Deadlines start at one minute."),
+  outputFormat: z.enum(OUTPUT_FORMATS, { error: "Pick an output format." }),
+  columns: z.array(z.string()).max(12, "Twelve columns is the limit."),
+  notes: z.string().max(280, "Keep the notes to 280 characters.").optional(),
+  pii: z.enum(["none", "redacted", "allowed"], { error: "Pick a personal-data rule." }),
+  retentionDays: z
+    .number({ error: "Enter retention as a whole number of days, from 0 to 365." })
+    .int()
+    .min(0, "Retention cannot be negative — 0 deletes the source material on delivery.")
+    .max(365, "Retention tops out at 365 days."),
   allowSubcontracting: z.boolean(),
   usOnly: z.boolean(),
 });
@@ -136,8 +147,14 @@ export async function postJobAction(
 const PlaceBidSchema = z.object({
   jobId: z.string().min(1),
   agentHandle: z.string().min(1, "Pick one of your agents."),
-  amountCents: z.number().int().min(1, "A bid needs a price."),
-  etaSeconds: z.number().int().min(30),
+  amountCents: z
+    .number({ error: "Enter your price in dollars, like 4.50." })
+    .int()
+    .min(1, "A bid needs a price."),
+  etaSeconds: z
+    .number({ error: "Pick a delivery time." })
+    .int()
+    .min(30, "Delivery takes at least 30 seconds."),
   note: z.string().min(4, "Say how you would do it — buyers read this."),
 });
 
@@ -219,16 +236,16 @@ export async function awardBidAction(
     const profile = await requireProfile();
     const jobId = text(form, "jobId");
     const bidId = text(form, "bidId");
-    if (!jobId || !bidId) throw new Error("Pick a bid to award.");
+    if (!jobId || !bidId) throw new ValidationError("Pick a bid to award.");
 
     const repo = getRepo();
     const job = await repo.getJob(jobId);
-    if (!job) throw new Error("That bounty no longer exists.");
+    if (!job) throw new ValidationError("That bounty no longer exists.");
     if (job.poster_id !== profile.id) {
-      throw new Error("Only the buyer who posted this bounty can award it.");
+      throw new ValidationError("Only the buyer who posted this bounty can award it.");
     }
     if (!job.bids.some((row) => row.id === bidId)) {
-      throw new Error("That bid is no longer on the board.");
+      throw new ValidationError("That bid is no longer on the board.");
     }
 
     const order = await repo.acceptBid({

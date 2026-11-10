@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import type { LoungeMessage } from "@/lib/data/types";
 import { tokenizeChatBody } from "@/lib/data/ext/home";
 import { cn, timeAgo } from "@/lib/utils";
@@ -10,6 +10,10 @@ import { Avatar, gradientForHandle, initialsFrom } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { postLoungeMessageAction, type ActionState } from "@/app/actions";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { FormAlert } from "@/components/feature/form-alert";
+import { submitKeepingInput } from "@/components/feature/action-form";
+import { SectionUnavailable } from "@/components/home/section-unavailable";
 
 export type LoungeChatPanelProps = {
   /** Oldest → newest. */
@@ -20,8 +24,19 @@ export type LoungeChatPanelProps = {
   nowIso: string;
   /** Display name of the signed-in human. */
   authorName: string;
+  /**
+   * False for a visitor with no account: the composer becomes a "Sign in to
+   * chat" prompt that returns here (shell-home-02).
+   */
+  signedIn: boolean;
   /** Room slugs that have a real `/lounge/[room]` page. */
   roomSlugs: string[];
+  /**
+   * The transcript could not be read (`loadHomeDashboard`). The panel then
+   * says so instead of "The Lounge is quiet right now", which would be a claim
+   * about the Lounge that a failed read cannot support.
+   */
+  unavailable?: boolean;
 };
 
 /**
@@ -37,7 +52,9 @@ export function LoungeChatPanel({
   now,
   nowIso,
   authorName,
+  signedIn,
   roomSlugs,
+  unavailable = false,
 }: LoungeChatPanelProps) {
   const [optimistic, addOptimistic] = React.useOptimistic(
     messages,
@@ -116,45 +133,54 @@ export function LoungeChatPanel({
             </div>
           </li>
         ))}
-        {optimistic.length === 0 ? (
+        {optimistic.length > 0 ? null : unavailable ? (
+          <li>
+            <SectionUnavailable />
+          </li>
+        ) : (
           <li className="text-[12px] text-muted">The Lounge is quiet right now.</li>
-        ) : null}
+        )}
       </ul>
 
-      <form ref={formRef} action={formAction} className="grid gap-2">
-        {state && !state.ok ? (
-          <p
-            role="alert"
-            className="m-0 flex items-start gap-2 rounded-[13px] border border-[#8a3142] bg-[#2c1017] px-3 py-2 text-[11.5px] font-semibold text-[#ffb3bd]"
-          >
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            {state.message}
-          </p>
-        ) : null}
-        <div className="flex items-center gap-2">
-          <label htmlFor="home-lounge-say" className="sr-only">
-            Message the Lounge
-          </label>
-          <Input
-            id="home-lounge-say"
-            name="body"
-            placeholder="Message the Lounge…"
-            inputSize="sm"
-            required
-            minLength={1}
-            maxLength={280}
-            autoComplete="off"
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            size="icon"
-            aria-label="Send to the Lounge"
-            loading={pending}
-          >
-            <Send className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
+      <form
+        ref={formRef}
+        action={formAction}
+        // A refused line keeps its text in the box, so it can be edited and
+        // sent again; the form is reset only after a success (above).
+        onSubmit={submitKeepingInput(formAction)}
+        className="grid gap-2"
+      >
+        <FormAlert state={state} compact />
+        {signedIn ? (
+          <div className="flex items-center gap-2">
+            <label htmlFor="home-lounge-say" className="sr-only">
+              Message the Lounge
+            </label>
+            <Input
+              id="home-lounge-say"
+              name="body"
+              placeholder="Message the Lounge…"
+              inputSize="sm"
+              required
+              minLength={1}
+              maxLength={280}
+              autoComplete="off"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              size="icon"
+              aria-label="Send to the Lounge"
+              loading={pending}
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        ) : (
+          <SignInPrompt withSignUp signInLabel="Sign in to chat">
+            Chatting in the Lounge needs an account. Reading it does not.
+          </SignInPrompt>
+        )}
       </form>
     </>
   );

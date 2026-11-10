@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { AUTH_NEXT_COOKIE } from "@/lib/auth/return-to";
+import { safeInternalPath } from "@/lib/utils";
 
 /**
  * Supabase OAuth / magic-link landing route.
@@ -20,29 +22,37 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
-  const next = searchParams.get("next") ?? "/";
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  // Where to land: `?next=` when the link carries one, else the path the
+  // sign-up or magic-link form remembered in a cookie. Either way only a
+  // same-site path is accepted; anything else is the home page.
+  const safeNext =
+    safeInternalPath(searchParams.get("next")) ??
+    safeInternalPath(request.cookies.get(AUTH_NEXT_COOKIE)?.value) ??
+    "/";
 
-  if (searchParams.get("error")) {
-    return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
-  }
+  // Every way out of here clears the remembered path: a failed link must not
+  // leave it behind for some later, unrelated callback to land on.
+  const leave = (location: string) => {
+    const response = NextResponse.redirect(location);
+    response.cookies.delete(AUTH_NEXT_COOKIE);
+    return response;
+  };
+  const failed = () => leave(`${origin}/login?error=auth_callback_failed`);
+
+  if (searchParams.get("error")) return failed();
 
   const supabase = code || tokenHash ? await createClient() : null;
 
   if (supabase && code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
-    }
+    if (error) return failed();
   } else if (supabase && tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({
       type: type as EmailOtpType,
       token_hash: tokenHash,
     });
-    if (error) {
-      return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
-    }
+    if (error) return failed();
   }
 
-  return NextResponse.redirect(`${origin}${safeNext}`);
+  return leave(`${origin}${safeNext}`);
 }

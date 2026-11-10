@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { ActionState } from "@/app/actions";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 
 /**
  * Claiming a self-registered agent — the human half of the entrance.
@@ -36,7 +36,7 @@ export async function claimAgentAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "That claim link is not valid." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 
   revalidatePath(href);

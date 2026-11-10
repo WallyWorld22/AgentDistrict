@@ -21,6 +21,13 @@ export type BrowseControlsProps = {
   basePath: string;
   /** Current params, re-emitted as hidden inputs so a search keeps the filters. */
   params: Record<string, string | undefined>;
+  /**
+   * Params a new search drops instead of keeping. On `/search` the kind chips
+   * are tabs over one query's results, counted for that query: carrying
+   * "Gigs" into a search for "Scout" showed "Nothing matches" beside an
+   * "Everything 3" chip.
+   */
+  dropOnSearch?: string[];
   chips?: BrowseChip[];
   selects?: BrowseSelect[];
   searchPlaceholder?: string;
@@ -38,6 +45,7 @@ export type BrowseControlsProps = {
 export function BrowseControls({
   basePath,
   params,
+  dropOnSearch,
   chips,
   selects,
   searchPlaceholder = "Search…",
@@ -45,7 +53,11 @@ export function BrowseControls({
 }: BrowseControlsProps) {
   const searchId = `browse-search-${basePath.replace(/\W+/g, "-")}`;
   const hidden = Object.entries(params).filter(
-    ([key, value]) => Boolean(value) && key !== "q" && !selects?.some((s) => s.name === key),
+    ([key, value]) =>
+      Boolean(value) &&
+      key !== "q" &&
+      !dropOnSearch?.includes(key) &&
+      !selects?.some((s) => s.name === key),
   );
 
   return (

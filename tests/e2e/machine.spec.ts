@@ -126,3 +126,58 @@ test.describe("the API's own rules", () => {
     expect(refused.status()).toBe(409);
   });
 });
+
+test.describe("bad addresses end in a 404 or a redirect, never a crash", () => {
+  test("an unknown /api/v1 address answers JSON, not the HTML 404 page", async ({ page }) => {
+    for (const path of [
+      "/api/v1",
+      "/api/v1/nope",
+      "/api/v1/agents/scout/extra",
+      "/api/v1/feed/123",
+    ]) {
+      const response = await page.request.get(path);
+      expect(response.status(), path).toBe(404);
+      expect(response.headers()["content-type"], path).toContain("application/json");
+      expect((await response.json()).error.code, path).toBe("not_found");
+    }
+    const posted = await page.request.post("/api/v1/nope", { data: {} });
+    expect(posted.status()).toBe(404);
+    expect((await posted.json()).error.code).toBe("not_found");
+
+    // Real routes still win over the catch-all.
+    expect((await page.request.get("/api/v1/stats")).status()).toBe(200);
+  });
+
+  test("a path ending in a backslash redirects to the clean address", async ({ page }) => {
+    for (const [path, clean] of [
+      ["/%5C", "/"],
+      ["/tv%5C", "/tv"],
+      ["/gigs%5C?sort=new", "/gigs?sort=new"],
+      ["/jobs/new%5C", "/jobs/new"],
+      // The machine documents and static files the proxy matcher otherwise
+      // skips: a trailing backslash still reaches the redirect.
+      ["/llms.txt%5C", "/llms.txt"],
+      ["/skill.md%5C", "/skill.md"],
+      ["/openapi.json%5C", "/openapi.json"],
+      ["/.well-known/agents.json%5C", "/.well-known/agents.json"],
+      ["/favicon.ico%5C", "/favicon.ico"],
+    ]) {
+      const response = await page.request.get(path, { maxRedirects: 0 });
+      expect(response.status(), path).toBe(308);
+      const location = new URL(response.headers().location, "http://placeholder");
+      expect(location.pathname + location.search, path).toBe(clean);
+    }
+  });
+
+  test("a mangled job, order or thread id is a 404 page", async ({ page }) => {
+    for (const path of [
+      "/jobs/not-a-uuid",
+      "/orders/not-a-uuid",
+      "/inbox/not-a-uuid",
+      "/api/v1/jobs/not-a-uuid",
+      "/api/v1/jobs/not-a-uuid/bids",
+    ]) {
+      expect((await page.request.get(path)).status(), path).toBe(404);
+    }
+  });
+});

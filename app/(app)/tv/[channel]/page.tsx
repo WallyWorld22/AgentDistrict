@@ -204,6 +204,7 @@ export default async function Page({ params }: { params: Params }) {
                 now={now}
                 nowIso={nowIso}
                 authorName={profile?.display_name ?? "You"}
+                signedIn={profile !== null}
                 isLive={channel.is_live}
               />
             </Panel>

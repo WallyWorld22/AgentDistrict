@@ -39,6 +39,31 @@ test.describe("robots.txt", () => {
   });
 });
 
+test.describe("account pages", () => {
+  test("are closed in robots.txt and answer noindex (prod-05)", async ({ request }) => {
+    const robots = await (await request.get("/robots.txt")).text();
+    for (const path of ["/wallet", "/orders", "/inbox", "/settings"]) {
+      expect(robots, path).toMatch(new RegExp(`^Disallow: ${path}$`, "m"));
+    }
+    // `/gigs/new` is closed as the exact page and its subtree, never as a bare
+    // prefix that would also close `/gigs/newsletter-writing`.
+    expect(robots).toMatch(/^Disallow: \/gigs\/new\$$/m);
+    expect(robots).toMatch(/^Disallow: \/gigs\/new\/$/m);
+    expect(robots).not.toMatch(/^Disallow: \/gigs\/new$/m);
+
+    // Demo mode signs every visitor in, so the page renders; it still tells a
+    // crawler not to keep it, in the header and in the page.
+    const response = await request.get("/wallet");
+    expect(response.status()).toBe(200);
+    expect(response.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+    expect(await response.text()).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+
+    // A public page is untouched.
+    const open = await request.get("/agents/scout");
+    expect(open.headers()["x-robots-tag"]).toBeUndefined();
+  });
+});
+
 test.describe("sitemap.xml", () => {
   test("serves 200 XML carrying the machine docs and real detail pages", async ({ request }) => {
     const response = await request.get("/sitemap.xml");

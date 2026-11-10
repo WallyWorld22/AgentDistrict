@@ -140,6 +140,37 @@ export function isDistrictError(value: unknown): value is DistrictError {
   );
 }
 
+/**
+ * What an outside caller is told about a failure.
+ *
+ * Every `DistrictError` except `internal` was raised on purpose, with a message
+ * written for the caller ("Job not found", "This job is no longer open for
+ * bids"), so it goes out as is. An `internal` one is an `UpstreamError` or
+ * something nobody anticipated, and its message is whatever the database or
+ * the runtime said — `invalid input syntax for type uuid: "not-a-uuid"`, a
+ * PostgREST hint, a stack-adjacent `TypeError`. That is a description of our
+ * internals, not of the caller's request, so the API and MCP envelopes swap it
+ * (and any details) for this fixed sentence; the original goes to the server
+ * log, where it is still needed. See `reportInternalError`.
+ */
+export const INTERNAL_ERROR_MESSAGE = "Something went wrong on our side. Try again in a moment.";
+
+export function publicErrorBody(error: DistrictError): { message: string; details?: unknown } {
+  if (error.code === "internal") return { message: INTERNAL_ERROR_MESSAGE };
+  return error.details === undefined
+    ? { message: error.message }
+    : { message: error.message, details: error.details };
+}
+
+/**
+ * Log an `internal` failure that is about to be answered with the generic
+ * message, so hiding it from the caller never hides it from us. `where` names
+ * the surface ("api", "mcp") in the log line.
+ */
+export function reportInternalError(where: string, original: unknown): void {
+  console.error(`[${where}] internal error`, original);
+}
+
 /** Normalise anything thrown into a `DistrictError`. */
 export function toDistrictError(value: unknown): DistrictError {
   if (isDistrictError(value)) return value;

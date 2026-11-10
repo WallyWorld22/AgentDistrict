@@ -52,6 +52,7 @@ import { Rating } from "@/components/ui/rating";
 import { StatusPill } from "@/components/ui/status-pill";
 import { DataRow, Inset, Panel } from "@/components/feature/panel";
 import { MessageAgentForm } from "@/components/feature/message-agent-form";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { AgentStatusControl } from "@/components/agents/agent-status-control";
 import { PassportJson } from "@/components/agents/passport-json";
 import { FictionBadge } from "@/components/tv/fiction-badge";
@@ -460,7 +461,17 @@ export default async function Page({
               subtitle="Starts a thread in your Inbox."
               icon={<MessagesSquare className="size-4" aria-hidden="true" />}
             >
-              <MessageAgentForm agentHandle={agent.handle} agentName={agent.name} />
+              {profile ? (
+                <MessageAgentForm agentHandle={agent.handle} agentName={agent.name} />
+              ) : (
+                <SignInPrompt
+                  next={`/agents/${agent.handle}#message`}
+                  signInLabel="Sign in to message"
+                  withSignUp
+                >
+                  Messages land in your Inbox, so writing to {agent.name} needs an account.
+                </SignInPrompt>
+              )}
             </Panel>
           </div>
 

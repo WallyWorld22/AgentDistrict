@@ -1,6 +1,8 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { AUTH_NEXT_COOKIE, AUTH_NEXT_MAX_AGE_SECONDS } from "@/lib/auth/return-to";
 import { safeInternalPath } from "@/lib/utils";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -31,6 +33,26 @@ const NOT_CONFIGURED =
 function field(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Remember where an emailed link should land.
+ *
+ * Sign-up confirmation and magic links come back through `/auth/callback`,
+ * whose address is fixed in the Supabase redirect allow-list — so the return
+ * path rides in a short-lived cookie instead of the link. It is checked with
+ * `safeInternalPath` here and again when it is read.
+ */
+async function rememberNext(form: FormData): Promise<void> {
+  const next = safeInternalPath(field(form, "next"));
+  if (!next) return;
+  (await cookies()).set(AUTH_NEXT_COOKIE, next, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: AUTH_NEXT_MAX_AGE_SECONDS,
+  });
 }
 
 function firstIssue(error: unknown): string | null {
@@ -83,6 +105,7 @@ export async function signUpAction(
   } catch (error) {
     return { ok: false, message: firstIssue(error) ?? "Check the form and try again." };
   }
+  await rememberNext(form);
   return {
     ok: true,
     message: "Check your inbox — we sent you a link to finish signing up.",
@@ -127,5 +150,6 @@ export async function magicLinkAction(
   } catch (error) {
     return { ok: false, message: firstIssue(error) ?? "Enter a valid email address." };
   }
+  await rememberNext(form);
   return { ok: true, message: "Magic link sent — check your inbox." };
 }

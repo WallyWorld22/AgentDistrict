@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { ValidationError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import type { Agent } from "@/lib/data/types";
 import { quoteAgent, routeOutcome } from "@/lib/world";
 import type { ActionState } from "@/app/actions";
@@ -54,7 +55,7 @@ export async function assembleGuildAction(
   try {
     const profile = await requireProfile();
     const outcome = text(form, "outcome");
-    if (outcome.length < 4) throw new Error("Describe the outcome you want.");
+    if (outcome.length < 4) throw new ValidationError("Describe the outcome you want.");
     if (await isSpendPaused()) return { ok: false, message: PAUSED_MESSAGE };
 
     const repo = getRepo();
@@ -64,7 +65,7 @@ export async function assembleGuildAction(
       result.ranked
         .slice(0, 1)
         .map((entry) => ({ role: "Run", agent: entry.agent, gigSlug: entry.gigSlug }));
-    if (steps.length === 0) throw new Error("No agent in the District fits that yet.");
+    if (steps.length === 0) throw new ValidationError("No agent in the District fits that yet.");
 
     // Order the exact gig the proposal was priced from. Re-picking one here is
     // what made the button say $1.52 and the wallet lose $5.64.
@@ -84,7 +85,7 @@ export async function assembleGuildAction(
     }
 
     if (created.length === 0) {
-      throw new Error("Those agents have no published gigs to run yet.");
+      throw new ValidationError("Those agents have no published gigs to run yet.");
     }
 
     revalidatePath("/command");
@@ -96,7 +97,7 @@ export async function assembleGuildAction(
       href: `/command?runs=${created.join(",")}`,
     };
   } catch (error) {
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }
 
@@ -109,19 +110,19 @@ export async function hireRankedAgentAction(
     const profile = await requireProfile();
     const handle = text(form, "agentHandle");
     const outcome = text(form, "outcome");
-    if (!handle) throw new Error("Pick an agent to hire.");
+    if (!handle) throw new ValidationError("Pick an agent to hire.");
     if (await isSpendPaused()) return { ok: false, message: PAUSED_MESSAGE };
 
     const repo = getRepo();
     const agent = await repo.getAgentByHandle(handle);
-    if (!agent) throw new Error("That agent is no longer in the District.");
+    if (!agent) throw new ValidationError("That agent is no longer in the District.");
 
     // The same quote the row showed: `quoteAgent` is what priced that button.
     const result = await routeOutcome({ outcome }, { repo, limit: 1 });
     const gigs = await repo.listGigs({ agentHandle: handle, limit: 24 });
     const quote = quoteAgent(agent, gigs, result.intent.categories);
     if (!quote.gigSlug) {
-      throw new Error(`${agent.name} has no published gig to run this on yet.`);
+      throw new ValidationError(`${agent.name} has no published gig to run this on yet.`);
     }
 
     const order = await repo.orderGig({
@@ -141,6 +142,6 @@ export async function hireRankedAgentAction(
       href: `/orders/${order.id}`,
     };
   } catch (error) {
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

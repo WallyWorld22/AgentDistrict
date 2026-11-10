@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -8,6 +8,7 @@ import { isFoundingCast } from "@/lib/data/ext/cast";
 import { DOC_PAGES } from "@/lib/docs";
 import { AGENT_HANDLES } from "@/lib/seed";
 import { AUTH_ROUTES, NAV_ITEMS } from "@/lib/nav";
+import { PRIVATE_ROUTES } from "@/lib/auth/private-routes";
 import { serializeJsonLd } from "@/components/seo/json-ld";
 import { INDEXNOW_KEY, indexNowTarget, normalizeUrls } from "@/lib/seo/indexnow";
 import {
@@ -39,6 +40,23 @@ import {
 
 const ORIGIN = "https://agentdistrict.io";
 
+/**
+ * Does robots.txt close `path` (with its query)? Google's matching, which Bing
+ * shares: each rule is a prefix, `*` is any run of characters and a trailing
+ * `$` anchors the end. With only `Allow: /` beside them, any matching
+ * Disallow wins.
+ */
+function robotsDisallows(disallow: string[], path: string): boolean {
+  return disallow.some((rule) => {
+    const anchored = rule.endsWith("$");
+    const body = (anchored ? rule.slice(0, -1) : rule)
+      .split("*")
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*");
+    return new RegExp(`^${body}${anchored ? "$" : ""}`).test(path);
+  });
+}
+
 /** A known passport and a known gig, both seeded, both pinned elsewhere. */
 const KNOWN_AGENT = "scout";
 const KNOWN_GIG = "find-100-qualified-local-businesses";
@@ -62,7 +80,7 @@ afterEach(() => {
 });
 
 describe("robots.txt", () => {
-  it("allows everything, closes only /api/, and points at the sitemap", async () => {
+  it("allows everything, closes only /api/ and the account pages, and points at the sitemap", async () => {
     const robots = (await import("@/app/robots")).default();
     const rules = Array.isArray(robots.rules) ? robots.rules : [robots.rules];
 
@@ -73,13 +91,75 @@ describe("robots.txt", () => {
     const wildcard = rules.find((rule) => rule.userAgent === "*");
     expect(wildcard).toBeDefined();
     expect(wildcard!.allow).toBe("/");
-    expect(wildcard!.disallow).toEqual(["/api/"]);
+    const closed = wildcard!.disallow as string[];
+    expect(closed).toEqual([
+      "/api/",
+      "/analytics",
+      "/command",
+      "/gigs/new$",
+      "/gigs/new?",
+      "/gigs/new/",
+      "/inbox",
+      "/orders",
+      "/profile",
+      "/settings",
+      "/wallet",
+      "/workplace",
+    ]);
 
-    // Nothing but /api/ is ever closed — a rule that disallowed a passport or
-    // a machine document would defeat the entire point of this layer.
+    // Nothing else is ever closed — a rule that disallowed a passport or a
+    // machine document would defeat the entire point of this layer.
     for (const rule of rules) {
-      expect(rule.disallow).toEqual(["/api/"]);
+      expect(rule.disallow).toEqual(closed);
       expect(rule.allow).toBe("/");
+    }
+
+    // Every account page, and everything below it, is closed (prod-05,
+    // economy-13, comms-docs-13, gigs-orders-17).
+    for (const route of PRIVATE_ROUTES) {
+      for (const path of [route, `${route}/`, `${route}?step=2`, `${route}/anything`]) {
+        expect(robotsDisallows(closed, path), path).toBe(true);
+      }
+    }
+    expect(robotsDisallows(closed, "/api/v1/agents")).toBe(true);
+
+    // And nothing public is caught by a prefix: `/gigs/new` used to close
+    // every gig whose slug starts with "new".
+    for (const open of [
+      "/",
+      "/agents/scout",
+      "/gigs",
+      "/gigs/some-gig",
+      "/gigs/newsletter-writing",
+      "/gigs/new-york-lead-lists",
+      "/gigs/newsletter-writing?tier=basic",
+      "/jobs",
+      "/jobs/new",
+      "/skill.md",
+      "/llms.txt",
+      "/onboarding/agent",
+      "/lounge",
+    ]) {
+      expect(robotsDisallows(closed, open), open).toBe(false);
+    }
+  });
+
+  it("closes a top-level account page by plain prefix only where no public route shares it", () => {
+    // A top-level private route is one plain prefix (see `closedPatterns`), so
+    // no other top-level route may start with its name.
+    const app = join(process.cwd(), "app");
+    const segments = new Set<string>();
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name.startsWith("(") && entry.isDirectory()) walk(join(dir, entry.name));
+        else segments.add(`/${entry.name.replace(/\.(?:ts|tsx)$/, "")}`);
+      }
+    };
+    walk(app);
+    for (const file of readdirSync(join(process.cwd(), "public"))) segments.add(`/${file}`);
+    for (const route of PRIVATE_ROUTES.filter((r) => r.lastIndexOf("/") === 0)) {
+      const clashes = [...segments].filter((s) => s !== route && s.startsWith(route));
+      expect(clashes, route).toEqual([]);
     }
   });
 

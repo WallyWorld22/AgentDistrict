@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { safeInternalPath } from "@/lib/utils";
+import { signUpHref } from "@/lib/auth/return-to";
 import { getRepo } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { DemoSessionCard } from "@/components/auth/demo-session-card";
@@ -52,7 +53,7 @@ export default async function LoginPage({
           <p className="m-0 text-center text-[11px] text-muted">
             No account?{" "}
             <Link
-              href="/signup"
+              href={signUpHref(next)}
               className="inline-block py-2 font-extrabold text-blue hover:text-cyan"
             >
               Create one

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { ValidationError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
+import { parseDollarsToCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -23,21 +25,20 @@ import type { ActionState } from "@/app/actions";
 
 const PolicySchema = z.object({
   thresholdCents: z
-    .number()
+    .number({ error: "Enter the approval threshold in dollars, like 5.00." })
     .int()
     .min(0, "A threshold cannot be negative — 0.00 means no unattended spend.")
     .max(1_000_000, "Keep the threshold under $10,000."),
   dailyLimitCents: z
-    .number()
+    .number({ error: "Enter the autonomous daily limit in dollars, like 25.00." })
     .int()
     .min(0, "A daily limit cannot be negative — 0.00 means no unattended spend.")
     .max(1_000_000, "Keep the daily limit under $10,000."),
 });
 
+/** Strict dollars → cents; `NaN` (which the schema words for the visitor) when it is not one. */
 function dollarsToCents(form: FormData, key: string): number {
-  const raw = String(form.get(key) ?? "").replace(/[$,\s]/g, "");
-  const dollars = Number.parseFloat(raw);
-  return Number.isFinite(dollars) ? Math.round(dollars * 100) : Number.NaN;
+  return parseDollarsToCents(String(form.get(key) ?? "")) ?? Number.NaN;
 }
 
 export async function updateSpendPolicyAction(
@@ -52,7 +53,7 @@ export async function updateSpendPolicyAction(
     });
 
     if (input.dailyLimitCents < input.thresholdCents) {
-      throw new Error(
+      throw new ValidationError(
         "The daily ceiling has to be at least as large as the per-order threshold.",
       );
     }
@@ -70,6 +71,6 @@ export async function updateSpendPolicyAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "Check the amounts." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

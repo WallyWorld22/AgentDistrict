@@ -44,6 +44,30 @@ export function formatCents(
 }
 
 /**
+ * A dollar amount typed into a form, as integer cents; `null` when it is not
+ * one.
+ *
+ * Strict on purpose. `Number.parseFloat` read "12abc" as 12, "1e9" as a
+ * billion and "1.234" as 1.23 without a word, so every money field now goes
+ * through this. A `$`, thousands commas and spaces are allowed; at most two
+ * decimal places; a leading minus is kept so the caller can say "cannot be
+ * negative" rather than "not a number".
+ *
+ * parseDollarsToCents("$1,250.50") → 125050
+ * parseDollarsToCents(".5")        → 50
+ * parseDollarsToCents("12abc")     → null
+ * parseDollarsToCents("1e9")       → null
+ * parseDollarsToCents("1.234")     → null
+ */
+export function parseDollarsToCents(value: string): number | null {
+  const raw = value.replace(/[$,\s]/g, "");
+  if (!/^-?(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/.test(raw)) return null;
+  const cents = Math.round(Number(raw) * 100);
+  if (!Number.isSafeInteger(cents)) return null;
+  return cents === 0 ? 0 : cents; // never -0
+}
+
+/**
  * Human duration for SLAs and latency.
  *
  * formatDuration(42)    → "42 sec"
@@ -107,13 +131,41 @@ export function slugify(input: string): string {
     .replace(/-{2,}/g, "-");
 }
 
+/** A throwaway origin to resolve a candidate path against. Never served. */
+const PATH_PROBE_ORIGIN = "https://return-to.invalid";
+
 /**
  * Accepts only a same-site path for post-auth redirects: absolute-path form
- * ("/wallet", "/inbox?x=1"), never protocol-relative ("//evil.com") or an
- * absolute URL. Anything else collapses to null so callers fall back to "/".
+ * ("/wallet", "/inbox?x=1"). Anything else collapses to null so callers fall
+ * back to "/".
+ *
+ * Refused, because a browser would read each of them as another site:
+ *
+ * - an absolute URL or anything with a scheme (`https://…`, `javascript:…`);
+ * - protocol-relative `//host`, and `/\host` (browsers treat `\` as `/`);
+ * - a backslash anywhere, raw or percent-encoded (`%5C`), and an encoded
+ *   slash or backslash right after the leading `/` (`/%2F/host`);
+ * - any whitespace or control character — browsers strip tabs and newlines
+ *   from a URL, so `/\t/host` arrives as `//host`.
+ *
+ * As a last check the value must resolve to the same origin it started from,
+ * and its resolved path must not begin with `//`. Dot segments are folded
+ * away on resolution, so `/.//host`, `/..//host`, `/%2e%2e//host` and
+ * `/a/..//host` all keep the origin yet resolve to the path `//host` — which
+ * the client router then treats as another site and navigates to.
  */
 export function safeInternalPath(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  if (value.includes("\\") || /%5c/i.test(value)) return null;
+  if (/^\/%(?:2f|5c)/i.test(value)) return null;
+  if (/[\u0000-\u0020\u007f-\u009f\u2028\u2029]/.test(value)) return null;
+  try {
+    const resolved = new URL(value, PATH_PROBE_ORIGIN);
+    if (resolved.origin !== PATH_PROBE_ORIGIN) return null;
+    if (resolved.pathname.startsWith("//")) return null;
+  } catch {
+    return null;
+  }
   return value;
 }

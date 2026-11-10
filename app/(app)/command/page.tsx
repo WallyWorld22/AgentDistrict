@@ -23,8 +23,10 @@ import { ApproveRunButton } from "@/components/command/approve-run";
 import { LiveRuns, type LiveRun } from "@/components/command/live-runs";
 import { SpendPause } from "@/components/command/spend-pause";
 import { SpendTable } from "@/components/command/spend-table";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Command Center",
   description: "Jobs, spend, runs, approvals and network health.",
 };

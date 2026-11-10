@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import type { ChatMessage } from "@/lib/data/types";
 import { ambientChatLine } from "@/lib/data/ext/lounge";
 import { useChannelChat } from "@/lib/realtime/use-channel-chat";
@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import { LiveDot } from "@/components/ui/live-dot";
 import { postChannelChatAction, type ActionState } from "@/app/actions";
 import { fetchChannelChatAction } from "@/app/(app)/tv/actions";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { FormAlert } from "@/components/feature/form-alert";
+import { submitKeepingInput } from "@/components/feature/action-form";
 
 export type ChannelChatProps = {
   slug: string;
@@ -21,6 +24,12 @@ export type ChannelChatProps = {
   now: number;
   nowIso: string;
   authorName: string;
+  /**
+   * False for a visitor with no account: the composer becomes a "Sign in to
+   * chat" prompt that returns here, instead of a box whose every line is
+   * refused.
+   */
+  signedIn: boolean;
   /** Only a live channel gets rotating viewer chatter. */
   isLive: boolean;
   className?: string;
@@ -59,6 +68,7 @@ export function ChannelChat({
   now,
   nowIso,
   authorName,
+  signedIn,
   isLive,
   className,
 }: ChannelChatProps) {
@@ -71,6 +81,7 @@ export function ChannelChat({
 
   const [tick, setTick] = React.useState(0);
   const [optimistic, setOptimistic] = React.useState<ChatMessage[]>([]);
+  const optimisticSeq = React.useRef(0);
   const listRef = React.useRef<HTMLUListElement>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -87,10 +98,11 @@ export function ChannelChat({
     async (previous: ActionState, form: FormData): Promise<ActionState> => {
       const body = String(form.get("body") ?? "").trim();
       if (body.length === 0) return { ok: false as const, message: "Say something first." };
+      const id = `optimistic-${(optimisticSeq.current += 1)}`;
       setOptimistic((current) => [
         ...current,
         {
-          id: `optimistic-${current.length}-${body.length}`,
+          id,
           channel_id: channelId,
           author_name: authorName,
           body,
@@ -98,6 +110,12 @@ export function ChannelChat({
         },
       ]);
       const result = await postChannelChatAction(previous, form);
+      // A refused line was never posted, so it must not stay on screen looking
+      // as if it had been (social-media-03). The alert below says why.
+      if (!result?.ok) {
+        setOptimistic((current) => current.filter((row) => row.id !== id));
+        return result;
+      }
       await refresh();
       return result;
     },
@@ -200,41 +218,46 @@ export function ChannelChat({
         ) : null}
       </ul>
 
-      <form ref={formRef} action={formAction} className="grid gap-2">
+      <form
+        ref={formRef}
+        action={formAction}
+        // A refused line keeps its text in the box, so it can be edited and
+        // sent again; the form is reset only after a success (above).
+        onSubmit={submitKeepingInput(formAction)}
+        className="grid gap-2"
+      >
         <input type="hidden" name="slug" value={slug} />
-        {state && !state.ok ? (
-          <p
-            role="alert"
-            className="m-0 flex items-start gap-2 rounded-[13px] border border-[#8a3142] bg-[#2c1017] px-3 py-2 text-[11.5px] font-semibold text-[#ffb3bd]"
-          >
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            {state.message}
-          </p>
-        ) : null}
-        <div className="flex items-center gap-2">
-          <label htmlFor={`tv-say-${slug}`} className="sr-only">
-            Say something
-          </label>
-          <Input
-            id={`tv-say-${slug}`}
-            name="body"
-            placeholder="Say something…"
-            inputSize="sm"
-            required
-            minLength={1}
-            maxLength={280}
-            autoComplete="off"
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            size="icon"
-            aria-label="Send to chat"
-            loading={pending}
-          >
-            <Send className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
+        <FormAlert state={state} compact />
+        {signedIn ? (
+          <div className="flex items-center gap-2">
+            <label htmlFor={`tv-say-${slug}`} className="sr-only">
+              Say something
+            </label>
+            <Input
+              id={`tv-say-${slug}`}
+              name="body"
+              placeholder="Say something…"
+              inputSize="sm"
+              required
+              minLength={1}
+              maxLength={280}
+              autoComplete="off"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              size="icon"
+              aria-label="Send to chat"
+              loading={pending}
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        ) : (
+          <SignInPrompt withSignUp signInLabel="Sign in to chat">
+            Chatting needs an account. Watching does not.
+          </SignInPrompt>
+        )}
         <p
           data-testid="chat-transport"
           className="m-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted"

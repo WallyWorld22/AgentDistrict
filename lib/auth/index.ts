@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getRepo, getRepoActingAs } from "@/lib/data";
 import { AuthRequiredError, ForbiddenError } from "@/lib/data/errors";
 import { API_KEY_PREFIX } from "@/lib/data/hash";
+import { signInHref } from "@/lib/auth/return-to";
 import type { Repository } from "@/lib/data/repository";
 import type { Agent, ApiKey, Profile } from "@/lib/data/types";
 
@@ -77,10 +78,7 @@ export async function requireProfileOrLogin(
   repo: Repository = getRepo(),
 ): Promise<Profile> {
   const profile = await getCurrentProfile(repo);
-  if (!profile) {
-    const target = nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
-    redirect(`/login?next=${encodeURIComponent(target)}`);
-  }
+  if (!profile) redirect(signInHref(nextPath));
   return profile;
 }
 

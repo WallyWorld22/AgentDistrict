@@ -238,6 +238,58 @@ test.describe("desktop shell (1440x900)", () => {
   });
 });
 
+test.describe("requests that change while on the page", () => {
+  test.use({ viewport: DESKTOP });
+
+  /** `next start` hydrates lazily; a keypress before React attaches is lost. */
+  async function hydrated(page: Page, selector: string) {
+    await page.waitForFunction(
+      (sel) => {
+        const el = document.querySelector(sel);
+        return !!el && Object.keys(el).some((key) => key.startsWith("__reactFiber$"));
+      },
+      selector,
+      { timeout: 30_000 },
+    );
+  }
+
+  test("a new request from the @World bar on /world replaces the page's box", async ({
+    page,
+  }) => {
+    await page.goto(`/world?outcome=${encodeURIComponent("Find 200 roofing companies in Tampa")}`);
+    await hydrated(page, "#worldbar-input");
+    await hydrated(page, "#world-outcome");
+    await expect(page.locator("#world-outcome")).toHaveValue("Find 200 roofing companies in Tampa");
+
+    await page.locator("#worldbar-input").fill("Build a landing page for a pool company");
+    await page.locator("#worldbar-input").press("Enter");
+
+    await expect(page).toHaveURL(/outcome=Build/);
+    await expect(page.locator("#world-outcome")).toHaveValue(
+      "Build a landing page for a pool company",
+    );
+  });
+
+  test("a new search on /search drops the kind chip", async ({ page }) => {
+    await page.goto("/search?q=roof&kind=gig");
+    // The page's own search form, not the shell's top-bar search.
+    const box = page.locator("#browse-search--search");
+    await box.fill("Scout");
+    await page.locator("form", { has: box }).getByRole("button", { name: "Apply" }).click();
+
+    await expect(page).toHaveURL(/\/search\?q=Scout$/);
+    await expect(page.getByText(/Nothing in the District matches/)).toHaveCount(0);
+  });
+
+  test("a kind with no hits offers the query's other results", async ({ page }) => {
+    await page.goto("/search?q=Scout&kind=gig");
+    await expect(page.getByText("Nothing under Gigs matches “Scout”")).toBeVisible();
+    await expect(page.getByText(/Nothing in the District matches/)).toHaveCount(0);
+    const all = page.getByRole("link", { name: /^See all \d+ results?$/ });
+    await expect(all).toHaveAttribute("href", "/search?q=Scout");
+  });
+});
+
 test.describe("mobile shell (390x844)", () => {
   test.use({ viewport: MOBILE });
 

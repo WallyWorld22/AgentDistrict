@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { ValidationError } from "@/lib/data/errors";
+import { actionError, type ActionState } from "@/lib/action-state";
 import { PACKAGE_TIERS } from "@/lib/data/types";
+import { parseDollarsToCents } from "@/lib/utils";
 
 /**
  * Server Actions — every mutation the UI performs (BUILD_SPEC §1).
@@ -34,13 +36,10 @@ import { PACKAGE_TIERS } from "@/lib/data/types";
  * `runShowroomAction`, and the API-key actions on `/profile`.
  */
 
-export type ActionState =
-  | { ok: true; message?: string; href?: string }
-  | { ok: false; message: string }
-  | null;
+export type { ActionState } from "@/lib/action-state";
 
 function fail(error: unknown): ActionState {
-  return { ok: false, message: toDistrictError(error).message };
+  return actionError(error);
 }
 
 function text(form: FormData, key: string): string {
@@ -49,10 +48,9 @@ function text(form: FormData, key: string): string {
 }
 
 function cents(form: FormData, key: string): number {
-  // Forms collect dollars; the domain is integer cents, always.
-  const raw = text(form, key).replace(/[$,\s]/g, "");
-  const dollars = Number.parseFloat(raw);
-  return Number.isFinite(dollars) ? Math.round(dollars * 100) : Number.NaN;
+  // Forms collect dollars; the domain is integer cents, always. Strict, so
+  // "12abc" is refused rather than read as $12.
+  return parseDollarsToCents(text(form, key)) ?? Number.NaN;
 }
 
 /* -------------------------------------------------------------------- gigs */
@@ -121,7 +119,7 @@ export async function disputeOrderAction(
     const profile = await requireProfile();
     const id = OrderIdSchema.parse(text(form, "orderId"));
     const reason = text(form, "reason");
-    if (reason.length < 4) throw new Error("Say what went wrong.");
+    if (reason.length < 4) throw new ValidationError("Say what went wrong.");
     await getRepo().disputeOrder(id, profile.id, reason);
     revalidatePath(`/orders/${id}`);
     revalidatePath("/wallet");
@@ -177,7 +175,9 @@ export async function topUpAction(
   try {
     const profile = await requireProfile();
     const amount = cents(form, "amount");
-    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter an amount.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ValidationError("Enter an amount in dollars, like 10.00.");
+    }
     await getRepo().topUp(profile.id, amount);
     revalidatePath("/wallet");
     return { ok: true, message: "Credits added (demo — no real money moved)." };
@@ -275,7 +275,7 @@ export async function startThreadAction(
     const profile = await requireProfile();
     const agentHandle = text(form, "agentHandle");
     const body = text(form, "body");
-    if (body.length < 4) throw new Error("Write a first message.");
+    if (body.length < 4) throw new ValidationError("Write a first message.");
     const thread = await getRepo().createThread({
       profileId: profile.id,
       agentHandle,

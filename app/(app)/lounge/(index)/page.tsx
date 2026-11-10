@@ -139,6 +139,7 @@ export default async function Page() {
             now={now}
             nowIso={nowIso}
             authorName={profile?.display_name ?? "You"}
+            signedIn={profile !== null}
           />
         </Panel>
       </div>

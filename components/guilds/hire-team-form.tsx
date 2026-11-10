@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Users } from "lucide-react";
 import { cn, formatCents, formatDuration } from "@/lib/utils";
 import type { PackageTier } from "@/lib/data/types";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { ActionForm } from "@/components/feature/action-form";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { hireGuildAction } from "@/app/(app)/guilds/actions";
 
 export type HireTierOption = {
@@ -39,28 +41,45 @@ export function HireTeamForm({
   members,
   tiers,
   availableCents,
+  signedIn,
 }: {
   slug: string;
   guildName: string;
   members: HireMember[];
   tiers: HireTierOption[];
   availableCents: number;
+  /**
+   * False for a visitor with no account. The packages and prices stay on show;
+   * the brief and the Hire button become a sign-in prompt that returns here,
+   * rather than a "you are short of credits" notice for a wallet a guest does
+   * not have (economy-12).
+   */
+  signedIn: boolean;
 }) {
   const [tier, setTier] = React.useState<PackageTier>(tiers[0]?.tier ?? "basic");
   const active = tiers.find((option) => option.tier === tier) ?? tiers[0];
   const hireable = members.filter((member) => member.gigTitle !== null).length;
-  const short = active ? active.totalCents - availableCents : 0;
+  const short = signedIn && active ? active.totalCents - availableCents : 0;
 
   return (
     <ActionForm
       action={hireGuildAction}
       className="gap-3"
-      footer={(pending) => (
-        <Button type="submit" variant="primary" size="md" loading={pending} fullWidth>
-          <Users className="size-4" aria-hidden="true" />
-          Hire Team — {formatCents(active?.totalCents ?? 0)}
-        </Button>
-      )}
+      footer={
+        signedIn
+          ? (pending) => (
+              <Button type="submit" variant="primary" size="md" loading={pending} fullWidth>
+                <Users className="size-4" aria-hidden="true" />
+                Hire Team — {formatCents(active?.totalCents ?? 0)}
+              </Button>
+            )
+          : (
+              <SignInPrompt next={`/guilds/${slug}#hire`} signInLabel="Sign in to hire" withSignUp>
+                Hiring {guildName} places orders against your wallet, so it needs an
+                account.
+              </SignInPrompt>
+            )
+      }
     >
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="tier" value={tier} />
@@ -124,26 +143,31 @@ export function HireTeamForm({
         </div>
       </div>
 
-      <Field
-        label={`Brief for ${guildName}`}
-        htmlFor="guild-brief"
-        required
-        hint="Every step gets this brief, prefixed with its role."
-      >
-        <Textarea
-          id="guild-brief"
-          name="brief"
-          rows={3}
+      {signedIn ? (
+        <Field
+          label={`Brief for ${guildName}`}
+          htmlFor="guild-brief"
           required
-          minLength={8}
-          placeholder="e.g. 200 roofing companies in Tampa, owner contact where public, scored and QA'd."
-        />
-      </Field>
+          hint="Every step gets this brief, prefixed with its role."
+        >
+          <Textarea
+            id="guild-brief"
+            name="brief"
+            rows={3}
+            required
+            minLength={8}
+            placeholder="e.g. 200 roofing companies in Tampa, owner contact where public, scored and QA'd."
+          />
+        </Field>
+      ) : null}
 
       {short > 0 ? (
         <p className="m-0 text-[11px] leading-relaxed text-yellow">
           {formatCents(active?.totalCents ?? 0)} is {formatCents(short)} more than the{" "}
-          {formatCents(availableCents)} you have available. Add credits on the Wallet
+          {formatCents(availableCents)} you have available. Add credits on the{" "}
+          <Link href="/wallet" className="font-extrabold text-blue hover:text-cyan">
+            Wallet
+          </Link>{" "}
           first, or pick a smaller package.
         </p>
       ) : null}

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import type { OrderStatus } from "@/lib/data/types";
 import type { ActionState } from "@/app/actions";
 
@@ -62,7 +62,7 @@ export async function setSpendPauseAction(
         : "External agent spending resumed.",
     };
   } catch (error) {
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }
 

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { districtNow, getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { ALL_KEY_SCOPES, toApiKeyView, type ApiKeyView } from "@/lib/data/ext/agents";
 import { timeAgo } from "@/lib/utils";
 
@@ -55,7 +55,7 @@ export async function createProfileApiKey(input: {
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "Check the form." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }
 
@@ -84,6 +84,6 @@ export async function revokeProfileApiKey(id: string): Promise<RevokeKeyResult> 
     revalidatePath("/developers");
     return { ok: true, message: "Key revoked." };
   } catch (error) {
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

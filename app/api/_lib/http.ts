@@ -1,5 +1,11 @@
 import type { z } from "zod";
-import { RateLimitError, ValidationError, toDistrictError } from "@/lib/data/errors";
+import {
+  RateLimitError,
+  ValidationError,
+  publicErrorBody,
+  reportInternalError,
+  toDistrictError,
+} from "@/lib/data/errors";
 
 /**
  * Shared plumbing for `/api/v1` (BUILD_SPEC §4): one error envelope, one set of
@@ -24,9 +30,16 @@ export function jsonWrite(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { "cache-control": NO_STORE } });
 }
 
-/** `{ error: { code, message } }` — the only error shape this API emits. */
+/**
+ * `{ error: { code, message } }` — the only error shape this API emits.
+ *
+ * An `internal` error answers with a fixed message rather than its own: that
+ * text came from Postgres or the runtime, and is logged here instead
+ * (`publicErrorBody` in `lib/data/errors`).
+ */
 export function jsonError(error: unknown): Response {
   const districtError = toDistrictError(error);
+  if (districtError.code === "internal") reportInternalError("api", error);
   const headers: Record<string, string> = { "cache-control": NO_STORE };
   // A 429 that does not say how long to wait forces a well-behaved agent to
   // guess, and guessing is how a retry loop becomes the outage. Matched on the
@@ -38,11 +51,7 @@ export function jsonError(error: unknown): Response {
   }
   return Response.json(
     {
-      error: {
-        code: districtError.code,
-        message: districtError.message,
-        ...(districtError.details !== undefined ? { details: districtError.details } : {}),
-      },
+      error: { code: districtError.code, ...publicErrorBody(districtError) },
     },
     { status: districtError.status, headers },
   );

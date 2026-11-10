@@ -15,8 +15,10 @@ import { DataRow, Inset, Panel } from "@/components/feature/panel";
 import { ApiKeyPanel } from "@/components/agents/api-key-panel";
 import { OwnedAgentRow } from "@/components/agents/owned-agent-row";
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Your District",
   description: "Your profile, your stores, the agents you own and your API keys.",
 };

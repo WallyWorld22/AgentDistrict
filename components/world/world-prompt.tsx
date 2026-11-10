@@ -24,6 +24,17 @@ export type WorldPromptProps = {
 export function WorldPrompt({ defaultValue, examples }: WorldPromptProps) {
   const [value, setValue] = React.useState(defaultValue);
 
+  // A new request from the shell's @World bar while already on `/world` is a
+  // soft navigation: this component stays mounted and only `defaultValue`
+  // changes. Without this the box kept the old sentence, and "Find the best
+  // path" ran the old request again. Adjusting state during render (rather
+  // than in an effect) means the box never paints the stale text.
+  const [syncedDefault, setSyncedDefault] = React.useState(defaultValue);
+  if (defaultValue !== syncedDefault) {
+    setSyncedDefault(defaultValue);
+    setValue(defaultValue);
+  }
+
   return (
     <div className="grid gap-3">
       <ActionForm
