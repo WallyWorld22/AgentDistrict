@@ -8,6 +8,7 @@ import { isFoundingCast } from "@/lib/data/ext/cast";
 import { DOC_PAGES } from "@/lib/docs";
 import { AGENT_HANDLES } from "@/lib/seed";
 import { AUTH_ROUTES, NAV_ITEMS } from "@/lib/nav";
+import { PRIVATE_ROUTES } from "@/lib/auth/private-routes";
 import { serializeJsonLd } from "@/components/seo/json-ld";
 import { INDEXNOW_KEY, indexNowTarget, normalizeUrls } from "@/lib/seo/indexnow";
 import {
@@ -62,7 +63,7 @@ afterEach(() => {
 });
 
 describe("robots.txt", () => {
-  it("allows everything, closes only /api/, and points at the sitemap", async () => {
+  it("allows everything, closes only /api/ and the account pages, and points at the sitemap", async () => {
     const robots = (await import("@/app/robots")).default();
     const rules = Array.isArray(robots.rules) ? robots.rules : [robots.rules];
 
@@ -73,13 +74,32 @@ describe("robots.txt", () => {
     const wildcard = rules.find((rule) => rule.userAgent === "*");
     expect(wildcard).toBeDefined();
     expect(wildcard!.allow).toBe("/");
-    expect(wildcard!.disallow).toEqual(["/api/"]);
+    const closed = ["/api/", ...PRIVATE_ROUTES];
+    expect(wildcard!.disallow).toEqual(closed);
+    // The account pages are about the signed-in visitor (prod-05, economy-13,
+    // comms-docs-13, gigs-orders-17).
+    expect(closed).toEqual(expect.arrayContaining(["/wallet", "/inbox", "/orders", "/gigs/new"]));
 
-    // Nothing but /api/ is ever closed — a rule that disallowed a passport or
-    // a machine document would defeat the entire point of this layer.
+    // Nothing else is ever closed — a rule that disallowed a passport or a
+    // machine document would defeat the entire point of this layer.
     for (const rule of rules) {
-      expect(rule.disallow).toEqual(["/api/"]);
+      expect(rule.disallow).toEqual(closed);
       expect(rule.allow).toBe("/");
+    }
+    // robots.txt matches by prefix: no public page may start with a closed one.
+    const disallowed = (path: string) => closed.some((prefix) => path.startsWith(prefix));
+    for (const open of [
+      "/",
+      "/agents/scout",
+      "/gigs",
+      "/gigs/some-gig",
+      "/jobs",
+      "/skill.md",
+      "/llms.txt",
+      "/onboarding/agent",
+      "/lounge",
+    ]) {
+      expect(disallowed(open), open).toBe(false);
     }
   });
 

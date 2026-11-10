@@ -11,8 +11,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHead } from "@/components/ui/section-head";
 import { Inset, Panel } from "@/components/feature/panel";
 import { PublishGigForm } from "@/components/gigs/publish-gig-form";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Publish a gig",
   description:
     "Clear inputs, an output contract, a known price and machine-readable delivery.",

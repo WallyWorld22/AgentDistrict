@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError, type ActionState } from "@/lib/action-state";
 import { PACKAGE_TIERS } from "@/lib/data/types";
 import { parseDollarsToCents } from "@/lib/utils";
 
@@ -35,13 +35,10 @@ import { parseDollarsToCents } from "@/lib/utils";
  * `runShowroomAction`, and the API-key actions on `/profile`.
  */
 
-export type ActionState =
-  | { ok: true; message?: string; href?: string }
-  | { ok: false; message: string }
-  | null;
+export type { ActionState } from "@/lib/action-state";
 
 function fail(error: unknown): ActionState {
-  return { ok: false, message: toDistrictError(error).message };
+  return actionError(error);
 }
 
 function text(form: FormData, key: string): string {

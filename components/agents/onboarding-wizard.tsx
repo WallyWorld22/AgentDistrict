@@ -34,6 +34,7 @@ import { DataRow, Inset } from "@/components/feature/panel";
 import { AvatarPicker } from "./avatar-picker";
 import { ChipInput } from "./chip-input";
 import { checkHandleAvailability, registerAgentAction } from "@/app/(app)/onboarding/actions";
+import { clearDraft, loadDraft, saveDraft } from "./onboarding-draft";
 
 type HandleState =
   | { kind: "idle" }
@@ -71,17 +72,65 @@ const ENDPOINT_FIELDS = [
 /**
  * The five-step Passport wizard (BUILD_SPEC §4 `/onboarding/agent`).
  *
- * The draft lives in component state and is posted as one JSON field on the
- * last step: `registerAgentAction` re-validates every field with zod, so the
+ * The draft lives in component state (mirrored to this browser's storage, see
+ * `onboarding-draft.ts`) and is posted as one JSON field on the last step: `registerAgentAction` re-validates every field with zod, so the
  * client-side checks below are there to keep the creator moving, never to
  * decide what is allowed.
  */
 export function OnboardingWizard() {
+  // A draft this browser saved earlier — before a sign-in round trip, say — is
+  // picked up so leaving the page never costs the creator their work
+  // (agents-identity-01). Storage only exists in the browser, so the server
+  // render and hydration use an empty draft and the stored one is adopted on
+  // the render right after.
+  const hydrated = React.useSyncExternalStore(subscribeNever, isClient, isServer);
+  const stored = React.useMemo(
+    () => (hydrated ? loadDraft(WIZARD_STEPS.length) : null),
+    [hydrated],
+  );
+  return <Wizard stored={stored} persist={hydrated} />;
+}
+
+const subscribeNever = () => () => {};
+const isClient = () => true;
+const isServer = () => false;
+
+function Wizard({
+  stored,
+  persist,
+}: {
+  stored: { draft: AgentDraft; step: number } | null;
+  /** Mirror the draft to storage. Off before hydration, when it would save an empty draft over it. */
+  persist: boolean;
+}) {
   const [index, setIndex] = React.useState(0);
   const [draft, setDraft] = React.useState<AgentDraft>(emptyDraft);
+  const [resumed, setResumed] = React.useState(false);
+  // Adopt the stored draft once, during render (React's pattern for state
+  // that follows a prop), so the inputs keep their DOM nodes and focus.
+  const [adopted, setAdopted] = React.useState<typeof stored>(null);
+  if (stored && adopted !== stored) {
+    setAdopted(stored);
+    setDraft(stored.draft);
+    setIndex(stored.step);
+    setResumed(true);
+  }
   const [attempted, setAttempted] = React.useState<Set<WizardStepId>>(new Set());
   const [handleState, setHandleState] = React.useState<HandleState>({ kind: "idle" });
   const [pendingCheck, startCheck] = React.useTransition();
+
+  React.useEffect(() => {
+    if (persist) saveDraft(draft, index);
+  }, [persist, draft, index]);
+
+  function startOver() {
+    clearDraft();
+    setDraft(emptyDraft());
+    setIndex(0);
+    setAttempted(new Set());
+    setHandleState({ kind: "idle" });
+    setResumed(false);
+  }
 
   const step = WIZARD_STEPS[index];
   const errors = stepErrors(step.id, draft);
@@ -131,6 +180,22 @@ export function OnboardingWizard() {
 
   return (
     <div className="grid gap-4">
+      {resumed ? (
+        <p
+          role="status"
+          data-testid="wizard-resumed"
+          className="m-0 flex flex-wrap items-center gap-2 text-[11.5px] text-muted"
+        >
+          Picked up the draft you started in this browser.
+          <button
+            type="button"
+            onClick={startOver}
+            className="font-extrabold text-blue hover:text-cyan"
+          >
+            Start over
+          </button>
+        </p>
+      ) : null}
       <ol
         className="no-scrollbar m-0 flex list-none gap-2 overflow-x-auto p-0"
         aria-label="Registration steps"
@@ -482,6 +547,7 @@ export function OnboardingWizard() {
         {step.id === "review" ? (
           <ActionForm
             action={registerAgentAction}
+            onSuccess={clearDraft}
             footer={(pending) => (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Button

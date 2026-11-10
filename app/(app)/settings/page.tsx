@@ -14,8 +14,10 @@ import { DataRow, Inset, Panel } from "@/components/feature/panel";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { AccountForm } from "@/components/settings/account-form";
 import { PasswordForm } from "@/components/settings/password-form";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Settings",
   description: "Your name, bio and avatar, your password, and where your spend policy lives.",
 };

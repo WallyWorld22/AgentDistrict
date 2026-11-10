@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { AGENT_STATUSES, type LoungeMessage } from "@/lib/data/types";
 import { chatTranscript, messagesForRoom } from "@/lib/data/ext/lounge";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
@@ -83,6 +83,6 @@ export async function joinRoomAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "Check the form." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

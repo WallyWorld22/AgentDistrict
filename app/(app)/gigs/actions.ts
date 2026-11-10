@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import {
   AGENT_CATEGORIES,
   OUTPUT_FORMATS,
@@ -209,6 +209,6 @@ export async function publishGigAction(
       const first = error.issues[0];
       return { ok: false, message: first?.message ?? "Check the form and try again." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

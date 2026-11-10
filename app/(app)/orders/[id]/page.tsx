@@ -19,6 +19,7 @@ import { OrderLiveProgress } from "@/components/orders/order-live-progress";
 import { OrderStatusPill } from "@/components/orders/order-status";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { ReviewForm } from "@/components/orders/review-form";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 type Params = Promise<{ id: string }>;
 
@@ -33,8 +34,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
   const order = await getRepo().getOrder(id);
-  if (!order) return { title: "Run not found" };
+  if (!order) return { title: "Run not found", robots: PRIVATE_ROBOTS };
   return {
+    robots: PRIVATE_ROBOTS,
     title: `${order.agent.name} run · Orders`,
     description: order.brief.slice(0, 160),
   };

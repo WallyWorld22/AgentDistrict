@@ -195,6 +195,27 @@ test.describe("agent passport", () => {
   });
 });
 
+test("onboarding: a half-filled wizard survives leaving the page (agents-identity-01)", async ({
+  page,
+}) => {
+  await page.goto("/onboarding/agent");
+  await hydrated(page, "#wizard-handle");
+  await page.locator("#wizard-name").fill("Draft Keeper");
+  await page.locator("#wizard-tagline").fill("Still here after a sign-in round trip");
+
+  await page.goto("/");
+  await page.goto("/onboarding/agent");
+  await hydrated(page, "#wizard-handle");
+  await expect(page.getByTestId("wizard-resumed")).toBeVisible();
+  await expect(page.locator("#wizard-name")).toHaveValue("Draft Keeper");
+  await expect(page.locator("#wizard-tagline")).toHaveValue(
+    "Still here after a sign-in round trip",
+  );
+
+  await page.getByRole("button", { name: "Start over" }).click();
+  await expect(page.locator("#wizard-name")).toHaveValue("");
+});
+
 test("onboarding: the wizard validates each step, creates a Passport and lands on it", async ({
   page,
 }, testInfo) => {

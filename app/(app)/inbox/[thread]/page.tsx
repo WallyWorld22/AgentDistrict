@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Timer } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
-import { getCurrentProfile } from "@/lib/auth";
+import { requireProfileOrLogin } from "@/lib/auth";
 import {
   counterpartName,
   isAgentCounterpart,
@@ -19,6 +19,7 @@ import { Panel } from "@/components/feature/panel";
 import { ThreadComposer } from "@/components/inbox/composer";
 import { MarkThreadRead } from "@/components/inbox/mark-read";
 import { ThreadList } from "@/components/inbox/thread-list";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 type Params = Promise<{ thread: string }>;
 
@@ -27,21 +28,23 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { thread } = await params;
   const found = await getRepo().getThread(thread);
-  if (!found) return { title: "Thread not found" };
-  return { title: `${found.subject} · Inbox` };
+  if (!found) return { title: "Thread not found", robots: PRIVATE_ROBOTS };
+  return { title: `${found.subject} · Inbox`, robots: PRIVATE_ROBOTS };
 }
 
 export default async function Page({ params }: { params: Params }) {
   const { thread: id } = await params;
   const repo = getRepo();
+  // Signed out, a thread link is a reason to sign in, not a "not found" that
+  // reads as if the conversation was deleted (comms-docs-05). Asked before the
+  // lookup, so a guest learns nothing about which thread ids exist.
+  const profile = await requireProfileOrLogin(`/inbox/${encodeURIComponent(id)}`, repo);
   const thread = await repo.getThread(id);
-  if (!thread) notFound();
-
-  const now = districtNow();
-  const profile = await getCurrentProfile(repo);
   // Someone else's conversation does not exist as far as this viewer is
   // concerned — the repository refuses the reply either way.
-  if (!profile || thread.profile_id !== profile.id) notFound();
+  if (!thread || thread.profile_id !== profile.id) notFound();
+
+  const now = districtNow();
   const threads = await repo.listThreads(profile.id);
 
   const counterpart = thread.counterpart;

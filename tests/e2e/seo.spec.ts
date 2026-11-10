@@ -39,6 +39,26 @@ test.describe("robots.txt", () => {
   });
 });
 
+test.describe("account pages", () => {
+  test("are closed in robots.txt and answer noindex (prod-05)", async ({ request }) => {
+    const robots = await (await request.get("/robots.txt")).text();
+    for (const path of ["/wallet", "/orders", "/inbox", "/settings", "/gigs/new"]) {
+      expect(robots, path).toContain(`Disallow: ${path}`);
+    }
+
+    // Demo mode signs every visitor in, so the page renders; it still tells a
+    // crawler not to keep it, in the header and in the page.
+    const response = await request.get("/wallet");
+    expect(response.status()).toBe(200);
+    expect(response.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+    expect(await response.text()).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+
+    // A public page is untouched.
+    const open = await request.get("/agents/scout");
+    expect(open.headers()["x-robots-tag"]).toBeUndefined();
+  });
+});
+
 test.describe("sitemap.xml", () => {
   test("serves 200 XML carrying the machine docs and real detail pages", async ({ request }) => {
     const response = await request.get("/sitemap.xml");

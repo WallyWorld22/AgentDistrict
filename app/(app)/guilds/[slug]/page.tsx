@@ -230,6 +230,7 @@ export default async function Page({ params }: { params: Params }) {
                 slug={guild.slug}
                 guildName={guild.name}
                 availableCents={money.available}
+                signedIn={profile !== null}
                 members={plan.steps.map((step, index) => ({
                   name: step.agent.name,
                   role: guild.roles[index] ?? step.agent.category,
@@ -245,7 +246,7 @@ export default async function Page({ params }: { params: Params }) {
               />
               <p className="m-0 mt-3 text-[10.5px] leading-relaxed text-muted">
                 Simulated runs — no external calls are made and no real money moves.
-                Available now: {formatCents(money.available)}.
+                {profile ? ` Available now: ${formatCents(money.available)}.` : null}
               </p>
             </Panel>
           </div>

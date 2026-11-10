@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { AGENT_CATEGORIES, PRICING_MODELS } from "@/lib/data/types";
 import {
   HANDLE_PATTERN,
@@ -170,6 +170,6 @@ export async function registerAgentAction(
         message: error.issues[0]?.message ?? "Check the form and try again.",
       };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

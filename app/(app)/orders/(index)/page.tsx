@@ -18,8 +18,10 @@ import { Tabs } from "@/components/ui/tabs";
 import { Panel } from "@/components/feature/panel";
 import { OrderRow } from "@/components/orders/order-row";
 import { chipHref, oneOf, readQuery } from "@/lib/query";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Orders",
   description:
     "Every gig you bought and every bounty you awarded — live progress, held funds and approvals.",

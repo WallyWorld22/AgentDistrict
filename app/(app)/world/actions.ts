@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import type { Agent } from "@/lib/data/types";
 import { quoteAgent, routeOutcome } from "@/lib/world";
 import type { ActionState } from "@/app/actions";
@@ -96,7 +96,7 @@ export async function assembleGuildAction(
       href: `/command?runs=${created.join(",")}`,
     };
   } catch (error) {
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }
 
@@ -141,6 +141,6 @@ export async function hireRankedAgentAction(
       href: `/orders/${order.id}`,
     };
   } catch (error) {
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

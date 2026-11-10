@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { AGENT_CATEGORIES, OUTPUT_FORMATS } from "@/lib/data/types";
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
@@ -46,7 +46,7 @@ function fail(error: unknown): ActionState {
   if (error instanceof z.ZodError) {
     return { ok: false, message: error.issues[0]?.message ?? "Check the form and try again." };
   }
-  return { ok: false, message: toDistrictError(error).message };
+  return actionError(error);
 }
 
 /* ------------------------------------------------------------ post a job */

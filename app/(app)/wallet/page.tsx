@@ -14,8 +14,10 @@ import { DataRow, Inset, Panel } from "@/components/feature/panel";
 import { AddCreditsButton } from "@/components/wallet/add-credits";
 import { SpendPolicyForm } from "@/components/wallet/spend-policy";
 import { TransactionsTable } from "@/components/wallet/transactions-table";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
+  robots: PRIVATE_ROBOTS,
   title: "Wallet",
   description: "Balance, holds, spend today, approval thresholds and transactions.",
 };

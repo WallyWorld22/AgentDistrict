@@ -236,6 +236,7 @@ async function HomeDashboard() {
             now={now}
             nowIso={nowIso}
             authorName={profile?.display_name ?? "You"}
+            signedIn={profile !== null}
             roomSlugs={rooms.map((room) => room.slug)}
           />
         </Panel>

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { updateSession } from "@/lib/supabase/middleware";
+import { isPrivatePath } from "@/lib/auth/private-routes";
+import { safeInternalPath } from "@/lib/utils";
 
 /** A backslash, raw or percent-encoded, in either case. */
 const BACKSLASHES = /(?:%5c|\\)+/gi;
@@ -30,11 +32,13 @@ export function withoutBackslashes(pathname: string): string | null {
  * Next.js 16 renamed Middleware to Proxy; the file convention is `proxy.ts` at
  * the project root (see node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md).
  *
- * It does two things. First, a path with a backslash in it is redirected to
+ * It does three things. First, a path with a backslash in it is redirected to
  * the clean address (`withoutBackslashes`) — in both data modes, before
  * anything else runs. Then it refreshes the Supabase auth session, and only
  * when Supabase is actually configured: with no env vars set it is a plain
- * pass-through, so demo mode never pays for auth it does not have.
+ * pass-through, so demo mode never pays for auth it does not have. Last, an
+ * account page (`lib/auth/private-routes`) is marked `X-Robots-Tag: noindex`,
+ * and a signed-out request for one is sent to `/login?next=…` with a `307`.
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const clean = withoutBackslashes(request.nextUrl.pathname);
@@ -43,8 +47,46 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     target.pathname = clean;
     return NextResponse.redirect(target, 308);
   }
-  if (!isSupabaseConfigured()) return NextResponse.next();
-  return updateSession(request);
+
+  const { pathname, search } = request.nextUrl;
+  const privatePage = isPrivatePath(pathname);
+  if (!isSupabaseConfigured()) {
+    return privatePage ? noindex(NextResponse.next()) : NextResponse.next();
+  }
+
+  const { response, session } = await updateSession(request);
+  if (!privatePage) return response;
+
+  // A signed-out request for an account page gets a real redirect to sign in
+  // and back, before the page (and its `loading.tsx` shell) can stream a 200.
+  // Only page loads: a Server Action POST is left to the action, which
+  // answers with its own "sign in" message.
+  if (session === "signed_out" && (request.method === "GET" || request.method === "HEAD")) {
+    const target = request.nextUrl.clone();
+    target.pathname = "/login";
+    target.search = "";
+    // `_rsc` is the router's cache-buster on a client navigation, not part of
+    // the address the visitor asked for.
+    const rest = search
+      .replace(/^\?/, "")
+      .split("&")
+      .filter((pair) => pair !== "" && !pair.startsWith("_rsc="))
+      .join("&");
+    const next = safeInternalPath(rest ? `${pathname}?${rest}` : pathname);
+    if (next) target.searchParams.set("next", next);
+    const redirect = NextResponse.redirect(target, 307);
+    // Keep whatever the session refresh decided about the auth cookies (a
+    // dead token is cleared), so the sign-in page starts from a clean slate.
+    for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+    return noindex(redirect);
+  }
+  return noindex(response);
+}
+
+/** Account pages are nobody's search result (see `lib/auth/private-routes`). */
+function noindex(response: NextResponse): NextResponse {
+  response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  return response;
 }
 
 export const config = {

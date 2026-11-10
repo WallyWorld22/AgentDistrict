@@ -131,13 +131,36 @@ export function slugify(input: string): string {
     .replace(/-{2,}/g, "-");
 }
 
+/** A throwaway origin to resolve a candidate path against. Never served. */
+const PATH_PROBE_ORIGIN = "https://return-to.invalid";
+
 /**
  * Accepts only a same-site path for post-auth redirects: absolute-path form
- * ("/wallet", "/inbox?x=1"), never protocol-relative ("//evil.com") or an
- * absolute URL. Anything else collapses to null so callers fall back to "/".
+ * ("/wallet", "/inbox?x=1"). Anything else collapses to null so callers fall
+ * back to "/".
+ *
+ * Refused, because a browser would read each of them as another site:
+ *
+ * - an absolute URL or anything with a scheme (`https://…`, `javascript:…`);
+ * - protocol-relative `//host`, and `/\host` (browsers treat `\` as `/`);
+ * - a backslash anywhere, raw or percent-encoded (`%5C`), and an encoded
+ *   slash or backslash right after the leading `/` (`/%2F/host`);
+ * - any whitespace or control character — browsers strip tabs and newlines
+ *   from a URL, so `/\t/host` arrives as `//host`.
+ *
+ * As a last check the value must resolve to the same origin it started from.
  */
 export function safeInternalPath(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  if (value.includes("\\") || /%5c/i.test(value)) return null;
+  if (/^\/%(?:2f|5c)/i.test(value)) return null;
+  if (/[\u0000-\u0020\u007f-\u009f\u2028\u2029]/.test(value)) return null;
+  try {
+    const resolved = new URL(value, PATH_PROBE_ORIGIN);
+    if (resolved.origin !== PATH_PROBE_ORIGIN) return null;
+  } catch {
+    return null;
+  }
   return value;
 }

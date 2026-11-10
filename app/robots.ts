@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { PRIVATE_ROUTES } from "@/lib/auth/private-routes";
 import { siteUrl } from "@/lib/site";
 
 /**
@@ -54,16 +55,23 @@ const WELCOMED_CRAWLERS = [
 ] as const;
 
 /**
- * The only thing closed to crawlers is `/api/`.
+ * Closed to crawlers: `/api/`, and the account pages.
+ *
+ * The account pages (`/wallet`, `/inbox`, `/orders`, … — `PRIVATE_ROUTES`)
+ * are about whoever is signed in and say nothing to a search engine; a
+ * signed-out request for one is redirected to sign in, and each also carries
+ * `noindex`.
+ *
+ * As for `/api/`:
  *
  * Nothing under it matters for discovery and all of it is either authenticated,
  * rate limited or a long-lived stream — `/api/events` in particular holds a
  * connection open for up to 240s, which is a bad thing to hand a crawler. The
  * machine surface a model actually wants (`/llms.txt`, `/llms-full.txt`,
  * `/skill.md`, `/openapi.json`, `/.well-known/*`, every passport and gig) sits
- * outside `/api/` precisely so this line can stay this short.
+ * outside `/api/` precisely so this list can stay this short.
  */
-const DISALLOW = ["/api/"];
+const DISALLOW = ["/api/", ...PRIVATE_ROUTES];
 
 export default function robots(): MetadataRoute.Robots {
   const origin = siteUrl();

@@ -75,6 +75,7 @@ export function SignInPanel({ next }: { next?: string | null }) {
           submitVariant="primary"
           fullWidth
         >
+          {next ? <input type="hidden" name="next" value={next} /> : null}
           <Field
             label="Email"
             htmlFor="magic-email"

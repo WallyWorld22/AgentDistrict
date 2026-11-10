@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { AVATAR_EMOJI } from "@/lib/data/ext/agents";
 import { encodeProfileAvatar } from "@/lib/data/ext/profiles";
 import { createClient } from "@/lib/supabase/server";
@@ -72,7 +72,7 @@ export async function updateProfileAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "Check the form and try again." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }
 
@@ -121,7 +121,7 @@ export async function changePasswordAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "Check the form and try again." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 
   return { ok: true, message: "Password updated." };

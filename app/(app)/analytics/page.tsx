@@ -20,12 +20,13 @@ import { Pill } from "@/components/ui/pill";
 import { SectionHead } from "@/components/ui/section-head";
 import { Inset, Panel } from "@/components/feature/panel";
 import { SparklineCard } from "@/components/analytics/sparkline";
+import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
 
 export const metadata: Metadata = {
   title: "Analytics",
   description: "District totals and the last fourteen days.",
   // Operators only — never index it, and never follow a link out of it.
-  robots: { index: false, follow: false },
+  robots: PRIVATE_ROBOTS,
 };
 
 export const dynamic = "force-dynamic";

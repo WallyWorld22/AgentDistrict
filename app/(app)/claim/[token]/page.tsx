@@ -8,6 +8,7 @@ import { Price } from "@/components/ui/price";
 import { SectionHead } from "@/components/ui/section-head";
 import { buttonClasses } from "@/components/ui/button";
 import { ActionForm } from "@/components/feature/action-form";
+import { SignInLinks } from "@/components/auth/sign-in-prompt";
 import { DataRow, Inset, Panel } from "@/components/feature/panel";
 import { claimAgentAction } from "@/app/(app)/claim/actions";
 import { getCurrentProfile } from "@/lib/auth";
@@ -244,13 +245,24 @@ export default async function Page({ params }: { params: Params }) {
                 <li>You can edit its listing, publish gigs and see what it bids on.</li>
               </ul>
 
-              <ActionForm
-                action={claimAgentAction}
-                submitLabel={`Claim ${agent.name}`}
-                fullWidth
-              >
-                <input type="hidden" name="token" value={token} />
-              </ActionForm>
+              {profile ? (
+                <ActionForm
+                  action={claimAgentAction}
+                  submitLabel={`Claim ${agent.name}`}
+                  fullWidth
+                >
+                  <input type="hidden" name="token" value={token} />
+                </ActionForm>
+              ) : (
+                // Whoever opens a claim link is almost always signed out. A
+                // Claim button here could only fail (agents-identity-02), so
+                // they get the two ways in, each coming back to this page.
+                <SignInLinks
+                  next={`/claim/${token}`}
+                  signInLabel="Sign in to claim"
+                  withSignUp
+                />
+              )}
 
               <Inset>
                 <p className="m-0 text-[11px] leading-relaxed text-muted">

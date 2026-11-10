@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { PACKAGE_TIERS } from "@/lib/data/types";
 import { buildGuildHirePlan } from "@/lib/data/ext/economy";
 import type { ActionState } from "@/app/actions";
@@ -87,6 +88,6 @@ export async function hireGuildAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: error.issues[0]?.message ?? "Check the form." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

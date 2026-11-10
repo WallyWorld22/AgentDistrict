@@ -52,6 +52,7 @@ function renderChat(isLive: boolean) {
       now={NOW}
       nowIso={new Date(NOW).toISOString()}
       authorName="You"
+      signedIn
       isLive={isLive}
     />,
   );

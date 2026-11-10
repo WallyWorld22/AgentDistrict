@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import type { LoungeMessage } from "@/lib/data/types";
 import { useLoungeMessages } from "@/lib/realtime/use-lounge-messages";
 import { cn, timeAgo } from "@/lib/utils";
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { LiveDot } from "@/components/ui/live-dot";
 import { postLoungeMessageAction, type ActionState } from "@/app/actions";
 import { fetchLoungeMessagesAction } from "@/app/(app)/lounge/actions";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { FormAlert } from "@/components/feature/form-alert";
 import { ChatBody } from "./chat-line";
 
 export type LoungeRoomOption = { slug: string; name: string; icon: string };
@@ -28,6 +30,12 @@ export type LoungeChatPanelProps = {
   nowIso: string;
   /** Display name of the signed-in human. */
   authorName: string;
+  /**
+   * False for a visitor with no account: the composer becomes a "Sign in to
+   * chat" prompt that returns here, instead of a box whose every line is
+   * refused.
+   */
+  signedIn: boolean;
   className?: string;
 };
 
@@ -51,10 +59,12 @@ export function LoungeChatPanel({
   now,
   nowIso,
   authorName,
+  signedIn,
   className,
 }: LoungeChatPanelProps) {
   const [room, setRoom] = React.useState<string | null>(roomSlug);
   const [optimistic, setOptimistic] = React.useState<LoungeMessage[]>([]);
+  const optimisticSeq = React.useRef(0);
   const formRef = React.useRef<HTMLFormElement>(null);
   const listRef = React.useRef<HTMLUListElement>(null);
 
@@ -70,10 +80,11 @@ export function LoungeChatPanel({
     async (previous: ActionState, form: FormData): Promise<ActionState> => {
       const body = String(form.get("body") ?? "").trim();
       if (body.length === 0) return { ok: false as const, message: "Say something first." };
+      const id = `optimistic-${(optimisticSeq.current += 1)}`;
       setOptimistic((current) => [
         ...current,
         {
-          id: `optimistic-${current.length}-${body.length}`,
+          id,
           room_slug: room,
           author_type: "human" as const,
           author_id: null,
@@ -83,6 +94,12 @@ export function LoungeChatPanel({
         },
       ]);
       const result = await postLoungeMessageAction(previous, form);
+      // A refused line was never posted, so it must not stay on screen looking
+      // as if it had been (social-media-03). The alert below says why.
+      if (!result?.ok) {
+        setOptimistic((current) => current.filter((row) => row.id !== id));
+        return result;
+      }
       await refresh();
       return result;
     },
@@ -179,41 +196,39 @@ export function LoungeChatPanel({
 
       <form ref={formRef} action={formAction} className="grid gap-2">
         {room ? <input type="hidden" name="roomSlug" value={room} /> : null}
-        {state && !state.ok ? (
-          <p
-            role="alert"
-            className="m-0 flex items-start gap-2 rounded-[13px] border border-[#8a3142] bg-[#2c1017] px-3 py-2 text-[11.5px] font-semibold text-[#ffb3bd]"
-          >
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            {state.message}
-          </p>
-        ) : null}
-        <div className="flex items-center gap-2">
-          <label htmlFor="lounge-panel-say" className="sr-only">
-            Message the Lounge
-          </label>
-          <Input
-            id="lounge-panel-say"
-            name="body"
-            placeholder={
-              activeRoomName ? `Message ${activeRoomName}…` : "Message the Lounge…"
-            }
-            inputSize="sm"
-            required
-            minLength={1}
-            maxLength={280}
-            autoComplete="off"
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            size="icon"
-            aria-label="Send to the Lounge"
-            loading={pending}
-          >
-            <Send className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
+        <FormAlert state={state} compact />
+        {signedIn ? (
+          <div className="flex items-center gap-2">
+            <label htmlFor="lounge-panel-say" className="sr-only">
+              Message the Lounge
+            </label>
+            <Input
+              id="lounge-panel-say"
+              name="body"
+              placeholder={
+                activeRoomName ? `Message ${activeRoomName}…` : "Message the Lounge…"
+              }
+              inputSize="sm"
+              required
+              minLength={1}
+              maxLength={280}
+              autoComplete="off"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              size="icon"
+              aria-label="Send to the Lounge"
+              loading={pending}
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        ) : (
+          <SignInPrompt withSignUp signInLabel="Sign in to chat">
+            Chatting in the Lounge needs an account. Reading it does not.
+          </SignInPrompt>
+        )}
         <p className="m-0 flex items-center gap-1.5 text-[10px] text-muted">
           <LiveDot color={feed.transport === "realtime" ? "bg-green" : "bg-blue"} size="sm" />
           {feed.transport === "realtime"

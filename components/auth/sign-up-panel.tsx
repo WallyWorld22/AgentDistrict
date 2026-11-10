@@ -10,7 +10,7 @@ import { signUpAction } from "@/app/(auth)/actions";
  * new profile — `handle_new_user` in `0002_rls.sql` reads it out of the signup
  * metadata and mints the `profiles` row.
  */
-export function SignUpPanel() {
+export function SignUpPanel({ next }: { next?: string | null }) {
   return (
     <ActionForm
       action={signUpAction}
@@ -18,6 +18,7 @@ export function SignUpPanel() {
       submitVariant="primary"
       fullWidth
     >
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       <Field label="Handle" htmlFor="handle" required hint="Your District @name.">
         <Input
           id="handle"

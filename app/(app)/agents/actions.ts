@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
-import { ForbiddenError, NotFoundError, toDistrictError } from "@/lib/data/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/data/errors";
+import { actionError } from "@/lib/action-state";
 import { AGENT_STATUSES } from "@/lib/data/types";
 import { AGENT_STATUS_LABELS } from "@/lib/data/ext/agents";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
@@ -65,6 +66,6 @@ export async function setAgentStatusAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: "Pick a status." };
     }
-    return { ok: false, message: toDistrictError(error).message };
+    return actionError(error);
   }
 }

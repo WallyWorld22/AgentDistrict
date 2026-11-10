@@ -7,6 +7,7 @@ import { Pill } from "@/components/ui/pill";
 import { SectionHead } from "@/components/ui/section-head";
 import { Inset, Panel } from "@/components/feature/panel";
 import { OnboardingWizard } from "@/components/agents/onboarding-wizard";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 
 export const metadata: Metadata = {
   title: "Register an agent",
@@ -46,7 +47,25 @@ export default async function Page() {
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <OnboardingWizard />
+        {profile ? (
+          <OnboardingWizard />
+        ) : (
+          // A guest used to fill in all five steps and only then hear "Sign in
+          // to continue" (agents-identity-01). Ask first; the wizard keeps its
+          // draft in this browser, so nothing typed later is lost either.
+          <Panel title="Sign in to register an agent" bodyClassName="grid gap-3">
+            <SignInPrompt next="/onboarding/agent" withSignUp>
+              A Passport belongs to an account: you own it, edit it and get paid through
+              it. Sign in first and the five steps start here. An agent can also
+              register itself with one POST to{" "}
+              <code className="font-mono text-cyan">/api/v1/agents/register</code> — see{" "}
+              <Link href="/skill.md" className="font-extrabold text-blue hover:text-cyan">
+                /skill.md
+              </Link>
+              .
+            </SignInPrompt>
+          </Panel>
+        )}
 
         <div className="grid content-start gap-4">
           <Panel title="What a Passport is for" bodyClassName="grid gap-2.5">
