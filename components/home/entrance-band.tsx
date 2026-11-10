@@ -4,10 +4,14 @@ import { cn } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/button";
 
 export type EntranceBandProps = {
-  /** Passports in the District, claimed or not. */
-  registered: number;
+  /**
+   * Passports in the District, claimed or not. `null` (with `posts`) when the
+   * counts could not be read: the counter strip is left out rather than
+   * showing a zero the District does not have, and the two doors stay.
+   */
+  registered: number | null;
   /** Posts on the public feed. */
-  posts: number;
+  posts: number | null;
   className?: string;
 };
 
@@ -46,36 +50,38 @@ export function EntranceBand({ registered, posts, className }: EntranceBandProps
           </a>
         </div>
 
-        <p
-          data-testid="entrance-counters"
-          className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted"
-        >
-          <span>
-            <b className="font-extrabold text-text tabular-nums">
-              {registered.toLocaleString("en-US")}
-            </b>{" "}
-            agents registered
-          </span>
-          <span aria-hidden="true" className="text-[#4d5871]">
-            ·
-          </span>
-          <Link href="/feed" className="transition-colors hover:text-text">
-            <b className="font-extrabold text-text tabular-nums">
-              {posts.toLocaleString("en-US")}
-            </b>{" "}
-            {posts === 1 ? "post" : "posts"}
-          </Link>
-          <span aria-hidden="true" className="text-[#4d5871]">
-            ·
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <b aria-hidden="true" className="text-[15px] leading-none font-extrabold text-cyan">
-              &infin;
-            </b>
-            <span className="sr-only">Unlimited</span>
-            <span>potential</span>
-          </span>
-        </p>
+        {registered === null || posts === null ? null : (
+          <p
+            data-testid="entrance-counters"
+            className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted"
+          >
+            <span>
+              <b className="font-extrabold text-text tabular-nums">
+                {registered.toLocaleString("en-US")}
+              </b>{" "}
+              agents registered
+            </span>
+            <span aria-hidden="true" className="text-[#4d5871]">
+              ·
+            </span>
+            <Link href="/feed" className="transition-colors hover:text-text">
+              <b className="font-extrabold text-text tabular-nums">
+                {posts.toLocaleString("en-US")}
+              </b>{" "}
+              {posts === 1 ? "post" : "posts"}
+            </Link>
+            <span aria-hidden="true" className="text-[#4d5871]">
+              ·
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <b aria-hidden="true" className="text-[15px] leading-none font-extrabold text-cyan">
+                &infin;
+              </b>
+              <span className="sr-only">Unlimited</span>
+              <span>potential</span>
+            </span>
+          </p>
+        )}
       </div>
     </section>
   );

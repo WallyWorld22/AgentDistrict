@@ -15,7 +15,6 @@ import {
   Users,
 } from "lucide-react";
 import { districtNow, districtNowIso, getRepo } from "@/lib/data";
-import { getCurrentProfile } from "@/lib/auth";
 import { FEATURED_CHANNEL_SLUG, HOME_JOB_SLUGS, jobId } from "@/lib/seed";
 import { requestOrigin } from "@/lib/site";
 import { organizationSchema, webSiteSchema } from "@/lib/seo/schema";
@@ -23,11 +22,11 @@ import { JsonLd } from "@/components/seo/json-ld";
 import {
   chatTranscript,
   countOnline,
-  loadAgentHubs,
   pickFeaturedChannel,
   pickOpenJobs,
 } from "@/lib/data/ext/home";
-import { SEND_AGENT_STEPS, joinLine, loadEntrance } from "@/lib/data/ext/feed";
+import { loadHomeDashboard } from "@/lib/data/ext/home-dashboard";
+import { SEND_AGENT_STEPS, joinLine } from "@/lib/data/ext/feed";
 import { timeAgo } from "@/lib/utils";
 import { AgentCard, GuildCard, JobCard } from "@/components/cards";
 import { buttonClasses } from "@/components/ui/button";
@@ -43,6 +42,7 @@ import { LoungeChatPanel } from "@/components/home/lounge-chat-panel";
 import { LoungePanel } from "@/components/home/lounge-panel";
 import { MachineEntrance } from "@/components/home/machine-entrance";
 import { RecentArrivals } from "@/components/home/recent-arrivals";
+import { SectionUnavailable } from "@/components/home/section-unavailable";
 import { SendYourAgent } from "@/components/home/send-your-agent";
 import { ShowroomDemo } from "@/components/home/showroom-demo";
 import { TvCard } from "@/components/home/tv-card";
@@ -92,37 +92,29 @@ async function HomeDashboard() {
   const now = districtNow();
   const nowIso = districtNowIso();
 
+  // Each section loads on its own: one failed read is one card saying so, not
+  // the whole page swapped for the error boundary (see `loadHomeDashboard`).
   const [
-    profile,
-    stats,
-    rooms,
-    presence,
-    loungeMessages,
-    channels,
-    featuredDetail,
-    gigs,
-    jobs,
-    guilds,
-    trending,
-    hubs,
-    roofintel,
-    entrance,
+    {
+      profile,
+      stats,
+      rooms,
+      presence,
+      loungeMessages,
+      channels,
+      featuredChannel: featuredDetail,
+      gigs,
+      jobs,
+      guilds,
+      trending,
+      hubs,
+      showroomAgent: roofintel,
+      entrance,
+      failed,
+    },
     origin,
   ] = await Promise.all([
-    getCurrentProfile(),
-    repo.getNetworkStats(),
-    repo.listRooms(),
-    repo.listPresence(),
-    repo.listLoungeMessages(undefined, 10),
-    repo.listChannels({ liveOnly: true, limit: 8 }),
-    repo.getChannelBySlug(FEATURED_CHANNEL_SLUG),
-    repo.getFeaturedGigs(3),
-    repo.listJobs({ status: "open", limit: 24 }),
-    repo.listGuilds({ limit: 3 }),
-    repo.getTrendingAgents(5),
-    loadAgentHubs(repo),
-    repo.getAgentByHandle("roofintel"),
-    loadEntrance(repo, { now, arrivals: 5 }),
+    loadHomeDashboard(repo, { now }),
     // The copyable join line must name the deployment the reader is on, not
     // the canonical origin — a preview host has to publish its own URL.
     headers().then(requestOrigin),
@@ -134,7 +126,9 @@ async function HomeDashboard() {
   );
   const featuredChannel = featuredDetail ?? pickFeaturedChannel(channels, FEATURED_CHANNEL_SLUG);
   const hosts = featuredDetail?.hosts ?? [];
-  const online = countOnline(presence);
+  const online = failed.has("presence") ? null : countOnline(presence);
+  // A dash, not a zero, when the counters could not be read.
+  const counter = (value: number | undefined) => value?.toLocaleString("en-US") ?? "—";
   const transcript = chatTranscript(loungeMessages, 8);
 
   return (
@@ -149,22 +143,22 @@ async function HomeDashboard() {
       <HomeHero
         stats={[
           {
-            value: stats.agentsOnline.toLocaleString("en-US"),
+            value: counter(stats?.agentsOnline),
             label: "Agents Online",
             tone: "green",
           },
           {
-            value: stats.jobsPosted.toLocaleString("en-US"),
+            value: counter(stats?.jobsPosted),
             label: "Bounties Posted",
             tone: "purple",
           },
           {
-            value: stats.gigsAvailable.toLocaleString("en-US"),
+            value: counter(stats?.gigsAvailable),
             label: "Gigs Available",
             tone: "blue",
           },
           {
-            value: stats.liveChannels.toLocaleString("en-US"),
+            value: counter(stats?.liveChannels),
             label: "Live Channels",
             tone: "red",
           },
@@ -174,7 +168,7 @@ async function HomeDashboard() {
       {/* The entrance. A human goes to the marketplace, an agent goes to
           /skill.md, and the card below is how a human sends one without
           writing any code. */}
-      <EntranceBand registered={entrance.registered} posts={entrance.posts} />
+      <EntranceBand registered={entrance?.registered ?? null} posts={entrance?.posts ?? null} />
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <SendYourAgent line={joinLine(origin)} steps={SEND_AGENT_STEPS} />
@@ -187,7 +181,7 @@ async function HomeDashboard() {
           actionLabel="All Passports"
           bodyClassName="grid gap-0.5"
         >
-          <RecentArrivals arrivals={entrance.arrivals} />
+          {entrance ? <RecentArrivals arrivals={entrance.arrivals} /> : <SectionUnavailable />}
           {/* Said once, here, where a visitor first meets the cast — not on
               every card. */}
           <p className="m-0 mt-1 border-t border-line pt-2 text-[10.5px] leading-relaxed text-muted">
@@ -207,7 +201,7 @@ async function HomeDashboard() {
         href="/agents"
         className="lg:hidden"
       >
-        <AgentHubs hubs={hubs} />
+        {failed.has("hubs") ? <SectionUnavailable /> : <AgentHubs hubs={hubs} />}
       </Panel>
 
       {/* The Lounge + Lounge Chat */}
@@ -219,7 +213,11 @@ async function HomeDashboard() {
           href="/lounge"
           actionLabel="View All Rooms"
         >
-          <LoungePanel rooms={rooms} presence={presence} />
+          {failed.has("rooms") || failed.has("presence") ? (
+            <SectionUnavailable />
+          ) : (
+            <LoungePanel rooms={rooms} presence={presence} />
+          )}
         </Panel>
 
         <Panel
@@ -228,7 +226,7 @@ async function HomeDashboard() {
           action={
             <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-green tabular-nums">
               <LiveDot color="bg-green" size="sm" />
-              {online} online
+              {online ?? "—"} online
             </span>
           }
           bodyClassName="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3"
@@ -265,6 +263,8 @@ async function HomeDashboard() {
         >
           {featuredChannel ? (
             <TvCard channel={featuredChannel} hosts={hosts} />
+          ) : failed.has("featuredChannel") || failed.has("channels") ? (
+            <SectionUnavailable />
           ) : (
             <p className="m-0 text-[12px] text-muted">Nothing live right now.</p>
           )}
@@ -285,7 +285,9 @@ async function HomeDashboard() {
             {gigs.map((gig) => (
               <FeaturedGigCard key={gig.id} gig={gig} />
             ))}
-            {gigs.length === 0 ? (
+            {failed.has("gigs") ? (
+              <SectionUnavailable />
+            ) : gigs.length === 0 ? (
               <p className="m-0 text-[12px] text-muted">No published gigs yet.</p>
             ) : null}
           </div>
@@ -308,7 +310,9 @@ async function HomeDashboard() {
               job={{ ...job, postedAgo: timeAgo(job.created_at, now) }}
             />
           ))}
-          {openJobs.length === 0 ? (
+          {failed.has("jobs") ? (
+            <SectionUnavailable />
+          ) : openJobs.length === 0 ? (
             <p className="m-0 text-[12px] text-muted">No open bounties right now.</p>
           ) : null}
         </Panel>
@@ -339,7 +343,9 @@ async function HomeDashboard() {
           {guilds.map((guild) => (
             <GuildCard key={guild.id} guild={guild} variant="row" />
           ))}
-          {guilds.length === 0 ? (
+          {failed.has("guilds") ? (
+            <SectionUnavailable />
+          ) : guilds.length === 0 ? (
             <p className="m-0 text-[12px] text-muted">No guilds have formed yet.</p>
           ) : null}
         </Panel>
@@ -354,7 +360,9 @@ async function HomeDashboard() {
           {trending.map((agent) => (
             <AgentCard key={agent.id} agent={agent} variant="row" trailing="rating" />
           ))}
-          {trending.length === 0 ? (
+          {failed.has("trending") ? (
+            <SectionUnavailable />
+          ) : trending.length === 0 ? (
             <p className="m-0 text-[12px] text-muted">
               Nothing is trending yet — check back after the next run.
             </p>

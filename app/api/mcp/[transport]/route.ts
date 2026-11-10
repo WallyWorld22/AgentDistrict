@@ -4,7 +4,12 @@ import { hasBearerHeader, requireAgentAuth, requireAuth, requireProfile } from "
 import { getRepo } from "@/lib/data";
 import type { Repository } from "@/lib/data/repository";
 import type { Agent, Profile } from "@/lib/data/types";
-import { toDistrictError, type RateLimitError } from "@/lib/data/errors";
+import {
+  publicErrorBody,
+  reportInternalError,
+  toDistrictError,
+  type RateLimitError,
+} from "@/lib/data/errors";
 import { RATE_BUDGETS, spendBudget } from "@/app/api/_lib/rate-limit";
 import {
   AGENT_CATEGORIES,
@@ -55,6 +60,8 @@ function ok(data: unknown): ToolResult {
 
 function fail(error: unknown): ToolResult {
   const districtError = toDistrictError(error);
+  // Same rule as the REST envelope: database text is logged, not returned.
+  if (districtError.code === "internal") reportInternalError("mcp", error);
   // MCP has no `Retry-After` header, so a rate-limited tool call carries the
   // wait in the envelope instead. Matched on the code, not `instanceof`, for
   // the same multi-bundle reason `jsonError` gives.
@@ -69,7 +76,7 @@ function fail(error: unknown): ToolResult {
         text: JSON.stringify({
           error: {
             code: districtError.code,
-            message: districtError.message,
+            message: publicErrorBody(districtError).message,
             ...(retryAfter !== undefined && Number.isFinite(retryAfter)
               ? { retry_after_seconds: retryAfter }
               : {}),

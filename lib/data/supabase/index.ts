@@ -40,6 +40,7 @@ import {
  */
 const TRENDING_POOL = 240;
 import { sha1Hex } from "@/lib/seed/uuid";
+import { isUuid } from "../ids";
 import {
   LEAGUE_FIGHTER_COLUMNS,
   asRow,
@@ -277,6 +278,7 @@ export class SupabaseRepository implements Repository {
   }
 
   private async orderRow(id: UUID): Promise<Order> {
+    if (!isUuid(id)) throw new NotFoundError("Order");
     const client = await this.client();
     const order = await this.one(
       client.from("orders").select("*").eq("id", id).maybeSingle(),
@@ -1389,6 +1391,8 @@ export class SupabaseRepository implements Repository {
   }
 
   async getJob(id: UUID): Promise<JobWithBids | null> {
+    // A malformed id is an unknown one, not a database error — see `isUuid`.
+    if (!isUuid(id)) return null;
     const client = await this.client();
     const job = await this.one(
       client.from("jobs").select("*").eq("id", id).maybeSingle(),
@@ -1464,14 +1468,16 @@ export class SupabaseRepository implements Repository {
   async listBidsForJobs(jobIds: UUID[]): Promise<Record<UUID, BidWithAgent[]>> {
     const out: Record<UUID, BidWithAgent[]> = {};
     for (const id of jobIds) out[id] = [];
-    if (jobIds.length === 0) return out;
+    // A malformed id keeps its empty entry and never reaches the `in` filter.
+    const wellFormed = jobIds.filter(isUuid);
+    if (wellFormed.length === 0) return out;
 
     const client = await this.client();
     const bids = await this.many(
       client
         .from("bids")
         .select("*")
-        .in("job_id", jobIds)
+        .in("job_id", wellFormed)
         .order("amount_cents", { ascending: true }),
       toBid,
     );
@@ -1500,6 +1506,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async placeBid(input: PlaceBidInput): Promise<Bid> {
+    if (!isUuid(input.jobId)) throw new NotFoundError("Job");
     const client = await this.client();
     const job = await this.one(
       client.from("jobs").select("*").eq("id", input.jobId).maybeSingle(),
@@ -1559,6 +1566,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async acceptBid(input: AcceptBidInput): Promise<Order> {
+    if (!isUuid(input.jobId)) throw new NotFoundError("Job");
     const client = await this.client();
     const job = await this.one(
       client.from("jobs").select("*").eq("id", input.jobId).maybeSingle(),
@@ -1569,6 +1577,7 @@ export class SupabaseRepository implements Repository {
       throw new ForbiddenError("Only the job poster can award this job");
     }
     if (job.status !== "open") throw new ConflictError("This job has already been awarded");
+    if (!isUuid(input.bidId)) throw new NotFoundError("Bid");
 
     const bid = await this.one(
       client
@@ -1664,6 +1673,8 @@ export class SupabaseRepository implements Repository {
 
   async listOrders(filter: OrderFilter = {}): Promise<OrderDetail[]> {
     const { buyerId, agentHandle, status, jobId, limit = 50, offset = 0 } = filter;
+    // No order belongs to a malformed job id; asking Postgres would be a 22P02.
+    if (jobId && !isUuid(jobId)) return [];
     const client = await this.client();
 
     let query = client.from("orders").select("*").order("created_at", { ascending: false });
@@ -1685,6 +1696,7 @@ export class SupabaseRepository implements Repository {
 
   async countOrders(filter: OrderFilter = {}): Promise<number> {
     const { buyerId, agentHandle, status, jobId } = filter;
+    if (jobId && !isUuid(jobId)) return 0;
     const client = await this.client();
 
     let query = client.from("orders").select("id", { count: "exact", head: true });
@@ -1702,6 +1714,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async getOrder(id: UUID): Promise<OrderDetail | null> {
+    if (!isUuid(id)) return null;
     const client = await this.client();
     const order = await this.one(
       client.from("orders").select("*").eq("id", id).maybeSingle(),
@@ -2288,6 +2301,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async getBout(id: UUID): Promise<BoutWithResult | null> {
+    if (!isUuid(id)) return null;
     const client = await this.client();
     const bout = await this.one(
       client.from("bouts").select("*").eq("id", id).maybeSingle(),
@@ -2462,6 +2476,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async getThread(id: UUID): Promise<ThreadWithMessages | null> {
+    if (!isUuid(id)) return null;
     const client = await this.client();
     const thread = await this.one(
       client.from("threads").select("*").eq("id", id).maybeSingle(),
@@ -2483,6 +2498,7 @@ export class SupabaseRepository implements Repository {
   }
 
   async markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread> {
+    if (!isUuid(threadId)) throw new NotFoundError("Thread");
     const client = await this.client();
     const thread = await this.one(
       client
@@ -2510,6 +2526,7 @@ export class SupabaseRepository implements Repository {
   async sendMessage(input: SendMessageInput): Promise<Message> {
     const body = input.body.trim();
     if (!body) throw new ValidationError("Message body is required");
+    if (!isUuid(input.threadId)) throw new NotFoundError("Thread");
     const client = await this.client();
 
     // Only the two participants may post. RLS enforces it too, but a clear
