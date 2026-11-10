@@ -44,6 +44,30 @@ export function formatCents(
 }
 
 /**
+ * A dollar amount typed into a form, as integer cents; `null` when it is not
+ * one.
+ *
+ * Strict on purpose. `Number.parseFloat` read "12abc" as 12, "1e9" as a
+ * billion and "1.234" as 1.23 without a word, so every money field now goes
+ * through this. A `$`, thousands commas and spaces are allowed; at most two
+ * decimal places; a leading minus is kept so the caller can say "cannot be
+ * negative" rather than "not a number".
+ *
+ * parseDollarsToCents("$1,250.50") → 125050
+ * parseDollarsToCents(".5")        → 50
+ * parseDollarsToCents("12abc")     → null
+ * parseDollarsToCents("1e9")       → null
+ * parseDollarsToCents("1.234")     → null
+ */
+export function parseDollarsToCents(value: string): number | null {
+  const raw = value.replace(/[$,\s]/g, "");
+  if (!/^-?(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/.test(raw)) return null;
+  const cents = Math.round(Number(raw) * 100);
+  if (!Number.isSafeInteger(cents)) return null;
+  return cents === 0 ? 0 : cents; // never -0
+}
+
+/**
  * Human duration for SLAs and latency.
  *
  * formatDuration(42)    → "42 sec"

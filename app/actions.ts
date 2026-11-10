@@ -7,6 +7,7 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
 import { PACKAGE_TIERS } from "@/lib/data/types";
+import { parseDollarsToCents } from "@/lib/utils";
 
 /**
  * Server Actions — every mutation the UI performs (BUILD_SPEC §1).
@@ -49,10 +50,9 @@ function text(form: FormData, key: string): string {
 }
 
 function cents(form: FormData, key: string): number {
-  // Forms collect dollars; the domain is integer cents, always.
-  const raw = text(form, key).replace(/[$,\s]/g, "");
-  const dollars = Number.parseFloat(raw);
-  return Number.isFinite(dollars) ? Math.round(dollars * 100) : Number.NaN;
+  // Forms collect dollars; the domain is integer cents, always. Strict, so
+  // "12abc" is refused rather than read as $12.
+  return parseDollarsToCents(text(form, key)) ?? Number.NaN;
 }
 
 /* -------------------------------------------------------------------- gigs */
@@ -177,7 +177,9 @@ export async function topUpAction(
   try {
     const profile = await requireProfile();
     const amount = cents(form, "amount");
-    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter an amount.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Enter an amount in dollars, like 10.00.");
+    }
     await getRepo().topUp(profile.id, amount);
     revalidatePath("/wallet");
     return { ok: true, message: "Credits added (demo — no real money moved)." };

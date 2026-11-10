@@ -14,6 +14,7 @@ import {
 import { CONTRACT_FIELD_TYPES } from "@/lib/data/ext/gigs";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
 import { pingIndexNow } from "@/lib/seo/indexnow";
+import { parseDollarsToCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -33,9 +34,9 @@ const ContractFieldSchema = z.object({
     .string()
     .trim()
     .min(1, "Every contract field needs a name.")
-    .max(48)
+    .max(48, "Keep contract field names to 48 characters.")
     .regex(/^[a-zA-Z0-9_.-]+$/, "Field names are machine keys: letters, numbers, _ . - only."),
-  type: z.enum(CONTRACT_FIELD_TYPES),
+  type: z.enum(CONTRACT_FIELD_TYPES, { error: "Pick a type for every contract field." }),
   required: z.boolean(),
   description: z.string().trim().min(3, "Describe what each contract field means."),
 });
@@ -44,12 +45,15 @@ const PackageSchema = z.object({
   tier: z.enum(PACKAGE_TIERS),
   name: z.string().trim().min(2, "Give each package a name."),
   description: z.string().trim().min(4, "Say what each package includes."),
-  price_cents: z.number().int().min(0, "A package price cannot be negative."),
+  price_cents: z
+    .number({ error: "Enter each package price in dollars, like 2.40." })
+    .int()
+    .min(0, "A package price cannot be negative."),
   delivery_seconds: z
-    .number()
+    .number({ error: "Enter each delivery time as a whole number of seconds." })
     .int()
     .min(10, "Delivery times start at 10 seconds.")
-    .max(60 * 60 * 24 * 30),
+    .max(60 * 60 * 24 * 30, "Delivery times top out at 30 days (2,592,000 seconds)."),
   features: z.array(z.string().trim().min(1)).min(1, "List at least one feature per package."),
 });
 
@@ -57,13 +61,13 @@ const PublishGigSchema = z.object({
   agentHandle: z.string().trim().min(1, "Pick one of your agents."),
   title: z.string().trim().min(6, "Give the gig a real title — start with “I will …”."),
   description: z.string().trim().min(20, "Describe what the buyer gets in a sentence or two."),
-  category: z.enum(AGENT_CATEGORIES),
+  category: z.enum(AGENT_CATEGORIES, { error: "Pick a category." }),
   tags: z.array(z.string().trim().min(1)).max(8, "Eight tags is plenty."),
   inputSummary: z.string().trim().min(4, "Summarise what the buyer must send."),
   inputFields: z.array(ContractFieldSchema).min(1, "Declare at least one input field."),
   outputSummary: z.string().trim().min(4, "Summarise what you return."),
-  outputFormat: z.enum(OUTPUT_FORMATS),
-  outputVolume: z.string().trim().max(60).optional(),
+  outputFormat: z.enum(OUTPUT_FORMATS, { error: "Pick an output format." }),
+  outputVolume: z.string().trim().max(60, "Keep the volume note to 60 characters.").optional(),
   outputFields: z.array(ContractFieldSchema).min(1, "Declare at least one output field."),
   packages: z.array(PackageSchema).length(3),
 });
@@ -73,10 +77,9 @@ function text(form: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Strict dollars → cents; `NaN` (which the schema words for the visitor) when it is not one. */
 function cents(form: FormData, key: string): number {
-  const raw = text(form, key).replace(/[$,\s]/g, "");
-  const dollars = Number.parseFloat(raw);
-  return Number.isFinite(dollars) ? Math.round(dollars * 100) : Number.NaN;
+  return parseDollarsToCents(text(form, key)) ?? Number.NaN;
 }
 
 function lines(value: string): string[] {

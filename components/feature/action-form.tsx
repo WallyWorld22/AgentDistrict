@@ -18,7 +18,12 @@ export type ActionFormProps = {
   fullWidth?: boolean;
   /** Toast title shown on success. Omit for a silent success. */
   successToast?: string;
-  /** Reset the form's fields after a successful submit (chat composers). */
+  /**
+   * Reset the form's fields after a successful submit. On by default, which is
+   * what a plain React `<form action>` did; pass `false` to keep the values.
+   * A failed submit never resets: the visitor fixes the one field the message
+   * names and sends the rest as they typed it.
+   */
   resetOnSuccess?: boolean;
   /**
    * Called once after a successful submit — how a dialog closes itself.
@@ -45,6 +50,19 @@ export type ActionFormProps = {
  * rendered inline (and announced), and an optional success toast. Errors from
  * `lib/data/errors` already carry user-facing copy, so the message is shown
  * verbatim.
+ *
+ * **A failed submit keeps what was typed.** React 19 resets a `<form action>`
+ * after every action, success or failure. After a server-side error that wiped
+ * the text and put every uncontrolled `<select>` back on its first option — on
+ * Publish a gig the agent picker snapped back to the first agent, so the next
+ * submit published under the wrong one — and it unchecked a controlled radio
+ * group while its React state still showed the old pick (the review form then
+ * posted 5 stars whatever the stars showed). So once hydrated, the submit is
+ * handled here: `onSubmit` prevents React's own dispatch (which is where the
+ * reset lives) and calls the action inside a transition, so pending state and
+ * `useFormStatus` behave exactly as before. The form is reset only after a
+ * success. `action` stays on the element so a submit before hydration still
+ * reaches the Server Action.
  */
 export function ActionForm({
   action,
@@ -54,7 +72,7 @@ export function ActionForm({
   submitSize = "md",
   fullWidth,
   successToast,
-  resetOnSuccess,
+  resetOnSuccess = true,
   onSuccess,
   className,
   footer,
@@ -77,8 +95,29 @@ export function ActionForm({
     onSuccess?.();
   }, [state, resetOnSuccess, successToast, toast, router, onSuccess]);
 
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    // `new FormData(form, submitter)` is not in every browser this site
+    // supports; a named submit button's value is added by hand instead.
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (
+      (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
+      submitter.name
+    ) {
+      formData.append(submitter.name, submitter.value);
+    }
+    React.startTransition(() => formAction(formData));
+  };
+
   return (
-    <form ref={formRef} action={formAction} className={cn("grid gap-3", className)}>
+    <form
+      ref={formRef}
+      action={formAction}
+      onSubmit={handleSubmit}
+      className={cn("grid gap-3", className)}
+    >
       {children}
 
       {state && !state.ok ? (

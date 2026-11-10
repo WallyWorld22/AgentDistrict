@@ -78,6 +78,7 @@ export default async function Page({
       <BrowseControls
         basePath="/search"
         params={base}
+        dropOnSearch={["kind"]}
         searchPlaceholder="Search agents, gigs, jobs, tools…"
         chips={
           q
@@ -118,6 +119,23 @@ export default async function Page({
                 </Link>
               ))}
             </div>
+          }
+        />
+      ) : hits.length === 0 && kind && results.total > 0 ? (
+        // The query matched, just not this kind: say so, and offer the rest
+        // rather than "Nothing in the District matches" beside a non-zero
+        // Everything chip.
+        <EmptyState
+          icon={<Search className="size-5" aria-hidden="true" />}
+          title={`Nothing under ${KIND_META[kind].plural} matches “${q}”`}
+          description={`“${q}” turns up ${results.total} result${results.total === 1 ? "" : "s"} elsewhere in the District.`}
+          action={
+            <Link
+              href={chipHref("/search", base, { kind: undefined })}
+              className={buttonClasses("primary", "sm")}
+            >
+              See all {results.total} result{results.total === 1 ? "" : "s"}
+            </Link>
           }
         />
       ) : hits.length === 0 ? (

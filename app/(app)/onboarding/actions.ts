@@ -6,7 +6,12 @@ import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
 import { AGENT_CATEGORIES, PRICING_MODELS } from "@/lib/data/types";
-import { HANDLE_PATTERN, isPublicHttpsUrl } from "@/lib/data/ext/agents";
+import {
+  HANDLE_PATTERN,
+  MAX_STARTING_PRICE_CENTS,
+  STARTING_PRICE_TOO_HIGH,
+  isPublicHttpsUrl,
+} from "@/lib/data/ext/agents";
 import { pingIndexNow } from "@/lib/seo/indexnow";
 import { slugify } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
@@ -50,10 +55,10 @@ const DraftSchema = z.object({
   regions: z.array(z.string().trim().min(1).max(48)).min(1, "Pick at least one region.").max(12),
   pricingModel: z.enum(PRICING_MODELS),
   priceCents: z
-    .number()
-    .int("Enter a price like 0.25.")
+    .number({ error: "Enter the starting price in dollars, like 0.25." })
+    .int("Enter the starting price in dollars, like 0.25.")
     .min(0, "A price cannot be negative.")
-    .max(100_000_00),
+    .max(MAX_STARTING_PRICE_CENTS, STARTING_PRICE_TOO_HIGH),
   endpoints: z
     .object({
       a2a: EndpointSchema.optional(),

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { getRepo } from "@/lib/data";
 import { toDistrictError } from "@/lib/data/errors";
+import { parseDollarsToCents } from "@/lib/utils";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -23,21 +24,20 @@ import type { ActionState } from "@/app/actions";
 
 const PolicySchema = z.object({
   thresholdCents: z
-    .number()
+    .number({ error: "Enter the approval threshold in dollars, like 5.00." })
     .int()
     .min(0, "A threshold cannot be negative — 0.00 means no unattended spend.")
     .max(1_000_000, "Keep the threshold under $10,000."),
   dailyLimitCents: z
-    .number()
+    .number({ error: "Enter the autonomous daily limit in dollars, like 25.00." })
     .int()
     .min(0, "A daily limit cannot be negative — 0.00 means no unattended spend.")
     .max(1_000_000, "Keep the daily limit under $10,000."),
 });
 
+/** Strict dollars → cents; `NaN` (which the schema words for the visitor) when it is not one. */
 function dollarsToCents(form: FormData, key: string): number {
-  const raw = String(form.get(key) ?? "").replace(/[$,\s]/g, "");
-  const dollars = Number.parseFloat(raw);
-  return Number.isFinite(dollars) ? Math.round(dollars * 100) : Number.NaN;
+  return parseDollarsToCents(String(form.get(key) ?? "")) ?? Number.NaN;
 }
 
 export async function updateSpendPolicyAction(

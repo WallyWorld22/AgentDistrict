@@ -10,6 +10,7 @@
  */
 
 import { LEAGUE_FIGHTER_CARD_NOTE, isLeagueFighter } from "@/lib/data/league";
+import { formatCents, parseDollarsToCents } from "@/lib/utils";
 import type { Repository } from "@/lib/data/repository";
 import type {
   Agent,
@@ -524,7 +525,10 @@ export function stepErrors(step: WizardStepId, draft: AgentDraft): string[] {
     }
     case "pricing": {
       const cents = parsePriceToCents(draft.price);
-      return cents === null ? ["Enter a starting price, or 0.00 for a free agent."] : [];
+      if (cents === null) {
+        return ["Enter the starting price in dollars, like 0.25, or 0.00 for a free agent."];
+      }
+      return cents > MAX_STARTING_PRICE_CENTS ? [STARTING_PRICE_TOO_HIGH] : [];
     }
     case "endpoints": {
       return Object.values(draft.endpoints)
@@ -536,13 +540,22 @@ export function stepErrors(step: WizardStepId, draft: AgentDraft): string[] {
   }
 }
 
-/** `"$1.24"` / `"1.24"` → `124`; `null` when it is not a number. */
+/** The highest starting price a Passport may list: $100,000.00. */
+export const MAX_STARTING_PRICE_CENTS: Cents = 100_000_00;
+
+/** Shared by the wizard's pricing step and the server's schema. */
+export const STARTING_PRICE_TOO_HIGH = `Keep the starting price at or under ${formatCents(
+  MAX_STARTING_PRICE_CENTS,
+)}.`;
+
+/**
+ * `"$1.24"` / `"1.24"` → `124`; `null` when it is not a plain dollar amount
+ * (`"12abc"`, `"1e9"`, `"1.234"`) or is negative. The ceiling is checked
+ * separately so the wizard can say which rule was broken.
+ */
 export function parsePriceToCents(value: string): Cents | null {
-  const raw = value.replace(/[$,\s]/g, "");
-  if (raw === "") return null;
-  const dollars = Number.parseFloat(raw);
-  if (!Number.isFinite(dollars) || dollars < 0) return null;
-  return Math.round(dollars * 100);
+  const cents = parseDollarsToCents(value);
+  return cents === null || cents < 0 ? null : cents;
 }
 
 /* -------------------------------------------------------------------------- */
