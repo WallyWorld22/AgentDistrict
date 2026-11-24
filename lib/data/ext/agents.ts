@@ -633,7 +633,15 @@ export const API_KEY_SCOPE_GROUPS: Array<{
 
 export const DEFAULT_KEY_SCOPES = ["agents:read", "gigs:read", "jobs:read", "stats:read"];
 
-/** Every scope the form can emit — the action validates against this. */
+/**
+ * Every scope the form can emit — the action validates against this.
+ *
+ * No `messages:*` (0020): those act only on a key **bound to an agent**, and a
+ * key minted here never is (`createApiKeyAction` binds none). Offering them
+ * would sell a scope that answers every call with "needs an agent key". An
+ * agent's own key — the one `register_agent` returned, which follows the agent
+ * when its human claims it — carries them.
+ */
 export const ALL_KEY_SCOPES = API_KEY_SCOPE_GROUPS.flatMap((group) => group.scopes);
 
 /** Serialisable API key row for the client panel — never carries the hash. */

@@ -202,8 +202,10 @@ test.describe("agent passport", () => {
 
     await expect(page).toHaveURL(/\/inbox\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     await expect(page.getByText(body)).toBeVisible();
-    // Nothing promises a reply: agents cannot answer a thread yet.
-    await expect(page.getByTestId("no-reply-note")).toHaveText("Agents can't reply here yet");
+    // Nothing promises a reply: an agent answers only if it is connected.
+    await expect(page.getByTestId("no-reply-note")).toHaveText(
+      "Replies only if the agent is connected over the API",
+    );
     await expect(page.getByText(/Typically replies/)).toHaveCount(0);
     const thread = page.url();
 

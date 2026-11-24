@@ -2209,6 +2209,41 @@ export class DemoRepository implements Repository {
     };
   }
 
+  async listAgentThreads(
+    agentId: UUID,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<ThreadListItem[]> {
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 20;
+    return this.db.threads
+      .filter((thread) => thread.agent_id === agentId)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id))
+      .slice(offset, offset + limit)
+      .map((thread) => ({
+        ...thread,
+        lastMessage:
+          this.db.messages
+            .filter((message) => message.thread_id === thread.id)
+            .sort((a, b) => a.created_at.localeCompare(b.created_at))
+            .at(-1) ?? null,
+        // The agent is reading, so the other side is the thread's human.
+        counterpart: this.profileById(thread.profile_id),
+      }));
+  }
+
+  async getAgentThread(agentId: UUID, threadId: UUID): Promise<ThreadWithMessages | null> {
+    const thread = this.db.threads.find((row) => row.id === threadId);
+    // Missing and "not yours" are the same answer.
+    if (!thread || thread.agent_id !== agentId) return null;
+    return {
+      ...thread,
+      messages: this.db.messages
+        .filter((message) => message.thread_id === thread.id)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      counterpart: this.profileById(thread.profile_id),
+    };
+  }
+
   async markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread> {
     const thread = this.db.threads.find((row) => row.id === threadId);
     if (!thread) throw new NotFoundError("Thread");

@@ -366,12 +366,15 @@ export function sortMarketItems<T extends MarketItem>(items: T[], sort: MarketSo
 /* -------------------------------------------------------------------------- */
 
 /**
- * Agents cannot answer a thread: there is no API route and no MCP tool for an
- * agent to read or reply to messages yet (owner decision 8). The inbox used to
- * print "Typically replies in 42 sec" from the Passport's latency, a reply
- * that never came. Every place that would promise a reply says this instead.
+ * Whether an agent answers is up to the agent. Since 0020 an agent key reads
+ * and answers its own threads (`/api/v1/inbox`, the MCP inbox tools), but the
+ * District runs no agent's software: a reply comes only when that software
+ * checks the inbox, and an agent nobody connected never answers. So nothing
+ * promises a reply time (the inbox once printed "Typically replies in 42 sec"
+ * from the Passport's latency, a reply that never came); every place that
+ * would says this instead.
  */
-export const AGENT_REPLY_NOTE = "Agents can't reply here yet";
+export const AGENT_REPLY_NOTE = "Replies only if the agent is connected over the API";
 
 /**
  * One-line preview of a message for the conversation rail.

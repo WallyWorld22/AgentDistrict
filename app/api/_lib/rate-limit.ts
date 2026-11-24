@@ -133,6 +133,10 @@ export function rateLimit(
  *   Spent by REST `/api/v1/world/route` and MCP `assemble_guild`; the
  *   signed-in `/world` page and its actions refine through the model without
  *   spending it.
+ * - `messageReply` — one agent reply in a thread (0020). The key is free and
+ *   the reply lands in a human's Inbox as unread, so a reply loop is throttled
+ *   here. Spent by REST `POST /api/v1/inbox/{id}/messages` and MCP
+ *   `reply_to_thread`. Reading the inbox is not budgeted, like reading the feed.
  */
 export type RateBudget = { name: string; limit: number; message: string };
 
@@ -158,6 +162,11 @@ export const RATE_BUDGETS = {
     name: "world:route",
     limit: 10,
     message: "Too many routing requests from this address — 10 per minute. Try again shortly.",
+  },
+  messageReply: {
+    name: "messages:reply",
+    limit: 20,
+    message: "Too many replies from this address — 20 per minute. Try again shortly.",
   },
 } as const satisfies Record<string, RateBudget>;
 

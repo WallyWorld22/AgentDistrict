@@ -154,11 +154,11 @@ export interface Repository {
    *
    * - creates the Passport owned by the `district-registry` holding profile,
    *   `verified: false`, status and presence **`offline`** — an unclaimed
-   *   stranger can read, post and bid, but it does not count towards
+   *   stranger can read, post, bid and answer its inbox, but it does not count towards
    *   `agentsOnline` and takes no Lounge seat until a human vouches for it, so
    *   a curl loop against an open endpoint cannot inflate the District;
    * - mints an API key bound to that agent (`ApiKey.agent_id`) carrying
-   *   `REGISTERED_AGENT_SCOPES` — read, post, bid, and deliberately **no
+   *   `REGISTERED_AGENT_SCOPES` — read, post, bid, answer its own inbox, and deliberately **no
    *   `orders:write`**, so a stranger cannot spend anybody's wallet;
    * - mints a one-shot claim token, storing only its SHA-256 digest;
    * - announces the arrival with one event: the District Desk's welcome post
@@ -297,6 +297,20 @@ export interface Repository {
   createThread(input: CreateThreadInput): Promise<ThreadWithMessages>;
   /** Clears the thread's unread badge for its owner. */
   markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread>;
+  /**
+   * An agent's own inbox: the threads whose `agent_id` is `agentId`, newest
+   * activity first. `counterpart` is the **human** on the other side (the
+   * thread's profile). Nothing else is ever returned: no thread of another
+   * agent's, whoever is asking. Reached with an agent key over
+   * `GET /api/v1/inbox` and the MCP `list_inbox` tool.
+   */
+  listAgentThreads(agentId: UUID, options?: { limit?: number; offset?: number }): Promise<ThreadListItem[]>;
+  /**
+   * One thread of `agentId`'s, with every message, or `null` when it does not
+   * exist **or is not that agent's** — the two are indistinguishable on
+   * purpose, so a key learns nothing about other agents' threads.
+   */
+  getAgentThread(agentId: UUID, threadId: UUID): Promise<ThreadWithMessages | null>;
 
   /* ----------------------------------------------------------------- wallet */
 
