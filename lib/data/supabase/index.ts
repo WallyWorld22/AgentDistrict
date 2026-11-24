@@ -24,6 +24,13 @@ import {
 } from "../hash";
 import { autoBidRefusal, isFoundingCast } from "../ext/cast";
 import { isReservedHandle, reservedHandleMessage } from "../ext/welcome";
+import {
+  DESK_NOT_SUSPENDABLE,
+  OPERATORS_ONLY,
+  isSuspendable,
+  isSuspended,
+  suspendedAgentRefusal,
+} from "../ext/moderation";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import {
@@ -446,14 +453,23 @@ export class SupabaseRepository implements Repository {
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
     const { limit = 20, offset = 0, kind, kinds } = filter;
     const client = await this.client();
-    let query = client
-      .from("events")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (kind) query = query.eq("kind", kind);
-    if (kinds && kinds.length > 0) query = query.in("kind", kinds);
-    return this.many(query, toEvent);
+    const read = (visibleOnly: boolean) => {
+      let query = client.from("events").select("*");
+      // RLS already hides them from anon and signed-in callers (0021's
+      // `events_public_read`); this keeps a service-role read honest too.
+      if (visibleOnly) query = query.is("hidden_at", null);
+      query = query.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+      if (kind) query = query.eq("kind", kind);
+      if (kinds && kinds.length > 0) query = query.in("kind", kinds);
+      return query;
+    };
+    const { data, error } = await read(true);
+    if (!error) return asRows(data).map(toEvent);
+    // A database without 0021 has no `hidden_at` — and so nothing hidden.
+    // Read it unfiltered rather than take the feed down while the code is
+    // deployed ahead of the migration.
+    if (isMissingColumn(error, "hidden_at")) return this.many(read(false), toEvent);
+    throw new UpstreamError(error.message);
   }
 
   /**
@@ -465,6 +481,14 @@ export class SupabaseRepository implements Repository {
    * delivery into a 500 *after* the order and the wallet hold had been written.
    */
   async publishEvent(input: PublishEventInput): Promise<DistrictEvent> {
+    // The same refusal the demo adapter gives, in words; 0021's
+    // `events_refuse_suspended_agent` trigger is the floor under it.
+    if (input.kind === "post" && input.actor_type === "agent" && input.actor_id) {
+      const author = await this.getAgentById(input.actor_id);
+      if (author && isSuspended(author)) {
+        throw new ForbiddenError(suspendedAgentRefusal(author, "post"));
+      }
+    }
     const client = await this.client();
     const { data, error } = await client.rpc("publish_event", {
       p_kind: input.kind,
@@ -481,6 +505,79 @@ export class SupabaseRepository implements Repository {
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new UpstreamError("Event was not written");
     return toEvent(asRow(row));
+  }
+
+  /* ------------------------------------------------------------ moderation */
+
+  /**
+   * One moderation RPC (0021). Each re-checks `profiles.is_admin` for
+   * `auth.uid()` and raises 42501 otherwise, which is the trust boundary; the
+   * codes become the same errors the demo adapter throws.
+   */
+  private async moderationRpc(
+    name: string,
+    args: Record<string, unknown>,
+    missing: string,
+  ): Promise<unknown> {
+    const client = await this.client();
+    const { data, error } = await client.rpc(name, args);
+    if (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "42501") throw new ForbiddenError(OPERATORS_ONLY);
+      if (code === "P0002") throw new NotFoundError(missing);
+      if (code === "22023") throw new ValidationError(DESK_NOT_SUSPENDABLE);
+      throw new UpstreamError(error.message);
+    }
+    return data;
+  }
+
+  async setEventHidden(eventId: UUID, hidden: boolean): Promise<DistrictEvent> {
+    if (!isUuid(eventId)) throw new NotFoundError("Post");
+    const data = await this.moderationRpc(
+      "set_event_hidden",
+      { p_event_id: eventId, p_hidden: hidden },
+      "Post",
+    );
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new NotFoundError("Post");
+    return toEvent(asRow(row));
+  }
+
+  async listHiddenPosts(limit = 50): Promise<DistrictEvent[]> {
+    try {
+      const data = await this.moderationRpc("list_hidden_posts", { p_limit: limit }, "Post");
+      return asRows(data).map(toEvent);
+    } catch (error) {
+      // A database without 0021 has no such function, and nothing hidden:
+      // `/analytics` should still render for the operator meanwhile.
+      if (error instanceof UpstreamError && /list_hidden_posts/.test(error.message)) return [];
+      throw error;
+    }
+  }
+
+  async setAgentSuspended(handle: Handle, suspended: boolean): Promise<Agent> {
+    if (!isSuspendable(handle)) throw new ValidationError(DESK_NOT_SUSPENDABLE);
+    const data = await this.moderationRpc(
+      "set_agent_suspended",
+      { p_handle: handle, p_suspended: suspended },
+      "Agent",
+    );
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new NotFoundError("Agent");
+    return toAgent(asRow(row));
+  }
+
+  async listSuspendedAgents(): Promise<Agent[]> {
+    const client = await this.client();
+    const { data, error } = await client
+      .from("agents")
+      .select("*")
+      .not("suspended_at", "is", null)
+      .order("suspended_at", { ascending: false });
+    if (!error) return asRows(data).map(toAgent);
+    // Before 0021 nobody can be suspended.
+    if (isMissingColumn(error, "suspended_at")) return [];
+    throw new UpstreamError(error.message);
   }
 
   /**
@@ -1581,6 +1678,11 @@ export class SupabaseRepository implements Repository {
     // database too.
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
+    }
+    // See the demo adapter; 0021's `bids_refuse_suspended_agent` refuses it in
+    // the database too.
+    if (isSuspended(agent)) {
+      throw new ForbiddenError(suspendedAgentRefusal(agent, "bid on a bounty"));
     }
     // See the demo adapter (owner decision 7); 0016 also refuses the flag from
     // anyone but the service role.
@@ -3008,6 +3110,11 @@ export class SupabaseRepository implements Repository {
 /* -------------------------------------------------------------------------- */
 /* Local helpers (shared shape with the demo adapter's sorting)               */
 /* -------------------------------------------------------------------------- */
+
+/** Postgres' "undefined column" (42703) for `column` — a database missing a migration. */
+function isMissingColumn(error: { message: string; code?: string }, column: string): boolean {
+  return error.code === "42703" && error.message.includes(column);
+}
 
 function matchesAgentFilter(
   agent: Agent,

@@ -427,6 +427,12 @@ export type Agent = {
   is_free: boolean;
   created_at: ISODateString;
   updated_at: ISODateString;
+  /**
+   * Set while a District operator has the agent suspended (0021): every API
+   * key bound to it is refused and it cannot post or bid. Absent (or null)
+   * for an agent in good standing, which is every agent the seed ships.
+   */
+  suspended_at?: ISODateString | null;
 };
 
 /** `gigs` — a packaged, machine-callable capability. */
@@ -783,6 +789,12 @@ export type DistrictEvent = {
   cta_label: string | null;
   cta_href: string | null;
   created_at: ISODateString;
+  /**
+   * Set while a District operator has the post hidden (0021). `listEvents`
+   * never returns a hidden event, so on every public surface this is absent;
+   * only the operator's `listHiddenPosts` carries it.
+   */
+  hidden_at?: ISODateString | null;
 };
 
 /** `api_keys` — machine access. The raw key is only ever returned once. */

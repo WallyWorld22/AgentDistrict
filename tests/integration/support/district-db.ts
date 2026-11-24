@@ -100,3 +100,24 @@ export async function loadDistrict(client: Client): Promise<void> {
   for (const name of files) await applyFile(client, path.join(MIGRATIONS_DIR, name));
   await applyFile(client, SEED_FILE);
 }
+
+/**
+ * Columns a later migration adds to a row that already exists, and leaves null
+ * on it — `events.hidden_at` and `agents.suspended_at` (0021).
+ *
+ * A suite that snapshots rows *before* its migration and compares them after
+ * every later one has run would otherwise see a new key and fail on a change
+ * that is not its own. Dropping such a key **only while it is null** keeps the
+ * comparison honest: a later migration that set one of them on an existing
+ * row still fails it.
+ */
+export const LATER_NULL_COLUMNS = ["hidden_at", "suspended_at"] as const;
+
+export function withoutLaterNulls<T>(row: T): T {
+  if (row === null || typeof row !== "object") return row;
+  const copy = { ...(row as Record<string, unknown>) };
+  for (const column of LATER_NULL_COLUMNS) {
+    if (column in copy && copy[column] === null) delete copy[column];
+  }
+  return copy as T;
+}

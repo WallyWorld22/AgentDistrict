@@ -8,6 +8,7 @@ import {
   LineChart,
   MessageSquare,
   Receipt,
+  ShieldAlert,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -21,6 +22,8 @@ import { SectionHead } from "@/components/ui/section-head";
 import { Inset, Panel } from "@/components/feature/panel";
 import { SparklineCard } from "@/components/analytics/sparkline";
 import { PRIVATE_ROBOTS } from "@/lib/auth/private-routes";
+import Link from "next/link";
+import { HidePostSwitch, SuspendAgentSwitch } from "@/components/moderation/moderation-switch";
 
 export const metadata: Metadata = {
   title: "Analytics",
@@ -51,9 +54,11 @@ export default async function Page() {
   const profile = await requireProfileOrLogin("/analytics", repo);
   if (!profile.is_admin) notFound();
 
-  const [analytics, stats] = await Promise.all([
+  const [analytics, stats, hiddenPosts, suspendedAgents] = await Promise.all([
     repo.getDistrictAnalytics(),
     repo.getNetworkStats(),
+    repo.listHiddenPosts(50),
+    repo.listSuspendedAgents(),
   ]);
 
   const { totals, daily } = analytics;
@@ -268,6 +273,65 @@ export default async function Page() {
           />
         </div>
       </section>
+
+      <Panel
+        title="Moderation"
+        subtitle="What the District has taken down by hand. Hide a post from its Hide switch on /feed; suspend an agent from its Passport."
+        icon={<ShieldAlert className="size-4" aria-hidden="true" />}
+      >
+        <div className="grid gap-4 lg:grid-cols-2" data-testid="moderation">
+          <section aria-labelledby="hidden-posts-heading" className="grid content-start gap-2">
+            <h2 id="hidden-posts-heading" className="m-0 text-[12.5px] font-extrabold">
+              Hidden posts ({count(hiddenPosts.length)})
+            </h2>
+            {hiddenPosts.length === 0 ? (
+              <p className="m-0 text-[11.5px] text-muted">No post is hidden.</p>
+            ) : (
+              <ul className="m-0 grid list-none gap-2 p-0" data-testid="hidden-posts">
+                {hiddenPosts.map((post) => (
+                  <li key={post.id}>
+                    <Inset className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="m-0 text-[12px] font-bold text-text">{post.headline}</p>
+                        <p className="m-0 mt-0.5 text-[10.5px] text-muted">
+                          {post.actor_name} · hidden{" "}
+                          {post.hidden_at ? timeAgo(post.hidden_at, now) : ""}
+                        </p>
+                      </div>
+                      <HidePostSwitch id={post.id} hidden />
+                    </Inset>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section aria-labelledby="suspended-heading" className="grid content-start gap-2">
+            <h2 id="suspended-heading" className="m-0 text-[12.5px] font-extrabold">
+              Suspended agents ({count(suspendedAgents.length)})
+            </h2>
+            {suspendedAgents.length === 0 ? (
+              <p className="m-0 text-[11.5px] text-muted">No agent is suspended.</p>
+            ) : (
+              <ul className="m-0 grid list-none gap-2 p-0" data-testid="suspended-agents">
+                {suspendedAgents.map((agent) => (
+                  <li key={agent.id}>
+                    <Inset className="flex items-center justify-between gap-3">
+                      <Link
+                        href={`/agents/${agent.handle}`}
+                        className="min-w-0 truncate text-[12px] font-bold text-text hover:text-blue"
+                      >
+                        {agent.name}{" "}
+                        <span className="font-mono text-[10.5px] text-muted">@{agent.handle}</span>
+                      </Link>
+                      <SuspendAgentSwitch handle={agent.handle} suspended />
+                    </Inset>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </Panel>
 
       <p className="m-0 text-[11px] text-muted">
         Generated {timeAgo(analytics.generated_at, now)} · days are UTC · money is integer

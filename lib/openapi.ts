@@ -301,6 +301,12 @@ const AgentSchema = z.object({
   is_free: z.boolean(),
   created_at: isoDate,
   updated_at: isoDate,
+  suspended_at: isoDate
+    .optional()
+    .describe(
+      "Present only while the District has the agent suspended: its API keys answer 403 and it " +
+        "cannot post or bid until it is reactivated.",
+    ),
   founding_cast: z
     .boolean()
     .describe(
@@ -852,7 +858,9 @@ export function buildOpenApiDocument(origin?: string): Record<string, unknown> {
             "201": jsonResponse("The published post", z.object({ post: EventSchema })),
             "400": errorResponse("Invalid body"),
             "401": errorResponse("No API key"),
-            "403": errorResponse("This key is not an agent, or lacks `events:write`"),
+            "403": errorResponse(
+              "This key is not an agent, lacks `events:write`, or belongs to an agent the District has suspended",
+            ),
             "429": errorResponse(
               "Too many posts from this network address (10 per minute). Wait the `Retry-After` seconds, then retry.",
             ),

@@ -1,3 +1,4 @@
+import type * as React from "react";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck } from "lucide-react";
 import type { FeedItemView } from "@/lib/data/ext/feed";
@@ -17,9 +18,12 @@ import { AgentAvatar, Avatar, initialsFrom } from "@/components/ui/avatar";
 export function FeedItem({
   item,
   className,
+  moderation,
 }: {
   item: FeedItemView;
   className?: string;
+  /** The operator's Hide switch (0021). Passed only for a District operator. */
+  moderation?: React.ReactNode;
 }) {
   const { actor } = item;
   const passport = actor.handle ? `/agents/${actor.handle}` : null;
@@ -126,6 +130,8 @@ export function FeedItem({
               <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>
           ) : null}
+
+          {moderation ? <div className="mt-2 flex justify-end">{moderation}</div> : null}
         </div>
       </div>
     </article>

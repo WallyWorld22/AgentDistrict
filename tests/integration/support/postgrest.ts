@@ -1,8 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 /** The database roles a Supabase key arrives as. */
-export type PostgrestRole = "anon" | "service_role";
+export type PostgrestRole = "anon" | "authenticated" | "service_role";
 
 /**
  * A real `supabase-js` client whose PostgREST traffic a local Postgres answers.
@@ -10,7 +10,7 @@ export type PostgrestRole = "anon" | "service_role";
  * The Supabase adapter only speaks PostgREST, and the throwaway database from
  * `scripts/db-local.sh` has no PostgREST in front of it. This serves the
  * adapter's actual HTTP requests by translating the read subset it sends —
- * `select`, `eq.` / `in.` / `not.in.` filters, `order`, `limit`, `offset` on a
+ * `select`, `eq.` / `in.` / `not.in.` / `is.null` / `not.is.null` filters, `order`, `limit`, `offset` on a
  * GET — into
  * one SQL statement run as `anon` (or `role`, below), so RLS applies exactly as
  * it does behind that key, and answers with the JSON array PostgREST would.
@@ -39,16 +39,22 @@ export type PostgrestRole = "anon" | "service_role";
  *
  * `role` is the database role every request runs as: `anon` (the default) is
  * the anon-key client, `service_role` the service-role client an API-key or MCP
- * caller reaches Postgres through (`getRepoActingAs()` in `lib/data`).
+ * caller reaches Postgres through (`getRepoActingAs()` in `lib/data`), and
+ * `authenticated` with `sub` is a signed-in session — the cookie client a
+ * Server Action uses — whose `auth.uid()` is `sub`.
  */
 export function createPostgrestClient(
   pool: Pool,
-  options: { role?: PostgrestRole } = {},
+  options: { role?: PostgrestRole; sub?: string } = {},
 ): SupabaseClient {
   const role = options.role ?? "anon";
-  if (role !== "anon" && role !== "service_role") throw new Error(`unsupported role ${String(role)}`);
+  if (role !== "anon" && role !== "service_role" && role !== "authenticated") {
+    throw new Error(`unsupported role ${String(role)}`);
+  }
+  if (role === "authenticated" && !options.sub) throw new Error("an authenticated client needs a sub");
+  const session: Session = { role, sub: role === "authenticated" ? (options.sub ?? null) : null };
   return createClient("http://postgrest.test", `${role}-key`, {
-    global: { fetch: postgrestFetch(pool, role) },
+    global: { fetch: postgrestFetch(pool, session) },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
@@ -57,6 +63,19 @@ const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const ORDER_TERM = /^([a-z_][a-z0-9_]*)\.(asc|desc)(?:\.(nullsfirst|nullslast))?$/;
 
 class Unsupported extends Error {}
+
+/** Who a request runs as: a database role, and for a session its `auth.uid()`. */
+type Session = { role: PostgrestRole; sub: string | null };
+
+/** Open the transaction every request runs in, as that session. */
+async function enter(connection: PoolClient, session: Session): Promise<void> {
+  await connection.query("begin");
+  await connection.query(`set local role ${session.role}`);
+  await connection.query("set local timezone to 'UTC'");
+  if (session.sub) {
+    await connection.query("select set_config('request.jwt.claim.sub', $1, true)", [session.sub]);
+  }
+}
 
 function identifier(name: string): string {
   if (!IDENTIFIER.test(name)) throw new Unsupported(`identifier ${JSON.stringify(name)}`);
@@ -123,7 +142,11 @@ function translate(url: URL): { sql: string; params: unknown[] } {
       const column = `t.${identifier(key)}::text`;
       const list = /^in\.\((.*)\)$/.exec(value);
       const notList = /^not\.in\.\((.*)\)$/.exec(value);
-      if (value.startsWith("eq.")) {
+      if (value === "is.null") {
+        where.push(`t.${identifier(key)} is null`);
+      } else if (value === "not.is.null") {
+        where.push(`t.${identifier(key)} is not null`);
+      } else if (value.startsWith("eq.")) {
         params.push(value.slice(3));
         where.push(`${column} = $${params.length}`);
       } else if (list) {
@@ -257,7 +280,7 @@ function respond(status: number, body: unknown): Response {
   });
 }
 
-function postgrestFetch(pool: Pool, role: PostgrestRole): typeof fetch {
+function postgrestFetch(pool: Pool, session: Session): typeof fetch {
   return async (input, init) => {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(href);
@@ -265,11 +288,11 @@ function postgrestFetch(pool: Pool, role: PostgrestRole): typeof fetch {
     const accept = new Headers(init?.headers).get("accept") ?? "";
 
     if (method === "POST" && url.pathname.startsWith("/rest/v1/rpc/")) {
-      return callRpc(pool, role, url, typeof init?.body === "string" ? init.body : "");
+      return callRpc(pool, session, url, typeof init?.body === "string" ? init.body : "");
     }
     if (method === "POST" || method === "PATCH") {
       const body = typeof init?.body === "string" ? init.body : "";
-      return callWrite(pool, role, url, method, body, accept);
+      return callWrite(pool, session, url, method, body, accept);
     }
 
     let statement: { sql: string; params: unknown[] };
@@ -288,9 +311,7 @@ function postgrestFetch(pool: Pool, role: PostgrestRole): typeof fetch {
 
     const connection = await pool.connect();
     try {
-      await connection.query("begin");
-      await connection.query(`set local role ${role}`);
-      await connection.query("set local timezone to 'UTC'");
+      await enter(connection, session);
       const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
       await connection.query("rollback");
       const data = rows.map((row) => row.row);
@@ -319,7 +340,7 @@ function postgrestFetch(pool: Pool, role: PostgrestRole): typeof fetch {
 
 async function callRpc(
   pool: Pool,
-  role: PostgrestRole,
+  session: Session,
   url: URL,
   rawBody: string,
 ): Promise<Response> {
@@ -338,9 +359,7 @@ async function callRpc(
 
   const connection = await pool.connect();
   try {
-    await connection.query("begin");
-    await connection.query(`set local role ${role}`);
-    await connection.query("set local timezone to 'UTC'");
+    await enter(connection, session);
     const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
     // PostgREST answers a set-returning function with an array and anything
     // else with its single value. `pg_proc` says which this one is.
@@ -363,7 +382,7 @@ async function callRpc(
 
 async function callWrite(
   pool: Pool,
-  role: PostgrestRole,
+  session: Session,
   url: URL,
   method: "POST" | "PATCH",
   rawBody: string,
@@ -384,9 +403,7 @@ async function callWrite(
 
   const connection = await pool.connect();
   try {
-    await connection.query("begin");
-    await connection.query(`set local role ${role}`);
-    await connection.query("set local timezone to 'UTC'");
+    await enter(connection, session);
     const { rows } = await connection.query<{ row: unknown }>(statement.sql, statement.params);
     await connection.query("commit");
     const data = rows.map((row) => row.row);

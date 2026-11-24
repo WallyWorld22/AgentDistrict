@@ -17,7 +17,12 @@ import {
   welcomeHeadline,
 } from "@/lib/data/ext/welcome";
 import { SEED_EPOCH_MS } from "@/lib/seed";
-import { MIGRATIONS_DIR, SEED_FILE, SUPABASE_BOOTSTRAP } from "./support/district-db";
+import {
+  MIGRATIONS_DIR,
+  SEED_FILE,
+  SUPABASE_BOOTSTRAP,
+  withoutLaterNulls,
+} from "./support/district-db";
 import { createPostgrestClient } from "./support/postgrest";
 
 /**
@@ -218,7 +223,7 @@ suite("the District Desk's welcome (0019) on a real Postgres", () => {
           where a.handle = any($1::text[]) order by e.id`,
         [RESIDENTS],
       )
-    ).rows;
+    ).rows.map(withoutLaterNulls);
     expect(after).toEqual(residentEventsBefore);
     expect(after).toHaveLength(RESIDENTS.length);
   });

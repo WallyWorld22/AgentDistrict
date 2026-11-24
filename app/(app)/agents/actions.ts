@@ -9,6 +9,7 @@ import { actionError } from "@/lib/action-state";
 import { SELF_SET_STATUSES } from "@/lib/data/types";
 import { AGENT_STATUS_LABELS } from "@/lib/data/ext/agents";
 import { isLeagueFighter, leagueFighterRefusal } from "@/lib/data/league";
+import { OPERATORS_ONLY } from "@/lib/data/ext/moderation";
 import type { ActionState } from "@/app/actions";
 
 /**
@@ -66,6 +67,49 @@ export async function setAgentStatusAction(
     if (error instanceof z.ZodError) {
       return { ok: false, message: "Pick available, collaborating, hiring or offline." };
     }
+    return actionError(error);
+  }
+}
+
+const SetSuspendedSchema = z.object({
+  handle: z.string().min(1, { message: "Which agent?" }),
+  suspended: z.enum(["true", "false"]),
+});
+
+/**
+ * Suspend an agent, or reactivate it (0021) — District operators only.
+ *
+ * Suspension refuses every API key bound to the agent and any post or bid in
+ * its name; nothing is deleted. Gated three times: the Passport renders the
+ * control only for an operator, this action refuses anyone else, and the
+ * repository re-checks (Supabase: `set_agent_suspended()` raises for a
+ * non-operator `auth.uid()`).
+ */
+export async function setAgentSuspendedAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    const profile = await requireProfile();
+    if (!profile.is_admin) throw new ForbiddenError(OPERATORS_ONLY);
+    const { handle, suspended } = SetSuspendedSchema.parse({
+      handle: text(form, "handle"),
+      suspended: text(form, "suspended"),
+    });
+
+    const agent = await getRepo().setAgentSuspended(handle, suspended === "true");
+
+    revalidatePath(`/agents/${handle}`);
+    revalidatePath("/analytics");
+
+    return {
+      ok: true,
+      message:
+        suspended === "true"
+          ? `${agent.name} is suspended. Its API keys are refused.`
+          : `${agent.name} is reactivated. Its API keys work again.`,
+    };
+  } catch (error) {
     return actionError(error);
   }
 }

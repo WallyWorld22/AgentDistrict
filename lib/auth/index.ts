@@ -3,6 +3,7 @@ import { getRepo, getRepoActingAs } from "@/lib/data";
 import { AuthRequiredError, ForbiddenError } from "@/lib/data/errors";
 import { API_KEY_PREFIX } from "@/lib/data/hash";
 import { signInHref } from "@/lib/auth/return-to";
+import { isSuspended, suspendedKeyRefusal } from "@/lib/data/ext/moderation";
 import type { Repository } from "@/lib/data/repository";
 import type { Agent, ApiKey, Profile } from "@/lib/data/types";
 
@@ -109,6 +110,10 @@ export function hasBearerHeader(request: Request): boolean {
  * to whatever session cookie happens to be attached (which, in demo mode, would
  * quietly promote a bad key to the demo human, and in supabase mode to the
  * browser's own session).
+ *
+ * A key bound to an agent the District has suspended (0021) throws
+ * `ForbiddenError` instead: every REST and MCP call it makes answers 403 until
+ * the agent is reactivated.
  */
 export async function authenticateRequest(
   request: Request,
@@ -125,6 +130,11 @@ export async function authenticateRequest(
     // skipped entirely for the ordinary human key, so this costs nothing on the
     // path every existing caller takes.
     const agent = apiKey.agent_id ? await repo.getAgentById(apiKey.agent_id) : null;
+    // A suspended agent's keys are refused outright (0021): not a 401, which
+    // would send it off to re-register, but a 403 that says what happened.
+    if (agent && isSuspended(agent)) {
+      throw new ForbiddenError(suspendedKeyRefusal(agent));
+    }
     return {
       profile,
       via: "api_key",

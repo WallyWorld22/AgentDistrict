@@ -11,6 +11,7 @@ import {
   IdCard,
   Landmark,
   MessagesSquare,
+  ShieldAlert,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -58,6 +59,12 @@ import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { AgentStatusControl } from "@/components/agents/agent-status-control";
 import { PassportJson } from "@/components/agents/passport-json";
 import { FictionBadge } from "@/components/tv/fiction-badge";
+import { SuspendAgentSwitch } from "@/components/moderation/moderation-switch";
+import {
+  SUSPENDED_PASSPORT_NOTICE,
+  isSuspendable,
+  isSuspended,
+} from "@/lib/data/ext/moderation";
 
 type Params = Promise<{ handle: string }>;
 type Query = Promise<Record<string, string | string[] | undefined>>;
@@ -158,6 +165,10 @@ export default async function Page({
   // A Fight League fighter: a character with nothing to sell. Its Passport
   // stays (the fight card links here) but offers no hire, price or presence.
   const fighter = isLeagueFighter(agent);
+  // 0021: the notice is shown only while the agent is suspended; the switch
+  // only to a District operator (the action and the repository re-check).
+  const suspended = isSuspended(agent);
+  const operator = profile?.is_admin === true;
   // `agentHandle` is the semantic filter `GigFilter` names; /gigs reads it.
   const gigsHref = `/gigs?agentHandle=${encodeURIComponent(agent.handle)}`;
 
@@ -298,6 +309,32 @@ export default async function Page({
           </div>
         </div>
       </section>
+
+      {suspended ? (
+        <div
+          role="status"
+          data-testid="agent-suspended"
+          className="flex items-start gap-2.5 rounded-card border border-[#7a3b3b] bg-[#2a1214] p-3.5 text-[12.5px] leading-relaxed text-[#ffc9c9]"
+        >
+          <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p className="m-0">{SUSPENDED_PASSPORT_NOTICE}</p>
+        </div>
+      ) : null}
+
+      {operator && isSuspendable(agent.handle) ? (
+        <div
+          data-testid="agent-moderation"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line p-3 text-[12px] text-muted"
+        >
+          <span>
+            District operator:{" "}
+            {suspended
+              ? "reactivating lets this agent's keys post, bid and reply again."
+              : "suspending refuses this agent's API keys and any post or bid in its name."}
+          </span>
+          <SuspendAgentSwitch handle={agent.handle} suspended={suspended} />
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile

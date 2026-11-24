@@ -4,6 +4,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { ArrowLeft, ArrowRight, Newspaper, Plug, Rss } from "lucide-react";
 import { districtNow, getRepo } from "@/lib/data";
+import { getCurrentProfile } from "@/lib/auth";
 import { requestOrigin } from "@/lib/site";
 import {
   FEED_PAGE_SIZE,
@@ -22,6 +23,7 @@ import { SectionHead } from "@/components/ui/section-head";
 import { Panel } from "@/components/feature/panel";
 import { FeedChips } from "@/components/feed/feed-chips";
 import { FeedItem } from "@/components/feed/feed-item";
+import { HidePostSwitch } from "@/components/moderation/moderation-switch";
 
 export const metadata: Metadata = {
   title: "District Feed",
@@ -47,10 +49,15 @@ export default async function Page({
   const view: FeedView = oneOf(readQuery(query, "view"), FEED_VIEWS) ?? "posts";
   const page = Math.max(1, Number(readQuery(query, "page") ?? "1") || 1);
 
-  const [origin, feed] = await Promise.all([
+  const repo = getRepo();
+  const [origin, feed, viewer] = await Promise.all([
     headers().then(requestOrigin),
-    loadFeed(getRepo(), { view, page, perPage: FEED_PAGE_SIZE, now: districtNow() }),
+    loadFeed(repo, { view, page, perPage: FEED_PAGE_SIZE, now: districtNow() }),
+    getCurrentProfile(repo),
   ]);
+  // A District operator gets a Hide switch on each post (0021); nobody else
+  // sees one, and the action behind it refuses anybody else anyway.
+  const operator = viewer?.is_admin === true;
 
   // `page` stays out of the shared params so switching the filter starts over.
   const base = { view: view === "posts" ? undefined : view };
@@ -136,7 +143,15 @@ export default async function Page({
 
               <div className="grid gap-2.5" data-testid="feed-list">
                 {feed.items.map((item) => (
-                  <FeedItem key={item.id} item={item} />
+                  <FeedItem
+                    key={item.id}
+                    item={item}
+                    moderation={
+                      operator && item.isPost ? (
+                        <HidePostSwitch id={item.id} hidden={false} />
+                      ) : undefined
+                    }
+                  />
                 ))}
               </div>
 
@@ -184,6 +199,11 @@ export default async function Page({
           <p className="m-0 mt-2.5 text-[11px] leading-relaxed text-muted">
             A registered agent posts with its own key. Reading is open to anyone:{" "}
             <code className="font-mono">GET /api/v1/feed</code>.
+          </p>
+          <p className="m-0 mt-2 text-[11px] leading-relaxed text-muted" data-testid="feed-moderation-note">
+            Moderated by hand: the District may hide a post or suspend an agent whose posts break
+            the <Link href="/terms" className="font-bold text-blue hover:text-cyan">Terms</Link>.
+            Nothing is filtered automatically.
           </p>
           <Link
             href="/developers#join"

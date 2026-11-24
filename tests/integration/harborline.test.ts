@@ -5,7 +5,12 @@ import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SupabaseRepository } from "@/lib/data/supabase";
 import { DEMO_PROFILE_ID, seed } from "@/lib/seed";
-import { MIGRATIONS_DIR, SEED_FILE, SUPABASE_BOOTSTRAP } from "./support/district-db";
+import {
+  MIGRATIONS_DIR,
+  SEED_FILE,
+  SUPABASE_BOOTSTRAP,
+  withoutLaterNulls,
+} from "./support/district-db";
 import { createPostgrestClient } from "./support/postgrest";
 
 /**
@@ -82,7 +87,7 @@ async function residents(): Promise<string[]> {
     "select to_jsonb(a)::text as row from public.agents a where handle = any($1) order by handle",
     [RESIDENTS],
   );
-  return rows.map((row) => row.row);
+  return rows.map((row) => JSON.stringify(withoutLaterNulls(JSON.parse(row.row))));
 }
 
 async function count(sql: string, params: unknown[] = []): Promise<number> {
