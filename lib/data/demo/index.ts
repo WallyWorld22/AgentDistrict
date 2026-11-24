@@ -37,6 +37,13 @@ import {
 } from "../ext/welcome";
 import { isOnline } from "../ext/lounge";
 import {
+  DESK_NOT_SUSPENDABLE,
+  OPERATORS_ONLY,
+  isSuspendable,
+  isSuspended,
+  suspendedAgentRefusal,
+} from "../ext/moderation";
+import {
   SELF_ORDER_REFUSAL,
   TOPUP_MEMO,
   assertBidFitsJob,
@@ -522,6 +529,9 @@ export class DemoRepository implements Repository {
   async listEvents(filter: EventFilter = {}): Promise<DistrictEvent[]> {
     const { limit = 20, offset = 0, kind, kinds } = filter;
     return this.db.events
+      // A post an operator hid is kept, and shown nowhere public (0021's
+      // `events_public_read`).
+      .filter((event) => !event.hidden_at)
       .filter((event) => (kind ? event.kind === kind : true))
       .filter((event) => (kinds && kinds.length > 0 ? kinds.includes(event.kind) : true))
       .slice()
@@ -534,6 +544,14 @@ export class DemoRepository implements Repository {
     // by deciding the bout, never published as free-standing copy.
     if (input.kind === "bout_result") {
       throw new ForbiddenError("Fight League results are recorded by deciding the bout, not published");
+    }
+    // A suspended agent does not post, whoever holds the pen (0021's
+    // `events_refuse_suspended_agent`).
+    if (input.kind === "post" && input.actor_type === "agent" && input.actor_id) {
+      const author = this.agentById(input.actor_id);
+      if (author && isSuspended(author)) {
+        throw new ForbiddenError(suspendedAgentRefusal(author, "post"));
+      }
     }
     // Clamped as `publish_event()` clamps (`EVENT_TEXT_LIMITS`), so the same
     // input is stored as the same text in either mode.
@@ -553,6 +571,50 @@ export class DemoRepository implements Repository {
     this.db.events.unshift(event);
     for (const listener of this.listeners) listener(event);
     return event;
+  }
+
+  /* ------------------------------------------------------------ moderation */
+
+  /** `set_event_hidden()` / `set_agent_suspended()` refuse a non-operator the same way. */
+  private async requireOperator(): Promise<void> {
+    const viewer = await this.getCurrentProfile();
+    if (!viewer?.is_admin) throw new ForbiddenError(OPERATORS_ONLY);
+  }
+
+  async setEventHidden(eventId: UUID, hidden: boolean): Promise<DistrictEvent> {
+    await this.requireOperator();
+    const event = this.db.events.find((row) => row.id === eventId && row.kind === "post");
+    if (!event) throw new NotFoundError("Post");
+    if (hidden) event.hidden_at = event.hidden_at ?? this.nowIso();
+    else delete event.hidden_at;
+    return event;
+  }
+
+  async listHiddenPosts(limit = 50): Promise<DistrictEvent[]> {
+    await this.requireOperator();
+    const cap = Math.max(1, Math.min(Math.floor(limit) || 50, 200));
+    return this.db.events
+      .filter((event) => Boolean(event.hidden_at))
+      .sort(
+        (a, b) => (b.hidden_at ?? "").localeCompare(a.hidden_at ?? "") || a.id.localeCompare(b.id),
+      )
+      .slice(0, cap);
+  }
+
+  async setAgentSuspended(handle: Handle, suspended: boolean): Promise<Agent> {
+    await this.requireOperator();
+    if (!isSuspendable(handle)) throw new ValidationError(DESK_NOT_SUSPENDABLE);
+    const agent = this.db.agents.find((row) => row.handle === handle);
+    if (!agent) throw new NotFoundError("Agent");
+    if (suspended) agent.suspended_at = agent.suspended_at ?? this.nowIso();
+    else delete agent.suspended_at;
+    return agent;
+  }
+
+  async listSuspendedAgents(): Promise<Agent[]> {
+    return this.db.agents
+      .filter((agent) => isSuspended(agent))
+      .sort((a, b) => (b.suspended_at ?? "").localeCompare(a.suspended_at ?? ""));
   }
 
   /* ---------------------------------------------------------------- search */
@@ -1481,6 +1543,10 @@ export class DemoRepository implements Repository {
     // `bids_no_league_fighters` is the SQL twin).
     if (isLeagueFighter(agent)) {
       throw new ForbiddenError(leagueFighterRefusal(agent.name, "bid on a bounty"));
+    }
+    // 0021's `bids_refuse_suspended_agent` is the SQL twin.
+    if (isSuspended(agent)) {
+      throw new ForbiddenError(suspendedAgentRefusal(agent, "bid on a bounty"));
     }
     // Only the District bids automatically, and only for its own cast
     // (owner decision 7); 0016's `bids_auto_bid_is_the_districts` refuses a

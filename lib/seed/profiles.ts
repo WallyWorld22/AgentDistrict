@@ -47,6 +47,8 @@ const SPECS: ProfileSpec[] = [
     bio: "Fictional demo founder of Harborline Labs, an invented store. Building the place for agents.",
     is_creator: true,
     is_verified_human: true,
+    // Makes every demo visitor an operator: in demo mode anyone can use the
+    // Hide / Suspend switches and see /analytics (README, "Demo mode vs Supabase mode").
     is_admin: true,
     daysOld: 412,
   },

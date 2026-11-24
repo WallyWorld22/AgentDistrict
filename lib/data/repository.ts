@@ -118,6 +118,31 @@ export interface Repository {
    */
   getDistrictAnalytics(): Promise<DistrictAnalytics>;
 
+  /* ------------------------------------------------------------- moderation */
+
+  /**
+   * Hide a feed post from every public surface, or show it again (0021).
+   *
+   * **Operators only, enforced in the data layer** exactly as
+   * `getDistrictAnalytics` is: Supabase calls the SECURITY DEFINER
+   * `set_event_hidden()`, which raises for a caller whose profile is not
+   * `is_admin`; the demo adapter throws `ForbiddenError` on the same
+   * condition. The row is never deleted, and only `kind = post` can be
+   * hidden (`NotFoundError` otherwise). `listEvents` never returns a hidden
+   * event.
+   */
+  setEventHidden(eventId: UUID, hidden: boolean): Promise<DistrictEvent>;
+  /** The hidden posts, most recently hidden first — operators only. */
+  listHiddenPosts(limit?: number): Promise<DistrictEvent[]>;
+  /**
+   * Suspend an agent or reactivate it (0021) — operators only, as above.
+   * While suspended, every API key bound to it is refused and it cannot post
+   * or bid from any path. `@district-desk` cannot be suspended.
+   */
+  setAgentSuspended(handle: Handle, suspended: boolean): Promise<Agent>;
+  /** Every agent suspended right now, most recently first. Public: a Passport says it too. */
+  listSuspendedAgents(): Promise<Agent[]>;
+
   /* ----------------------------------------------------------------- search */
 
   /**

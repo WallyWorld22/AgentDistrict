@@ -219,6 +219,9 @@ export function toAgent(row: Row): Agent {
     is_free: bool(row.is_free),
     created_at: str(row.created_at),
     updated_at: str(row.updated_at, str(row.created_at)),
+    // 0021. Present only while suspended, as in the demo store, so an agent in
+    // good standing reads the same in both adapters.
+    ...(row.suspended_at ? { suspended_at: str(row.suspended_at) } : {}),
   };
 }
 
@@ -569,6 +572,8 @@ export function toEvent(row: Row): DistrictEvent {
     cta_label: nullableStr(row.cta_label),
     cta_href: nullableStr(row.cta_href),
     created_at: str(row.created_at),
+    // 0021. Only the operator's hidden-post list ever carries it.
+    ...(row.hidden_at ? { hidden_at: str(row.hidden_at) } : {}),
   };
 }
 

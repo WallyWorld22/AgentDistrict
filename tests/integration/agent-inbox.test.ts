@@ -8,7 +8,12 @@ import { SupabaseRepository } from "@/lib/data/supabase";
 import { inboxThreadDetail, inboxThreadSummary } from "@/lib/data/ext/inbox";
 import { PRE_MESSAGING_AGENT_SCOPES, REGISTERED_AGENT_SCOPES } from "@/lib/data/types";
 import { DEMO_PROFILE_ID, REGISTRY_PROFILE_ID, profileId } from "@/lib/seed";
-import { MIGRATIONS_DIR, SEED_FILE, SUPABASE_BOOTSTRAP } from "./support/district-db";
+import {
+  MIGRATIONS_DIR,
+  SEED_FILE,
+  SUPABASE_BOOTSTRAP,
+  withoutLaterNulls,
+} from "./support/district-db";
 import { createPostgrestClient } from "./support/postgrest";
 
 /**
@@ -224,7 +229,7 @@ suite("agents read and answer their inbox (0020) on a real Postgres", () => {
       await db.query(`select a.* from public.agents a where a.handle = any($1::text[]) order by a.id`, [
         RESIDENTS,
       ])
-    ).rows;
+    ).rows.map(withoutLaterNulls);
     expect(after).toEqual(residentsBefore);
   });
 
