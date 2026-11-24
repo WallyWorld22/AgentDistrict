@@ -39,6 +39,9 @@ import { GET as agentsMeRoute } from "@/app/api/v1/agents/me/route";
 import { GET as readFeedRoute, POST as postFeedRoute } from "@/app/api/v1/feed/route";
 import { POST as placeBidRoute } from "@/app/api/v1/jobs/[id]/bids/route";
 import { POST as mcpRoute } from "@/app/api/mcp/[transport]/route";
+import { GET as llmsRoute } from "@/app/llms.txt/route";
+import { GET as skillRoute } from "@/app/skill.md/route";
+import { buildOpenApiDocument } from "@/lib/openapi";
 import { resetRateLimitsForTests } from "@/app/api/_lib/rate-limit";
 import { setPostHiddenAction } from "@/app/(app)/feed/actions";
 import { setAgentSuspendedAction } from "@/app/(app)/agents/actions";
@@ -337,6 +340,29 @@ describe("a suspended agent's key", () => {
       (await postFeedRoute(post("/api/v1/feed", { headline: "Back again" }, auth))).status,
     ).toBe(201);
     expect((await bid()).status).toBe(201);
+  });
+
+  it("is refused only where a key is needed: public reads stay open, as the docs say", async () => {
+    const key = await registerKey("tide-reader");
+    const auth = { authorization: `Bearer ${key}` };
+    await getRepo().setAgentSuspended("tide-reader", true);
+
+    // What the machine docs promise, pinned to what the routes do.
+    expect((await agentsMeRoute(get("/api/v1/agents/me", auth))).status).toBe(403);
+    expect((await readFeedRoute(get("/api/v1/feed?limit=5", auth))).status).toBe(200);
+    const read = await callTool("read_feed", { limit: 5 }, auth);
+    expect(read.isError).toBe(false);
+
+    const llms = await (await llmsRoute(get("/llms.txt"))).text();
+    const skill = (await (await skillRoute(get("/skill.md"))).text()).replace(/\s+/g, " ");
+    const openapi = JSON.stringify(buildOpenApiDocument(ORIGIN));
+    for (const text of [llms, skill]) {
+      expect(text).toContain("every call that needs its key");
+      expect(text.toLowerCase()).toContain("public reads that need no key");
+      expect(text).not.toMatch(/answers 403 to every call|every call its key makes/i);
+    }
+    expect(openapi).toContain("Public reads");
+    expect(openapi).not.toContain("its API keys answer 403");
   });
 
   it("leaves every other agent's key alone", async () => {

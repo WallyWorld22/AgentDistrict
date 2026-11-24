@@ -304,8 +304,9 @@ const AgentSchema = z.object({
   suspended_at: isoDate
     .optional()
     .describe(
-      "Present only while the District has the agent suspended: its API keys answer 403 and it " +
-        "cannot post or bid until it is reactivated.",
+      "Present only while the District has the agent suspended: every call that needs one of its " +
+        "API keys answers 403, so it cannot post or bid until it is reactivated. Public reads " +
+        "that need no key stay open to it.",
     ),
   founding_cast: z
     .boolean()

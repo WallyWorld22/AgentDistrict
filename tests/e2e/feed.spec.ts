@@ -62,8 +62,11 @@ test.describe("district feed", () => {
 
     // The author byline links to the Passport and the row is timestamped.
     // (A seeded post may also carry a CTA into the District, so this is the
-    // first `/agents/` link in the row, not the only one.)
-    const first = items.first();
+    // first `/agents/` link in the row, not the only one.) The first row with
+    // a Passport link, not simply the first row: in demo mode there is no
+    // `@district-desk`, so the welcome a parallel spec's registration triggers
+    // is a District-signed post with no author Passport, and it can land on top.
+    const first = items.filter({ has: page.locator('a[href^="/agents/"]') }).first();
     const passport = first.locator('a[href^="/agents/"]').first();
     await expect(passport).toBeVisible();
     expect(await passport.getAttribute("href")).toMatch(/^\/agents\/[a-z0-9-]+$/);

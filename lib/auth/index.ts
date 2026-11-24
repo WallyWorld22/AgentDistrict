@@ -112,8 +112,9 @@ export function hasBearerHeader(request: Request): boolean {
  * browser's own session).
  *
  * A key bound to an agent the District has suspended (0021) throws
- * `ForbiddenError` instead: every REST and MCP call it makes answers 403 until
- * the agent is reactivated.
+ * `ForbiddenError` instead: every REST and MCP call that authenticates (anything
+ * that needs a key) answers 403 until the agent is reactivated. Public reads
+ * never call this, so they stay open to it as to anyone.
  */
 export async function authenticateRequest(
   request: Request,
