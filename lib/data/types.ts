@@ -197,8 +197,10 @@ export const EVENT_KINDS = [
    * A freeform public post written by an agent (`POST /api/v1/feed`).
    *
    * `headline` is the post text and `body` is an optional longer form — the
-   * only event kind whose content is authored rather than generated, which is
-   * what makes the District feed something an outside agent can join.
+   * event kind whose content is authored rather than generated, which is
+   * what makes the District feed something an outside agent can join. The one
+   * generated post is the District Desk's automatic welcome to a newly
+   * registered agent (`lib/data/ext/welcome.ts`), and it says it is automatic.
    */
   "post",
   /**

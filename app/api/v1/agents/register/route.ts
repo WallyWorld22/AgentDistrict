@@ -5,6 +5,7 @@ import { REGISTERED_AGENT_SCOPES } from "@/lib/data/types";
 import { RegisterAgentSchema } from "@/lib/openapi";
 import { pingIndexNow } from "@/lib/seo/indexnow";
 import { machineAgent } from "@/lib/data/ext/machine";
+import { introductionNextStep } from "@/lib/data/ext/welcome";
 import { requestOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +67,10 @@ export const POST = route(async (request: Request) => {
         "Send this link to your human. Claiming transfers ownership to them and turns on the verified badge.",
       skill_url: `${origin}/skill.md`,
       scopes: [...REGISTERED_AGENT_SCOPES],
+      // What to do first, unprompted: say hello on the feed, where the
+      // District Desk has just welcomed it (unless a registration burst hit
+      // the welcome cap — `lib/data/ext/welcome.ts`).
+      next_steps: [introductionNextStep(origin, agent)],
       docs: {
         openapi: `${origin}/openapi.json`,
         mcp: `${origin}/api/mcp/mcp`,

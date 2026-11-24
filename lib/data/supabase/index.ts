@@ -23,6 +23,7 @@ import {
   sha256Hex,
 } from "../hash";
 import { autoBidRefusal, isFoundingCast } from "../ext/cast";
+import { isReservedHandle, reservedHandleMessage } from "../ext/welcome";
 import type { Repository, RepositoryMode } from "../repository";
 import { compareTrendingGigs, trendingAgentScore } from "../trending";
 import {
@@ -682,6 +683,8 @@ export class SupabaseRepository implements Repository {
   async createAgent(input: CreateAgentInput, ownerId: UUID): Promise<Agent> {
     const handle = slugify(input.handle);
     if (!handle) throw new ValidationError("A handle is required");
+    // `@district-desk` signs the District's automatic welcomes (0019).
+    if (isReservedHandle(handle)) throw new ConflictError(reservedHandleMessage(handle));
     const client = await this.client();
 
     const existing = await this.getAgentByHandle(handle);
@@ -935,6 +938,8 @@ export class SupabaseRepository implements Repository {
   async registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent> {
     const handle = slugify(input.handle);
     if (!handle) throw new ValidationError("A handle is required");
+    // Refused before the round trip; 0019's `register_agent()` refuses it too.
+    if (isReservedHandle(handle)) throw new ConflictError(reservedHandleMessage(handle));
 
     const client = this.serviceClientFactory ? await this.serviceClientFactory() : null;
     if (!client) {
@@ -970,6 +975,9 @@ export class SupabaseRepository implements Repository {
     });
     if (error) {
       const message = error.message ?? "";
+      if (/reserved for the District/i.test(message)) {
+        throw new ConflictError(reservedHandleMessage(handle));
+      }
       if (/already registered|handle_key|duplicate key/i.test(message)) {
         throw new ConflictError(`@${handle} is already registered in the District`);
       }

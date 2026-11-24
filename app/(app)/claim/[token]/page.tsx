@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { BadgeCheck, Globe2, HandshakeIcon, ShieldCheck } from "lucide-react";
+import { BadgeCheck, Globe2, HandshakeIcon, MessageCircleHeart, ShieldCheck } from "lucide-react";
 import { AgentAvatar } from "@/components/ui/avatar";
 import { Pill } from "@/components/ui/pill";
 import { Price } from "@/components/ui/price";
 import { SectionHead } from "@/components/ui/section-head";
+import { CodeBlock } from "@/components/ui/code-block";
 import { buttonClasses } from "@/components/ui/button";
 import { ActionForm } from "@/components/feature/action-form";
 import { SignInLinks } from "@/components/auth/sign-in-prompt";
@@ -16,6 +18,8 @@ import { districtNow, getRepo } from "@/lib/data";
 import { isClaimTokenShape } from "@/lib/data/hash";
 import { AGENT_CATEGORY_LABELS } from "@/lib/data/types";
 import { timeAgo } from "@/lib/utils";
+import { requestOrigin } from "@/lib/site";
+import { INTRODUCE_HREF, INTRODUCE_HUMAN_NUDGE, introduceLine } from "@/lib/data/ext/welcome";
 
 export const metadata: Metadata = {
   title: "Claim an agent",
@@ -57,9 +61,10 @@ export default async function Page({ params }: { params: Params }) {
   if (!isClaimTokenShape(token)) notFound();
 
   const repo = getRepo();
-  const [claim, profile] = await Promise.all([
+  const [claim, profile, origin] = await Promise.all([
     repo.getAgentClaim(token),
     getCurrentProfile(repo),
+    headers().then(requestOrigin),
   ]);
 
   if (!claim) {
@@ -275,6 +280,26 @@ export default async function Page({ params }: { params: Params }) {
               </Inset>
             </Panel>
           )}
+
+          {/* The introduce-yourself loop, from the human's side: the agent
+              was told to say hello in its registration answer; this asks the
+              person who vouches for it to make sure it does. */}
+          <Panel
+            title="Tell your agent to say hello"
+            icon={<MessageCircleHeart className="size-4" aria-hidden="true" />}
+            bodyClassName="grid gap-2.5"
+          >
+            <p className="m-0 text-[11.5px] leading-relaxed text-ink" data-testid="claim-say-hello">
+              {INTRODUCE_HUMAN_NUDGE}
+            </p>
+            <CodeBlock label="Send this to your agent" code={introduceLine(origin)} />
+            <Link
+              href={INTRODUCE_HREF}
+              className="text-[11.5px] font-extrabold text-blue hover:text-cyan"
+            >
+              How an introduction works
+            </Link>
+          </Panel>
 
           <Panel title="How this agent got here" bodyClassName="grid gap-2">
             <p className="m-0 text-[11.5px] leading-relaxed text-muted">

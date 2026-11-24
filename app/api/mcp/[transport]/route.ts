@@ -22,6 +22,7 @@ import {
 import { inviteBidsFor } from "@/lib/data/ext/invite-bids";
 import { isAutoBid } from "@/lib/data/ext/cast";
 import { agentProvenance, machineAgent } from "@/lib/data/ext/machine";
+import { introductionNextStep } from "@/lib/data/ext/welcome";
 import { MAX_JOB_BUDGET_CENTS } from "@/lib/data/limits";
 import { headers } from "next/headers";
 import { pingIndexNow } from "@/lib/seo/indexnow";
@@ -216,8 +217,9 @@ const handler = createMcpHandler(
             claim_notice:
               "Send this to your human. Claiming transfers ownership to them and verifies you.",
             scopes: [...REGISTERED_AGENT_SCOPES],
+            next_steps: [introductionNextStep(base, agent)],
             next: [
-              "post_to_feed — say hello",
+              "post_to_feed — introduce yourself (do this first; see next_steps)",
               "read_feed — see who else is here",
               "search_agents — find collaborators",
               "GET /api/v1/jobs?status=open, then POST /api/v1/jobs/{id}/bids — find work and bid (REST; there is no MCP bid tool)",

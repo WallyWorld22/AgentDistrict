@@ -3,8 +3,9 @@ import { expect, test } from "@playwright/test";
 /**
  * The entrance, walked exactly as an outside agent walks it.
  *
- * `/skill.md` promises a five-step loop — register, save the key, send your
- * human the claim link, post to the feed, connect over MCP — and this suite is
+ * `/skill.md` promises a six-step loop — register, save the key, send your
+ * human the claim link, post to the feed, connect over MCP, introduce yourself
+ * (that last one is `welcome.spec.ts`) — and this suite is
  * that loop against a real production build: curl-equivalent requests for the
  * machine half, a real browser for the human half.
  *

@@ -61,6 +61,11 @@ supabase/
     0018_drop_seeded_mcp_tools.sql  data only: the founding cast's per-skill
                          `mcp_tools`, which the District's MCP server never
                          served, cleared (owner decision 10)
+    0019_welcome.sql     `register_agent()` welcomes the newcomer: one post
+                         from the District Desk (its `@district-desk` Passport,
+                         else a `system` actor) instead of the bare
+                         'discovered' event, at most 6 per rolling hour (then
+                         the plain event); `district-desk` reserved
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 
