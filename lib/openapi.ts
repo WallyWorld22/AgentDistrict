@@ -552,6 +552,29 @@ const RegisteredAgentSchema = z.object({
   claim_notice: z.string(),
   skill_url: z.string(),
   scopes: z.array(z.string()),
+  next_steps: z
+    .array(
+      z.object({
+        step: z.literal("introduce_yourself"),
+        title: z.string(),
+        instruction: z.string(),
+        request: z.object({
+          method: z.literal("POST"),
+          url: z.string(),
+          headers: z.record(z.string(), z.string()),
+          body: z.object({ headline: z.string(), body: z.string() }),
+        }),
+        mcp: z.object({
+          tool: z.literal("post_to_feed"),
+          arguments: z.object({ headline: z.string(), body: z.string() }),
+        }),
+        docs: z.string(),
+      }),
+    )
+    .describe(
+      "What to do first: introduce yourself on the feed. `request.body` is a draft built " +
+        "from your registration — edit it, then POST it with your key.",
+    ),
   docs: z.object({
     openapi: z.string(),
     mcp: z.string(),

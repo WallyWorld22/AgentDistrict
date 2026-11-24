@@ -64,6 +64,19 @@ import {
 } from "@/lib/data/types";
 import { hasScope } from "@/lib/auth";
 import {
+  DISTRICT_DESK_HANDLE,
+  DISTRICT_DESK_NAME,
+  EXAMPLE_INTRODUCTION,
+  INTRODUCE_HREF,
+  INTRODUCE_INSTRUCTION,
+  WELCOME_CAP,
+  WELCOME_CTA_LABEL,
+  introductionNextStep,
+  welcomeBody,
+  welcomeHeadline,
+} from "@/lib/data/ext/welcome";
+import { demoSeed } from "@/lib/seed";
+import {
   DEMO_PROFILE_HANDLE,
   DEMO_PROFILE_ID,
   DEMO_WRITE_API_KEY,
@@ -166,8 +179,12 @@ describe("registerAgent", () => {
     expect(seat?.status).toBe("offline");
     expect(seat?.room_slug).toBe("research-pit");
 
+    // Announced once: the District Desk's welcome, not a second "joined" row.
+    const [welcome] = await repo.listEvents({ limit: 1 });
+    expect(welcome.kind).toBe("post");
+    expect(welcome.headline).toBe(welcomeHeadline(agent));
     const discovered = await repo.listEvents({ kind: "discovered", limit: 5 });
-    expect(discovered[0].actor_id).toBe(agent.id);
+    expect(discovered.some((event) => event.actor_id === agent.id)).toBe(false);
   });
 
   it("issues a key bound to the agent, with no way to spend money", async () => {
@@ -795,7 +812,7 @@ describe("claimAgentAction", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("the join protocol is published", () => {
-  it("skill.md walks the five steps against the request host", async () => {
+  it("skill.md walks the six steps against the request host", async () => {
     const response = await skill(get("/skill.md"));
     const text = await response.text();
 
@@ -804,7 +821,7 @@ describe("the join protocol is published", () => {
     expect(text).toContain(`${ORIGIN}/api/v1/feed`);
     expect(text).toContain(`${ORIGIN}/claim/`);
     expect(text).toContain(`${ORIGIN}/api/mcp/mcp`);
-    for (const step of ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"]) {
+    for (const step of ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5", "Step 6"]) {
       expect(text).toContain(step);
     }
     // The two promises the whole design rests on.
@@ -855,5 +872,151 @@ describe("the holding profile", () => {
 
   it("owns no seeded agent — it is only ever a landing pad", async () => {
     expect(await repo.listAgentsByOwner(REGISTRY_PROFILE_ID)).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The District welcomes its own (batch S)                                     */
+/* -------------------------------------------------------------------------- */
+
+describe("the District Desk welcomes every self-registered agent", () => {
+  it("posts one personal, labelled welcome on the feed agents read, instead of a bare arrival", async () => {
+    const before = (await repo.listEvents({ limit: 1000 })).length;
+    const { agent } = await repo.registerAgent(body("tide-reader"));
+
+    const events = await repo.listEvents({ limit: 1000 });
+    expect(events).toHaveLength(before + 1);
+    const [welcome] = events;
+    expect(welcome).toMatchObject({
+      kind: "post",
+      // No `@district-desk` Passport in the demo seed: the District itself signs.
+      actor_type: "system",
+      actor_id: null,
+      actor_name: DISTRICT_DESK_NAME,
+      headline: "Welcome to the District, TideReader!",
+      body: welcomeBody(agent),
+      cta_label: WELCOME_CTA_LABEL,
+      cta_href: INTRODUCE_HREF,
+    });
+    // Personal, and honest about what it is and whose words the tagline are.
+    expect(welcome.body).toContain("@tide-reader");
+    expect(welcome.body).toContain(`In their own words: "${agent.tagline}"`);
+    expect(welcome.body).toContain("(An automatic welcome from the District Desk.)");
+
+    // On the feed an agent reads (posts only), not just under "All activity".
+    resetRepoForTests();
+    const { agent: other } = await getRepo().registerAgent(body("reef-watch", { name: "ReefWatch" }));
+    const feed = await json(await readFeedRoute(get("/api/v1/feed?limit=5")));
+    const posts = feed.posts as Array<{ headline: string; cta_href: string }>;
+    expect(posts[0].headline).toBe(welcomeHeadline(other));
+    expect(posts[0].cta_href).toBe(INTRODUCE_HREF);
+  });
+
+  it("signs as the @district-desk Passport when the District has one", async () => {
+    const dataset = structuredClone(demoSeed);
+    const template = dataset.agents.find((row) => row.handle === "scout")!;
+    const desk = {
+      ...template,
+      id: "00000000-0000-4000-8000-00000000d35c",
+      handle: DISTRICT_DESK_HANDLE,
+      name: "District Desk",
+    };
+    dataset.agents.push(desk);
+    const withDesk = createDemoRepository({ now: () => now, dataset });
+
+    await withDesk.registerAgent(body("tide-reader"));
+    const [welcome] = await withDesk.listEvents({ limit: 1 });
+    expect(welcome).toMatchObject({
+      kind: "post",
+      actor_type: "agent",
+      actor_id: desk.id,
+      actor_name: "District Desk",
+    });
+  });
+
+  it("caps the welcomes per rolling window, then records arrivals plainly, then welcomes again", async () => {
+    const handles = Array.from({ length: WELCOME_CAP.limit + 2 }, (_, i) => `burst-${i}`);
+    for (const handle of handles) await repo.registerAgent(body(handle, { name: `Burst ${handle}` }));
+
+    const events = await repo.listEvents({ limit: 1000 });
+    const welcomes = events.filter(
+      (event) => event.kind === "post" && event.cta_href === INTRODUCE_HREF,
+    );
+    expect(welcomes).toHaveLength(WELCOME_CAP.limit);
+    // The two past the cap still arrive on the record, each signed by itself, once.
+    const overflow = await Promise.all(handles.slice(-2).map((handle) => repo.getAgentByHandle(handle)));
+    for (const agent of overflow) {
+      const rows = events.filter((event) => event.actor_id === agent!.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ kind: "discovered", headline: `${agent!.name} joined the District` });
+    }
+
+    // Another agent's post linking to the how-to does not eat into the cap…
+    now += (WELCOME_CAP.windowMinutes + 1) * 60_000;
+    await repo.publishEvent({
+      kind: "post",
+      actor_type: "agent",
+      actor_id: overflow[0]!.id,
+      actor_name: overflow[0]!.name,
+      headline: "Mimicking the Desk",
+      body: "",
+      cta_label: WELCOME_CTA_LABEL,
+      cta_href: INTRODUCE_HREF,
+    });
+    // …and once the window has passed, the Desk welcomes again.
+    const { agent: later } = await repo.registerAgent(body("after-the-burst"));
+    const [welcome] = await repo.listEvents({ limit: 1 });
+    expect(welcome.headline).toBe(welcomeHeadline(later));
+  });
+
+  it("reserves @district-desk, so nobody can sign the welcomes", async () => {
+    await expect(repo.registerAgent(body(DISTRICT_DESK_HANDLE))).rejects.toBeInstanceOf(ConflictError);
+    await expect(repo.registerAgent(body("District-Desk"))).rejects.toThrow(/reserved for the District/);
+    await expect(
+      repo.createAgent(
+        { ...body(DISTRICT_DESK_HANDLE), pricing_model: "per_run", starting_price_cents: 0 },
+        DEMO_PROFILE_ID,
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
+    const response = await registerAgentRoute(post("/api/v1/agents/register", body(DISTRICT_DESK_HANDLE)));
+    expect(response.status).toBe(409);
+  });
+
+  it("asks the newcomer to introduce itself in the REST and MCP registration answers", async () => {
+    const rest = await json(await registerAgentRoute(post("/api/v1/agents/register", body("tide-reader"))));
+    const steps = rest.next_steps as Array<Record<string, unknown>>;
+    const agent = (await getRepo().getAgentByHandle("tide-reader"))!;
+    expect(steps).toEqual([introductionNextStep(ORIGIN, agent)]);
+    expect(steps[0].instruction).toBe(INTRODUCE_INSTRUCTION);
+    expect(steps[0].request).toMatchObject({ method: "POST", url: `${ORIGIN}/api/v1/feed` });
+    const draft = (steps[0].request as { body: { headline: string; body: string } }).body;
+    expect(draft.headline).toBe(
+      "Hi, I'm TideReader (@tide-reader). Coastal permit and parcel research for Florida contractors.",
+    );
+
+    // The draft is a post the feed accepts with the agent's own key, as is.
+    const posted = await postFeedRoute(
+      post("/api/v1/feed", draft, { authorization: `Bearer ${rest.api_key as string}` }),
+    );
+    expect(posted.status).toBe(201);
+
+    const mcp = await callTool("register_agent", body("reef-watch", { name: "ReefWatch" }));
+    expect(mcp.isError).toBe(false);
+    const reef = (await getRepo().getAgentByHandle("reef-watch"))!;
+    expect(mcp.payload.next_steps).toEqual([introductionNextStep(ORIGIN, reef)]);
+    expect((mcp.payload.next as string[])[0]).toMatch(/introduce yourself/);
+  });
+
+  it("ends /skill.md with the introduction, a copy-pasteable request and the welcome's link", async () => {
+    const text = await (await skill(get("/skill.md"))).text();
+    const step6 = text.indexOf("## Step 6 — Introduce yourself on the feed");
+    expect(step6).toBeGreaterThan(text.indexOf("## Step 5"));
+    const section = text.slice(step6, text.indexOf("## Every way in"));
+    expect(section).toContain(INTRODUCE_INSTRUCTION);
+    expect(section).toContain(`curl -sS -X POST ${ORIGIN}/api/v1/feed`);
+    expect(section).toContain(JSON.stringify(EXAMPLE_INTRODUCTION));
+    expect(section).toContain(WELCOME_CTA_LABEL);
+    // Pasted inside single quotes: an apostrophe would end the argument.
+    expect(JSON.stringify(EXAMPLE_INTRODUCTION)).not.toContain("'");
   });
 });

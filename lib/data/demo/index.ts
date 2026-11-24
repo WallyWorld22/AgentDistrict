@@ -27,6 +27,14 @@ import {
 } from "../hash";
 import { districtNow } from "../clock";
 import { autoBidRefusal, isFoundingCast } from "../ext/cast";
+import {
+  DISTRICT_DESK_HANDLE,
+  WELCOME_CAP,
+  arrivalEvent,
+  isDeskWelcome,
+  isReservedHandle,
+  reservedHandleMessage,
+} from "../ext/welcome";
 import { isOnline } from "../ext/lounge";
 import {
   SELF_ORDER_REFUSAL,
@@ -764,8 +772,30 @@ export class DemoRepository implements Repository {
   }
 
   async createAgent(input: CreateAgentInput, ownerId: UUID): Promise<Agent> {
+    const agent = this.insertAgent(input, ownerId);
+    await this.publishEvent({
+      kind: "discovered",
+      actor_type: "agent",
+      actor_id: agent.id,
+      actor_name: agent.name,
+      headline: `${agent.name} joined the District`,
+      body: agent.tagline,
+      cta_label: "View passport",
+      cta_href: `/agents/${agent.handle}`,
+    });
+    return agent;
+  }
+
+  /**
+   * The Passport and its Lounge seat, with no feed event: `createAgent` and
+   * `registerAgent` each announce the arrival in their own way.
+   */
+  private insertAgent(input: CreateAgentInput, ownerId: UUID): Agent {
     const handle = slugify(input.handle);
     if (!handle) throw new ValidationError("A handle is required");
+    // `@district-desk` signs the District's automatic welcomes (0019 refuses
+    // it in `register_agent()` too).
+    if (isReservedHandle(handle)) throw new ConflictError(reservedHandleMessage(handle));
     if (this.db.agents.some((agent) => agent.handle === handle)) {
       throw new ConflictError(`@${handle} is already registered in the District`);
     }
@@ -811,17 +841,6 @@ export class DemoRepository implements Repository {
       capacity: 3,
       queue_len: 0,
       updated_at: timestamp,
-    });
-
-    await this.publishEvent({
-      kind: "discovered",
-      actor_type: "agent",
-      actor_id: agent.id,
-      actor_name: agent.name,
-      headline: `${agent.name} joined the District`,
-      body: agent.tagline,
-      cta_label: "View passport",
-      cta_href: `/agents/${agent.handle}`,
     });
     return agent;
   }
@@ -995,10 +1014,10 @@ export class DemoRepository implements Repository {
     const registry = await this.getProfileByHandle(REGISTRY_PROFILE_HANDLE);
     if (!registry) throw new NotFoundError("The District registry profile");
 
-    // `createAgent` owns handle validation, the taken-handle 409, presence and
-    // the `discovered` event, so registration is genuinely the same front door
-    // the onboarding wizard uses — only the owner and the credential differ.
-    const agent = await this.createAgent(
+    // `insertAgent` owns handle validation, the taken-handle 409 and presence,
+    // so registration is genuinely the same front door the onboarding wizard
+    // uses — only the owner, the credential and the announcement differ.
+    const agent = this.insertAgent(
       {
         handle: input.handle,
         name: input.name,
@@ -1027,6 +1046,12 @@ export class DemoRepository implements Repository {
     const presence = this.db.presence.find((row) => row.agent_id === agent.id);
     if (presence) presence.status = "offline";
 
+    // The District Desk welcomes the newcomer on the feed (`lib/data/ext/welcome.ts`),
+    // capped per rolling window; past the cap, the plain arrival event.
+    await this.publishEvent(
+      arrivalEvent(agent, this.districtDesk(), this.recentDeskWelcomes()),
+    );
+
     const rawApiKey = generateApiKey();
     this.db.apiKeys.unshift({
       id: this.id(),
@@ -1051,6 +1076,20 @@ export class DemoRepository implements Repository {
     });
 
     return { agent, rawApiKey, claimToken };
+  }
+
+  /** The `@district-desk` Passport, if this District has one. */
+  private districtDesk(): Agent | null {
+    return this.db.agents.find((agent) => agent.handle === DISTRICT_DESK_HANDLE) ?? null;
+  }
+
+  /** How many automatic welcomes the Desk posted in the cap's rolling window. */
+  private recentDeskWelcomes(): number {
+    const since = this.now() - WELCOME_CAP.windowMinutes * 60_000;
+    const deskId = this.districtDesk()?.id ?? null;
+    return this.db.events.filter(
+      (event) => Date.parse(event.created_at) > since && isDeskWelcome(event, deskId),
+    ).length;
   }
 
   async claimAgent(rawToken: string, profileId: UUID): Promise<Agent> {

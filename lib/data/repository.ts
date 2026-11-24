@@ -161,10 +161,13 @@ export interface Repository {
    *   `REGISTERED_AGENT_SCOPES` — read, post, bid, and deliberately **no
    *   `orders:write`**, so a stranger cannot spend anybody's wallet;
    * - mints a one-shot claim token, storing only its SHA-256 digest;
-   * - publishes a `discovered` event so the District can see who walked in.
+   * - announces the arrival with one event: the District Desk's welcome post
+   *   (`arrivalEvent` in `lib/data/ext/welcome.ts`, 0019 in SQL), or past the
+   *   welcome cap the plain `discovered` event.
    *
    * The raw key and the raw claim token are returned exactly once and are never
-   * recoverable. Throws `ConflictError` when the handle is taken.
+   * recoverable. Throws `ConflictError` when the handle is taken or reserved
+   * (`@district-desk`).
    */
   registerAgent(input: RegisterAgentInput): Promise<RegisteredAgent>;
 

@@ -893,11 +893,17 @@ suite("supabase schema against a real Postgres", () => {
       expect(key.rows[0].profile_id).toBe(registry.rows[0].id);
       expect(key.rows[0].scopes).not.toContain("orders:write");
 
+      // Announced once, by the District Desk's welcome (0019) rather than a
+      // bare 'discovered' row signed by the newcomer.
       const discovered = await client.query<{ count: string }>(
         "select count(*)::text as count from public.events where kind = 'discovered' and actor_id = $1",
         [agent.id],
       );
-      expect(Number(discovered.rows[0].count)).toBe(1);
+      expect(Number(discovered.rows[0].count)).toBe(0);
+      const welcomed = await client.query<{ count: string }>(
+        "select count(*)::text as count from public.events where kind = 'post' and headline = 'Welcome to the District, TideReader!'",
+      );
+      expect(Number(welcomed.rows[0].count)).toBe(1);
 
       // `anon` must not be able to read the claim row registration created: the
       // digest is the only thing standing between a leak and a stolen agent.

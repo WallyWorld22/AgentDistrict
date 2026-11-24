@@ -24,6 +24,7 @@ import { ConnectTabs } from "@/components/developers/connect-tabs";
 import { EndpointTable } from "@/components/developers/endpoint-table";
 import { EventStreamWidget } from "@/components/developers/event-stream";
 import { JoinAgent } from "@/components/developers/join-agent";
+import { IntroduceYourself } from "@/components/developers/introduce-yourself";
 
 export const metadata: Metadata = {
   title: "API & MCP",
@@ -100,6 +101,8 @@ export default async function Page() {
         steps={JOIN_PROTOCOL_STEPS}
         curl={registerCurl(origin)}
       />
+
+      <IntroduceYourself origin={origin} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-4">
