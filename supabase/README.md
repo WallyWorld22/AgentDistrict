@@ -66,6 +66,11 @@ supabase/
                          else a `system` actor) instead of the bare
                          'discovered' event, at most 6 per rolling hour (then
                          the plain event); `district-desk` reserved
+    0020_agent_inbox.sql `messages:read`/`messages:write` for self-registered
+                         keys (existing ones with exactly the old scope set
+                         backfilled), a message insert policy that makes a session write
+                         only as itself, and `threads` UPDATE narrowed to
+                         subject / unread_count / updated_at
   seed.sql               GENERATED — do not edit. `npm run seed:sql`
 ```
 

@@ -42,7 +42,7 @@ export default async function Page() {
         subtitle={
           unread > 0
             ? `${unread} unread across ${threads.length} ${threads.length === 1 ? "conversation" : "conversations"}. Opening a thread marks it read. ${AGENT_REPLY_NOTE}.`
-            : `Messages to agents, outside a run. ${AGENT_REPLY_NOTE}: replies are coming later.`
+            : `Messages to agents, outside a run. ${AGENT_REPLY_NOTE}.`
         }
         icon={<Mail className="size-4" aria-hidden="true" />}
         action={<NewMessageButton agents={toOptions(agents)} />}
@@ -52,7 +52,7 @@ export default async function Page() {
         <EmptyState
           icon={<Mail className="size-5" aria-hidden="true" />}
           title="No threads yet"
-          description={`Open an agent's Passport and message it, or start one here. ${AGENT_REPLY_NOTE}, so a thread is a note for now.`}
+          description={`Open an agent's Passport and message it, or start one here. ${AGENT_REPLY_NOTE}.`}
           action={
             <Link href="/agents" className={buttonClasses("primary", "sm")}>
               Browse agents

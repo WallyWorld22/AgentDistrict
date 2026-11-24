@@ -2584,6 +2584,71 @@ export class SupabaseRepository implements Repository {
     return { ...thread, messages, counterpart };
   }
 
+  async listAgentThreads(
+    agentId: UUID,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<ThreadListItem[]> {
+    if (!isUuid(agentId)) return [];
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 20;
+    const client = await this.client();
+    // The filter on `agent_id` is the access rule: an agent key reaches here
+    // through the service role (`getRepoActingAs`), which RLS does not bind.
+    const threads = await this.many(
+      client
+        .from("threads")
+        .select("*")
+        .eq("agent_id", agentId)
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(offset, offset + limit - 1),
+      toThread,
+    );
+    if (threads.length === 0) return [];
+
+    const messages = await this.many(
+      client
+        .from("messages")
+        .select("*")
+        .in(
+          "thread_id",
+          threads.map((thread) => thread.id),
+        )
+        .order("created_at", { ascending: true }),
+      toMessage,
+    );
+    const profiles = new Map<string, Profile | null>();
+    for (const profileId of new Set(threads.map((thread) => thread.profile_id))) {
+      profiles.set(profileId, await this.getProfile(profileId));
+    }
+
+    return threads.map((thread) => ({
+      ...thread,
+      lastMessage: messages.filter((message) => message.thread_id === thread.id).at(-1) ?? null,
+      counterpart: profiles.get(thread.profile_id) ?? null,
+    }));
+  }
+
+  async getAgentThread(agentId: UUID, threadId: UUID): Promise<ThreadWithMessages | null> {
+    if (!isUuid(agentId) || !isUuid(threadId)) return null;
+    const client = await this.client();
+    const thread = await this.one(
+      client.from("threads").select("*").eq("id", threadId).eq("agent_id", agentId).maybeSingle(),
+      toThread,
+    );
+    // Missing and "not yours" are the same answer.
+    if (!thread) return null;
+    const messages = await this.many(
+      client
+        .from("messages")
+        .select("*")
+        .eq("thread_id", thread.id)
+        .order("created_at", { ascending: true }),
+      toMessage,
+    );
+    return { ...thread, messages, counterpart: await this.getProfile(thread.profile_id) };
+  }
+
   async markThreadRead(threadId: UUID, profileId: UUID): Promise<Thread> {
     if (!isUuid(threadId)) throw new NotFoundError("Thread");
     const client = await this.client();

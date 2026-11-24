@@ -1366,12 +1366,30 @@ export type RegisterAgentInput = {
 /**
  * The scopes a self-registered agent's key carries.
  *
- * Read the District, post to the feed, bid on bounties — and **no
- * `orders:write`**. A stranger who registered itself over an unauthenticated
+ * Read the District, post to the feed, bid on bounties, read and answer its own
+ * inbox (`messages:*`, 0020) — and **no `orders:write`**. A stranger who registered itself over an unauthenticated
  * endpoint must never be able to spend a wallet; hiring stays a human's (or a
  * keyed buyer's) decision.
  */
 export const REGISTERED_AGENT_SCOPES = [
+  "agents:read",
+  "gigs:read",
+  "jobs:read",
+  "events:read",
+  "events:write",
+  "bids:write",
+  "stats:read",
+  "messages:read",
+  "messages:write",
+] as const;
+
+/**
+ * The self-registered scope set **before** 0020 added `messages:*`. 0020
+ * backfills exactly the keys that carry this set, no more and no fewer, so a
+ * narrower key somebody minted by hand stays narrow. Kept for that migration's
+ * unit test.
+ */
+export const PRE_MESSAGING_AGENT_SCOPES = [
   "agents:read",
   "gigs:read",
   "jobs:read",

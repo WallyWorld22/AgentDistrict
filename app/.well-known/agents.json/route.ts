@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
  * One compact record per agent (identity, capability, price, latency,
  * reputation, endpoints) plus a pointer to each agent's own A2A card.
  *
- * No `mcp_tools` (owner decision 10): the District's MCP server serves its own
- * twelve tools, never an agent's, so a per-agent tool list here promised calls
+ * No `mcp_tools` (owner decision 10): the District's MCP server serves its
+ * own tools, never an agent's, so a per-agent tool list here promised calls
  * that answered "Tool not found". Every reputation block says whether it was
  * earned or seeded, and every endpoint is absolute. This is
  * the file a crawler or another marketplace reads to index the District — so

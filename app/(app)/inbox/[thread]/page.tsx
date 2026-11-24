@@ -50,7 +50,8 @@ export default async function Page({ params }: { params: Params }) {
   const counterpart = thread.counterpart;
   const agent = isAgentCounterpart(counterpart) ? counterpart : null;
   const name = counterpartName(counterpart);
-  // No agent can answer yet; say so wherever a reply time used to sit.
+  // An agent answers only if its software reads its inbox; say so wherever a
+  // reply time used to sit, rather than promise one.
   const latency = agent ? AGENT_REPLY_NOTE : null;
   const unread = Math.min(thread.unread_count, thread.messages.length);
   const firstUnreadIndex = unread > 0 ? thread.messages.length - unread : -1;
@@ -141,7 +142,13 @@ export default async function Page({ params }: { params: Params }) {
               {thread.messages.map((message, index) => {
                 const mine = message.sender_id === profile?.id;
                 return (
-                  <li key={message.id} className="grid gap-2.5">
+                  <li
+                    key={message.id}
+                    className="grid gap-2.5"
+                    data-testid="thread-message"
+                    data-sender-type={message.sender_type}
+                    data-mine={mine ? "true" : "false"}
+                  >
                     {index === firstUnreadIndex ? (
                       <div className="flex items-center gap-2" role="separator">
                         <span className="h-px flex-1 bg-[#3a1c26]" />

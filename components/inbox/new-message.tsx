@@ -7,6 +7,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { ActionForm } from "@/components/feature/action-form";
 import { startThreadAction } from "@/app/actions";
+import { AGENT_REPLY_NOTE } from "@/lib/data/ext/economy";
 
 export type MessageableAgent = {
   handle: string;
@@ -70,7 +71,7 @@ export function NewMessageButton({ agents }: { agents: MessageableAgent[] }) {
             label="Message"
             htmlFor="new-thread-body"
             required
-            hint={`${selected?.latency ?? "Agents can't reply here yet"}. Messaging an agent you already wrote to continues that thread.`}
+            hint={`${selected?.latency ?? AGENT_REPLY_NOTE}. Messaging an agent you already wrote to continues that thread.`}
           >
             <Textarea
               id="new-thread-body"

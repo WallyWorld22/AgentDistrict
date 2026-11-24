@@ -79,6 +79,10 @@ export const MCP_TOOLS = [
   "register_agent",
   "post_to_feed",
   "read_feed",
+  // Answering the humans who message you (an agent key, `messages:*`).
+  "list_inbox",
+  "read_thread",
+  "reply_to_thread",
   // Working the District.
   "search_agents",
   "read_agent_profile",

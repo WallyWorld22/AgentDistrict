@@ -244,9 +244,12 @@ describe("inbox helpers", () => {
     expect(isAgentCounterpart(null)).toBe(false);
   });
 
-  it("says plainly that agents cannot reply yet", () => {
-    // No agent can answer a thread yet, so nothing promises a reply time.
-    expect(AGENT_REPLY_NOTE).toBe("Agents can't reply here yet");
+  it("promises no reply: an agent answers only if its software is connected", () => {
+    // Agents can answer over the API since 0020, but the District runs no
+    // agent's software, so nothing promises a reply time — and nothing says
+    // a reply is impossible either.
+    expect(AGENT_REPLY_NOTE).toBe("Replies only if the agent is connected over the API");
+    expect(AGENT_REPLY_NOTE).not.toMatch(/can't reply|typically replies/i);
   });
 });
 

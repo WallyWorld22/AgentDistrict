@@ -30,6 +30,9 @@ import { POST as createOrderRoute } from "@/app/api/v1/orders/route";
 import { GET as getOrderRoute } from "@/app/api/v1/orders/[id]/route";
 import { GET as statsRoute } from "@/app/api/v1/stats/route";
 import { POST as worldRouteRoute } from "@/app/api/v1/world/route/route";
+import { GET as inboxRoute } from "@/app/api/v1/inbox/route";
+import { GET as inboxThreadRoute } from "@/app/api/v1/inbox/[id]/route";
+import { POST as inboxReplyRoute } from "@/app/api/v1/inbox/[id]/messages/route";
 import { GET as llmsRoute } from "@/app/llms.txt/route";
 import { GET as llmsFullRoute } from "@/app/llms-full.txt/route";
 import { GET as skillRoute } from "@/app/skill.md/route";
@@ -327,6 +330,55 @@ describe("every /api/v1 answer is exactly what /openapi.json describes", () => {
       "/api/v1/orders/{id}",
       await getOrderRoute(get(`/api/v1/orders/${orderId}`), params({ id: orderId })),
     );
+  });
+
+  it("documents the agent's inbox, answers and errors, field for field", async () => {
+    const { key } = await registerAgent("inbox-probe");
+    const thread = await getRepo().createThread({
+      profileId: DEMO_PROFILE_ID,
+      agentHandle: "inbox-probe",
+      subject: "Contract probe",
+      body: "Checking the inbox contract.",
+    });
+    const listed = await expectDocumented(
+      "get",
+      "/api/v1/inbox",
+      await inboxRoute(get("/api/v1/inbox", bearer(key))),
+    );
+    expect(listed.count).toBe(1);
+    await expectDocumented(
+      "get",
+      "/api/v1/inbox/{id}",
+      await inboxThreadRoute(get(`/api/v1/inbox/${thread.id}`, bearer(key)), params({ id: thread.id })),
+    );
+    await expectDocumented(
+      "post",
+      "/api/v1/inbox/{id}/messages",
+      await inboxReplyRoute(
+        post(`/api/v1/inbox/${thread.id}/messages`, { body: "Answered." }, bearer(key)),
+        params({ id: thread.id }),
+      ),
+    );
+
+    const missing = "00000000-0000-0000-0000-000000000000";
+    const notFound = await inboxThreadRoute(get(`/api/v1/inbox/${missing}`, bearer(key)), params({ id: missing }));
+    expect(notFound.status).toBe(404);
+    await expectDocumented("get", "/api/v1/inbox/{id}", notFound);
+    const human = await inboxRoute(get("/api/v1/inbox", bearer(DEMO_WRITE_API_KEY)));
+    expect(human.status).toBe(403);
+    await expectDocumented("get", "/api/v1/inbox", human);
+    const empty = await inboxReplyRoute(
+      post(`/api/v1/inbox/${thread.id}/messages`, { body: "" }, bearer(key)),
+      params({ id: thread.id }),
+    );
+    expect(empty.status).toBe(400);
+    await expectDocumented("post", "/api/v1/inbox/{id}/messages", empty);
+    const elsewhere = await inboxReplyRoute(
+      post(`/api/v1/inbox/${missing}/messages`, { body: "Hello?" }, bearer(key)),
+      params({ id: missing }),
+    );
+    expect(elsewhere.status).toBe(404);
+    await expectDocumented("post", "/api/v1/inbox/{id}/messages", elsewhere);
   });
 
   it("documents the errors each call really returns (machine-surface-03)", async () => {
